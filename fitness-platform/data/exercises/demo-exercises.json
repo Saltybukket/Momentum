@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "data_classification": "TECHNICAL_DEMO_ONLY",
+  "disclaimer": "Self-authored software test fixtures; not a reviewed exercise prescription.",
+  "items": [
+    {"id": "demo-bodyweight-squat", "name": "Bodyweight Squat", "primary_muscle_group": "Quadriceps", "equipment": "None", "tracking_type": "REPS"},
+    {"id": "demo-push-up", "name": "Push-up", "primary_muscle_group": "Chest", "equipment": "None", "tracking_type": "REPS"},
+    {"id": "demo-dumbbell-row", "name": "Dumbbell Row", "primary_muscle_group": "Back", "equipment": "Dumbbells", "tracking_type": "REPS_WEIGHT"},
+    {"id": "demo-plank", "name": "Plank", "primary_muscle_group": "Core", "equipment": "Mat", "tracking_type": "DURATION"},
+    {"id": "demo-walking", "name": "Walking", "primary_muscle_group": "Cardiovascular", "equipment": "None", "tracking_type": "DISTANCE_DURATION"},
+    {"id": "demo-db-rdl", "name": "Dumbbell Romanian Deadlift", "primary_muscle_group": "Hamstrings", "equipment": "Dumbbells", "tracking_type": "REPS_WEIGHT"},
+    {"id": "demo-band-pull-apart", "name": "Band Pull-apart", "primary_muscle_group": "Back", "equipment": "Resistance band", "tracking_type": "REPS"},
+    {"id": "demo-goblet-squat", "name": "Goblet Squat", "primary_muscle_group": "Quadriceps", "equipment": "Kettlebell", "tracking_type": "REPS_WEIGHT"},
+    {"id": "demo-overhead-press", "name": "Dumbbell Overhead Press", "primary_muscle_group": "Shoulders", "equipment": "Dumbbells", "tracking_type": "REPS_WEIGHT"},
+    {"id": "demo-dead-bug", "name": "Dead Bug", "primary_muscle_group": "Core", "equipment": "Mat", "tracking_type": "REPS"},
+    {"id": "demo-glute-bridge", "name": "Glute Bridge", "primary_muscle_group": "Glutes", "equipment": "Mat", "tracking_type": "REPS"},
+    {"id": "demo-calf-raise", "name": "Standing Calf Raise", "primary_muscle_group": "Calves", "equipment": "None", "tracking_type": "REPS"}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "data_classification": "TECHNICAL_DEMO_ONLY",
+  "items": [
+    {"id": "none", "name": "None"},
+    {"id": "mat", "name": "Mat"},
+    {"id": "resistance-band", "name": "Resistance band"},
+    {"id": "dumbbells", "name": "Dumbbells"},
+    {"id": "kettlebell", "name": "Kettlebell"},
+    {"id": "barbell", "name": "Barbell"},
+    {"id": "bench", "name": "Bench"},
+    {"id": "pull-up-bar", "name": "Pull-up bar"}
+  ]
+}

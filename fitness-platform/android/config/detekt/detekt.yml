@@ -1,0 +1,21 @@
+complexity:
+  LongMethod:
+    threshold: 150
+  LongParameterList:
+    functionThreshold: 12
+    constructorThreshold: 12
+  TooManyFunctions:
+    thresholdInFiles: 30
+    thresholdInClasses: 20
+    thresholdInInterfaces: 20
+style:
+  MagicNumber:
+    active: false
+  WildcardImport:
+    active: false
+  MaxLineLength:
+    active: true
+    maxLineLength: 220
+    excludePackageStatements: true
+    excludeImportStatements: true
+    excludeCommentStatements: false

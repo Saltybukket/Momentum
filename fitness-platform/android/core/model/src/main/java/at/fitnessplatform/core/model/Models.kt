@@ -1,0 +1,75 @@
+package at.fitnessplatform.core.model
+
+enum class SyncStatus { LOCAL_ONLY, PENDING, SYNCING, SYNCED, FAILED, CONFLICT }
+
+enum class UnitSystem { METRIC, IMPERIAL }
+
+enum class OnboardingStatus { NOT_STARTED, SKIPPED, IN_PROGRESS, COMPLETED }
+
+enum class TrackingType { REPS_WEIGHT, REPS, DURATION, DISTANCE_DURATION, MANUAL }
+
+enum class WorkoutStatus { PLANNED, IN_PROGRESS, PAUSED, COMPLETED, CANCELLED }
+
+data class GuestProfile(
+    val id: String,
+    val displayName: String,
+    val createdAtEpochMs: Long,
+    val unitSystem: UnitSystem = UnitSystem.METRIC,
+    val onboardingStatus: OnboardingStatus = OnboardingStatus.NOT_STARTED,
+    val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY,
+    val serverId: String? = null,
+    val conflictVersion: Long? = null,
+)
+
+data class CustomExercise(
+    val id: String,
+    val ownerProfileId: String,
+    val name: String,
+    val description: String = "",
+    val primaryMuscleGroup: String,
+    val requiredEquipment: String,
+    val trackingType: TrackingType,
+    val notes: String = "",
+    val createdAtEpochMs: Long,
+    val updatedAtEpochMs: Long,
+    val syncStatus: SyncStatus = SyncStatus.PENDING,
+    val serverId: String? = null,
+    val conflictVersion: Long? = null,
+    val deletedAtEpochMs: Long? = null,
+)
+
+data class WorkoutExercise(
+    val id: String,
+    val workoutId: String,
+    val exerciseId: String,
+    val position: Int,
+)
+
+data class Workout(
+    val id: String,
+    val ownerProfileId: String,
+    val title: String,
+    val status: WorkoutStatus = WorkoutStatus.PLANNED,
+    val startTimeEpochMs: Long? = null,
+    val endTimeEpochMs: Long? = null,
+    val notes: String = "",
+    val exercises: List<WorkoutExercise> = emptyList(),
+    val createdAtEpochMs: Long,
+    val updatedAtEpochMs: Long,
+    val syncStatus: SyncStatus = SyncStatus.PENDING,
+    val serverId: String? = null,
+    val conflictVersion: Long? = null,
+)
+
+enum class OutboxOperationType { UPSERT_PROFILE, UPSERT_EXERCISE, DELETE_EXERCISE, UPSERT_WORKOUT }
+
+data class OutboxOperation(
+    val id: String,
+    val aggregateId: String,
+    val operationType: OutboxOperationType,
+    val payloadJson: String,
+    val createdAtEpochMs: Long,
+    val status: SyncStatus = SyncStatus.PENDING,
+    val retryCount: Int = 0,
+    val lastError: String? = null,
+)

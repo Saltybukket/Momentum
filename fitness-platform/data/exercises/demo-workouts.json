@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "data_classification": "TECHNICAL_DEMO_ONLY",
+  "items": [
+    {"id": "demo-full-body", "title": "Demo Full Body", "exercise_ids": ["demo-bodyweight-squat", "demo-push-up", "demo-dumbbell-row", "demo-plank"]},
+    {"id": "demo-mobility-walk", "title": "Demo Mobility & Walk", "exercise_ids": ["demo-dead-bug", "demo-walking"]}
+  ]
+}

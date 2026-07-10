@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "data_classification": "TECHNICAL_DEMO_ONLY",
+  "items": [
+    {"id": "chest", "name": "Chest"},
+    {"id": "back", "name": "Back"},
+    {"id": "shoulders", "name": "Shoulders"},
+    {"id": "arms", "name": "Arms"},
+    {"id": "core", "name": "Core"},
+    {"id": "quadriceps", "name": "Quadriceps"},
+    {"id": "hamstrings", "name": "Hamstrings"},
+    {"id": "glutes", "name": "Glutes"},
+    {"id": "calves", "name": "Calves"},
+    {"id": "cardiovascular", "name": "Cardiovascular"}
+  ]
+}

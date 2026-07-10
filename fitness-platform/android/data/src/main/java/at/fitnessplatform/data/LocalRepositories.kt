@@ -1,0 +1,231 @@
+package at.fitnessplatform.data
+
+import androidx.room.withTransaction
+import at.fitnessplatform.core.database.*
+import at.fitnessplatform.core.model.*
+import at.fitnessplatform.domain.*
+import java.nio.charset.StandardCharsets
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+
+private fun outboxEntity(
+    ids: UuidProvider,
+    clock: Clock,
+    aggregateId: String,
+    type: OutboxOperationType,
+    payload: String,
+) = OutboxEntity(
+    id = ids.newUuid(),
+    aggregateId = aggregateId,
+    operationType = type.name,
+    payloadJson = payload,
+    createdAtEpochMs = clock.nowEpochMs(),
+    status = SyncStatus.PENDING.name,
+    retryCount = 0,
+    lastError = null,
+)
+
+@Singleton
+class RoomGuestProfileRepository @Inject constructor(
+    private val database: AppDatabase,
+    private val profileDao: GuestProfileDao,
+    private val outboxDao: OutboxDao,
+    private val ids: UuidProvider,
+    private val clock: Clock,
+    private val events: DomainEventDispatcher,
+    private val syncEnqueuer: SyncEnqueuer,
+) : GuestProfileRepository {
+    override fun observeProfile(): Flow<GuestProfile?> = profileDao.observe().map { it?.toModel() }
+    override suspend fun getProfile(): GuestProfile? = profileDao.get()?.toModel()
+
+    override suspend fun create(displayName: String): GuestProfile {
+        profileDao.get()?.let { return it.toModel() }
+        val now = clock.nowEpochMs()
+        val profile = GuestProfile(ids.newUuid(), displayName, now, syncStatus = SyncStatus.PENDING)
+        database.withTransaction {
+            profileDao.insert(profile.toEntity())
+            outboxDao.insert(profileOutbox(profile))
+        }
+        events.publish(GuestProfileCreated(ids.newUuid(), now, profile.id))
+        syncEnqueuer.enqueue()
+        return profile
+    }
+
+    override suspend fun update(profile: GuestProfile): GuestProfile {
+        val updated = profile.copy(syncStatus = SyncStatus.PENDING)
+        database.withTransaction {
+            profileDao.update(updated.toEntity())
+            outboxDao.insert(profileOutbox(updated))
+        }
+        syncEnqueuer.enqueue()
+        return updated
+    }
+
+    private fun profileOutbox(profile: GuestProfile): OutboxEntity {
+        val payload = buildJsonObject {
+            put("display_name", profile.displayName)
+            put("unit_system", profile.unitSystem.name)
+            put("onboarding_status", profile.onboardingStatus.name)
+        }.toString()
+        return outboxEntity(ids, clock, profile.id, OutboxOperationType.UPSERT_PROFILE, payload)
+    }
+}
+
+@Singleton
+class RoomExerciseRepository @Inject constructor(
+    private val database: AppDatabase,
+    private val profileDao: GuestProfileDao,
+    private val exerciseDao: ExerciseDao,
+    private val outboxDao: OutboxDao,
+    private val ids: UuidProvider,
+    private val clock: Clock,
+    private val events: DomainEventDispatcher,
+    private val syncEnqueuer: SyncEnqueuer,
+) : ExerciseRepository {
+    override fun observeExercises(): Flow<List<CustomExercise>> = exerciseDao.observeActive().map { rows -> rows.map { it.toModel() } }
+    override suspend fun getExercise(id: String): CustomExercise? = exerciseDao.get(id)?.toModel()
+
+    override suspend fun create(
+        name: String,
+        description: String,
+        primaryMuscleGroup: String,
+        requiredEquipment: String,
+        trackingType: TrackingType,
+        notes: String,
+    ): CustomExercise {
+        val profile = profileDao.get() ?: error("Create a guest profile before adding exercises.")
+        val now = clock.nowEpochMs()
+        val exercise = CustomExercise(
+            id = ids.newUuid(), ownerProfileId = profile.id, name = name, description = description,
+            primaryMuscleGroup = primaryMuscleGroup, requiredEquipment = requiredEquipment,
+            trackingType = trackingType, notes = notes, createdAtEpochMs = now, updatedAtEpochMs = now,
+        )
+        database.withTransaction {
+            exerciseDao.insert(exercise.toEntity())
+            outboxDao.insert(exerciseOutbox(exercise, OutboxOperationType.UPSERT_EXERCISE))
+        }
+        events.publish(ExerciseCreated(ids.newUuid(), now, exercise.id))
+        syncEnqueuer.enqueue()
+        return exercise
+    }
+
+    override suspend fun update(exercise: CustomExercise): CustomExercise {
+        val updated = exercise.copy(updatedAtEpochMs = clock.nowEpochMs(), syncStatus = SyncStatus.PENDING)
+        database.withTransaction {
+            exerciseDao.update(updated.toEntity())
+            outboxDao.insert(exerciseOutbox(updated, OutboxOperationType.UPSERT_EXERCISE))
+        }
+        syncEnqueuer.enqueue()
+        return updated
+    }
+
+    override suspend fun delete(id: String) {
+        val current = exerciseDao.get(id)?.toModel() ?: return
+        if (current.deletedAtEpochMs != null) return
+        val deleted = current.copy(deletedAtEpochMs = clock.nowEpochMs(), syncStatus = SyncStatus.PENDING)
+        database.withTransaction {
+            exerciseDao.update(deleted.toEntity())
+            outboxDao.insert(exerciseOutbox(deleted, OutboxOperationType.DELETE_EXERCISE))
+        }
+        syncEnqueuer.enqueue()
+    }
+
+    private fun exerciseOutbox(exercise: CustomExercise, type: OutboxOperationType): OutboxEntity {
+        val payload = buildJsonObject {
+            put("id", exercise.id)
+            put("name", exercise.name)
+            put("description", exercise.description)
+            put("primary_muscle_group", exercise.primaryMuscleGroup)
+            put("equipment", exercise.requiredEquipment)
+            put("tracking_type", exercise.trackingType.name)
+            put("notes", exercise.notes)
+        }.toString()
+        return outboxEntity(ids, clock, exercise.id, type, payload)
+    }
+}
+
+@Singleton
+class RoomWorkoutRepository @Inject constructor(
+    private val database: AppDatabase,
+    private val profileDao: GuestProfileDao,
+    private val exerciseDao: ExerciseDao,
+    private val workoutDao: WorkoutDao,
+    private val outboxDao: OutboxDao,
+    private val ids: UuidProvider,
+    private val clock: Clock,
+    private val events: DomainEventDispatcher,
+    private val syncEnqueuer: SyncEnqueuer,
+) : WorkoutRepository {
+    override fun observeWorkouts(): Flow<List<Workout>> = workoutDao.observeAll().map { rows -> rows.map { it.toModel() } }
+    override suspend fun getWorkout(id: String): Workout? = workoutDao.get(id)?.toModel()
+
+    override suspend fun create(title: String, exerciseIds: List<String>, notes: String): Workout {
+        val profile = profileDao.get() ?: error("Create a guest profile before adding workouts.")
+        exerciseIds.forEach { requireNotNull(exerciseDao.get(it)) { "Exercise $it does not exist." } }
+        val now = clock.nowEpochMs()
+        val workoutId = ids.newUuid()
+        val workout = Workout(
+            id = workoutId, ownerProfileId = profile.id, title = title, notes = notes,
+            exercises = exerciseIds.mapIndexed { index, exerciseId ->
+                WorkoutExercise(ids.newUuid(), workoutId, exerciseId, index)
+            },
+            createdAtEpochMs = now, updatedAtEpochMs = now,
+        )
+        database.withTransaction {
+            workoutDao.insertWorkout(workout.toEntity())
+            workoutDao.insertExercises(workout.exercises.map { it.toEntity() })
+            outboxDao.insert(workoutOutbox(workout))
+        }
+        events.publish(WorkoutCreated(ids.newUuid(), now, workout.id))
+        syncEnqueuer.enqueue()
+        return workout
+    }
+
+    override suspend fun start(id: String): Workout {
+        val current = requireNotNull(workoutDao.get(id)?.toModel()) { "Workout not found." }
+        if (current.status == WorkoutStatus.IN_PROGRESS || current.status == WorkoutStatus.COMPLETED) return current
+        val now = clock.nowEpochMs()
+        val updated = current.copy(status = WorkoutStatus.IN_PROGRESS, startTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
+        database.withTransaction {
+            workoutDao.updateWorkout(updated.toEntity())
+            outboxDao.insert(workoutOutbox(updated))
+        }
+        events.publish(WorkoutStarted(ids.newUuid(), now, id))
+        syncEnqueuer.enqueue()
+        return updated
+    }
+
+    override suspend fun complete(id: String): Workout {
+        val current = requireNotNull(workoutDao.get(id)?.toModel()) { "Workout not found." }
+        if (current.status == WorkoutStatus.COMPLETED) return current
+        require(current.status == WorkoutStatus.IN_PROGRESS) { "Only a started workout can be completed." }
+        val now = clock.nowEpochMs()
+        val updated = current.copy(status = WorkoutStatus.COMPLETED, endTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
+        database.withTransaction {
+            workoutDao.updateWorkout(updated.toEntity())
+            outboxDao.insert(workoutOutbox(updated))
+        }
+        val deterministicEventId = UUID.nameUUIDFromBytes("WorkoutCompleted:$id".toByteArray(StandardCharsets.UTF_8)).toString()
+        events.publish(WorkoutCompleted(deterministicEventId, now, id))
+        syncEnqueuer.enqueue()
+        return updated
+    }
+
+    private fun workoutOutbox(workout: Workout): OutboxEntity {
+        val payload = buildJsonObject {
+            put("id", workout.id)
+            put("title", workout.title)
+            put("status", workout.status.name)
+            put("notes", workout.notes)
+            putJsonArray("exercise_ids") { workout.exercises.sortedBy { it.position }.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.exerciseId)) } }
+        }.toString()
+        return outboxEntity(ids, clock, workout.id, OutboxOperationType.UPSERT_WORKOUT, payload)
+    }
+}

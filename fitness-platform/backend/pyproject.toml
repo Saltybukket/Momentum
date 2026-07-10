@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fitness-platform-backend"
+version = "0.1.0"
+description = "Modular-monolith backend scaffold for the Fitness Platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "Proprietary scaffold - choose a project license before publication"}
+authors = [{name = "Fitness Platform Contributors"}]
+dependencies = [
+  "fastapi>=0.116,<1",
+  "uvicorn[standard]>=0.35,<1",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "sqlalchemy[asyncio]>=2.0.41,<3",
+  "alembic>=1.16,<2",
+  "asyncpg>=0.30,<1",
+  "aiosqlite>=0.21,<1",
+  "redis>=6.2,<7",
+  "structlog>=25.4,<26",
+  "python-json-logger>=3.3,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<1",
+  "mypy>=1.17,<2",
+  "testcontainers[postgres,redis]>=4.10,<5",
+  "types-redis>=4.6,<5",
+]
+
+[project.scripts]
+fitness-backend = "fitness_platform.main:run"
+fitness-seed = "fitness_platform.seed:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fitness_platform"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config --cov=fitness_platform --cov-report=term-missing"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+  "integration: database or infrastructure integration test",
+  "contract: provider contract test",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["fitness_platform"]
+omit = ["*/seed.py", "*/alembic/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 70
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S105", "S106"]
+"alembic/versions/*.py" = ["I001", "UP007", "UP035"]
+"src/fitness_platform/core/config.py" = ["S105"]
+"src/fitness_platform/providers/mocks.py" = ["S105"]
+"src/fitness_platform/presentation/schemas.py" = ["S105"]
+"src/fitness_platform/main.py" = ["S104"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+packages = ["fitness_platform"]
+warn_unused_ignores = true
+exclude = ["alembic/versions"]
+
+[[tool.mypy.overrides]]
+module = ["redis.*"]
+ignore_missing_imports = true
