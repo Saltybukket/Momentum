@@ -41,8 +41,14 @@ interface ExerciseDao {
     @Update
     suspend fun update(entity: CustomExerciseEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replace(entity: CustomExerciseEntity)
+
     @Query("UPDATE custom_exercises SET syncStatus = 'SYNCED' WHERE id IN (:ids)")
     suspend fun markSynced(ids: List<String>)
+
+    @Query("UPDATE custom_exercises SET syncStatus = 'CONFLICT' WHERE id IN (:ids)")
+    suspend fun markConflict(ids: List<String>)
 }
 
 data class WorkoutWithExercises(

@@ -10,6 +10,7 @@ from fitness_platform.domain.enums import UserKind
 from fitness_platform.domain.models import Exercise, GuestSession, Profile, Workout, WorkoutExercise
 from fitness_platform.infrastructure.orm import (
     ExerciseRow,
+    ExerciseChangeRow,
     GuestSessionRow,
     IdempotencyRecordRow,
     OutboxEventRow,
@@ -47,6 +48,7 @@ def exercise_from_row(row: ExerciseRow) -> Exercise:
         updated_at=row.updated_at,
         server_updated_at=row.server_updated_at,
         deleted_at=row.deleted_at,
+        revision=row.revision,
     )
 
 
@@ -176,6 +178,12 @@ class SqlAlchemyExerciseRepository:
             return None
         return exercise_from_row(row)
 
+    async def get_including_deleted(self, user_id: UUID, exercise_id: UUID) -> Exercise | None:
+        row = await self._session.get(ExerciseRow, exercise_id)
+        if row is None or row.owner_user_id != user_id:
+            return None
+        return exercise_from_row(row)
+
     async def upsert(self, exercise: Exercise) -> Exercise:
         row = await self._session.get(ExerciseRow, exercise.id)
         if row is None:
@@ -193,6 +201,7 @@ class SqlAlchemyExerciseRepository:
                 updated_at=exercise.updated_at,
                 server_updated_at=exercise.server_updated_at,
                 deleted_at=exercise.deleted_at,
+                revision=exercise.revision,
             )
             self._session.add(row)
         else:
@@ -208,6 +217,7 @@ class SqlAlchemyExerciseRepository:
             row.updated_at = exercise.updated_at
             row.server_updated_at = exercise.server_updated_at
             row.deleted_at = exercise.deleted_at
+            row.revision = exercise.revision
         await self._session.flush()
         return exercise_from_row(row)
 
@@ -219,6 +229,26 @@ class SqlAlchemyExerciseRepository:
         row.updated_at = deleted_at
         await self._session.flush()
         return True
+
+    async def record_change(self, exercise: Exercise, changed_at: datetime) -> int:
+        change = ExerciseChangeRow(
+            owner_user_id=exercise.owner_user_id,
+            exercise_id=exercise.id,
+            revision=exercise.revision,
+            changed_at=changed_at,
+        )
+        self._session.add(change)
+        await self._session.flush()
+        return change.sequence
+
+    async def changes_since(self, user_id: UUID, cursor: int, limit: int) -> Sequence[tuple[int, Exercise]]:
+        rows = (await self._session.execute(
+            select(ExerciseChangeRow, ExerciseRow)
+            .join(ExerciseRow, ExerciseRow.id == ExerciseChangeRow.exercise_id)
+            .where(ExerciseChangeRow.owner_user_id == user_id, ExerciseChangeRow.sequence > cursor)
+            .order_by(ExerciseChangeRow.sequence.asc()).limit(limit)
+        )).all()
+        return [(change.sequence, exercise_from_row(exercise)) for change, exercise in rows]
 
 
 class SqlAlchemyWorkoutRepository:

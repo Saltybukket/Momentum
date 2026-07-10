@@ -19,6 +19,7 @@ class GuestSessionStore @Inject constructor(@ApplicationContext private val cont
     private object Keys {
         val token = stringPreferencesKey("guest_token")
         val syncEnabled = booleanPreferencesKey("sync_enabled")
+        val exerciseCursor = stringPreferencesKey("exercise_sync_cursor")
     }
 
     val token: Flow<String?> = context.sessionDataStore.data.map { it[Keys.token] }
@@ -29,4 +30,6 @@ class GuestSessionStore @Inject constructor(@ApplicationContext private val cont
     suspend fun saveToken(value: String) = context.sessionDataStore.edit { it[Keys.token] = value }
     suspend fun clearToken() = context.sessionDataStore.edit { it.remove(Keys.token) }
     suspend fun setSyncEnabled(enabled: Boolean) = context.sessionDataStore.edit { it[Keys.syncEnabled] = enabled }
+    suspend fun exerciseCursor(): Long = context.sessionDataStore.data.first()[Keys.exerciseCursor]?.toLongOrNull() ?: 0L
+    suspend fun saveExerciseCursor(value: Long) = context.sessionDataStore.edit { it[Keys.exerciseCursor] = value.toString() }
 }

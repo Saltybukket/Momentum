@@ -180,6 +180,7 @@ class ExerciseService:
             created_at=now,
             updated_at=now,
             server_updated_at=now,
+            revision=1,
         )
         event = ExerciseCreated(exercise_id=exercise.id, user_id=user_id)
         async with self._uow_factory() as uow:
@@ -187,6 +188,7 @@ class ExerciseService:
             if existing is not None:
                 raise ConflictError("Exercise already exists.")
             result = await uow.exercises.upsert(exercise)
+            await uow.exercises.record_change(result, now)
             await uow.outbox.add_event(
                 event_id=event.event_id,
                 aggregate_type="exercise",
@@ -211,6 +213,7 @@ class ExerciseService:
         tracking_type: TrackingType,
         notes: str,
     ) -> Exercise:
+        now = self._clock.now()
         async with self._uow_factory() as uow:
             existing = await uow.exercises.get(user_id, exercise_id)
             if existing is None:
@@ -224,18 +227,26 @@ class ExerciseService:
                 tracking_type=tracking_type,
                 notes=notes.strip(),
                 sync_status=SyncStatus.SYNCED,
-                updated_at=self._clock.now(),
-                server_updated_at=self._clock.now(),
+                updated_at=now,
+                server_updated_at=now,
+                revision=existing.revision + 1,
             )
             result = await uow.exercises.upsert(updated)
+            await uow.exercises.record_change(result, now)
             await uow.commit()
             return result
 
     async def delete(self, *, user_id: UUID, exercise_id: UUID) -> None:
+        now = self._clock.now()
         async with self._uow_factory() as uow:
-            deleted = await uow.exercises.soft_delete(user_id, exercise_id, self._clock.now())
-            if not deleted:
+            existing = await uow.exercises.get(user_id, exercise_id)
+            if existing is None:
                 raise NotFoundError("Exercise not found.")
+            deleted = await uow.exercises.upsert(replace(
+                existing, deleted_at=now, updated_at=now, server_updated_at=now,
+                revision=existing.revision + 1,
+            ))
+            await uow.exercises.record_change(deleted, now)
             await uow.commit()
 
 
@@ -421,11 +432,7 @@ class WorkoutService:
 
 
 class SyncService:
-    """Small push-only sync foundation.
-
-    Conflict versions and pull/change feeds are intentionally deferred. Server timestamps win for
-    this scaffold, while client UUIDs remain stable.
-    """
+    """Cursor-based private-exercise synchronization with optimistic revisions."""
 
     def __init__(self, *, uow_factory: UowFactory, clock: Clock, ids: UuidProvider) -> None:
         self._uow_factory = uow_factory
@@ -467,10 +474,31 @@ class SyncService:
                 elif entity_type == "exercise":
                     exercise_id = UUID(str(payload["id"]))
                     aggregate_id = exercise_id
+                    existing_exercise = await uow.exercises.get_including_deleted(user_id, exercise_id)
+                    base_revision = payload.get("base_revision")
+                    if existing_exercise is not None and base_revision != existing_exercise.revision:
+                        results.append({
+                            "operation_id": str(operation_id), "aggregate_id": str(exercise_id),
+                            "status": "CONFLICT", "server_updated_at": existing_exercise.server_updated_at.isoformat(),
+                            "revision": existing_exercise.revision,
+                        })
+                        continue
                     if action == "DELETE":
-                        await uow.exercises.soft_delete(user_id, exercise_id, now)
+                        if existing_exercise is None:
+                            raise ValidationAppError("Cannot delete a missing exercise.")
+                        exercise = Exercise(
+                            **{**existing_exercise.__dict__} if hasattr(existing_exercise, "__dict__") else {
+                                "id": existing_exercise.id, "owner_user_id": existing_exercise.owner_user_id,
+                                "name": existing_exercise.name, "description": existing_exercise.description,
+                                "primary_muscle_group": existing_exercise.primary_muscle_group, "equipment": existing_exercise.equipment,
+                                "tracking_type": existing_exercise.tracking_type, "notes": existing_exercise.notes,
+                                "sync_status": SyncStatus.SYNCED, "created_at": existing_exercise.created_at,
+                                "updated_at": now, "server_updated_at": now, "deleted_at": now,
+                                "revision": existing_exercise.revision + 1,
+                            }
+                        )
+                        exercise = await uow.exercises.upsert(exercise)
                     elif action == "UPSERT":
-                        existing_exercise = await uow.exercises.get(user_id, exercise_id)
                         exercise = Exercise(
                             id=exercise_id,
                             owner_user_id=user_id,
@@ -488,10 +516,13 @@ class SyncService:
                             created_at=existing_exercise.created_at if existing_exercise else now,
                             updated_at=now,
                             server_updated_at=now,
+                            deleted_at=None,
+                            revision=(existing_exercise.revision + 1) if existing_exercise else 1,
                         )
-                        await uow.exercises.upsert(exercise)
+                        exercise = await uow.exercises.upsert(exercise)
                     else:
                         raise ValidationAppError(f"Unsupported exercise action: {action}")
+                    await uow.exercises.record_change(exercise, now)
                 elif entity_type == "workout" and action == "UPSERT":
                     workout_id = UUID(str(payload["id"]))
                     aggregate_id = workout_id
@@ -532,7 +563,19 @@ class SyncService:
                         "aggregate_id": str(aggregate_id),
                         "status": "SYNCED",
                         "server_updated_at": now.isoformat(),
+                        "revision": exercise.revision if entity_type == "exercise" else None,
                     }
                 )
             await uow.commit()
         return results
+
+    async def pull(self, *, user_id: UUID, cursor: int, limit: int) -> tuple[list[dict[str, object]], int, bool]:
+        async with self._uow_factory() as uow:
+            changes = await uow.exercises.changes_since(user_id, cursor, limit + 1)
+        has_more = len(changes) > limit
+        page = changes[:limit]
+        next_cursor = page[-1][0] if page else cursor
+        return [
+            {"cursor": sequence, "exercise": exercise, "deleted": exercise.deleted_at is not None}
+            for sequence, exercise in page
+        ], next_cursor, has_more

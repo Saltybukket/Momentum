@@ -93,6 +93,8 @@ class ExerciseResponse(ApiModel):
     created_at: datetime
     updated_at: datetime
     server_updated_at: datetime | None
+    revision: int
+    deleted_at: datetime | None = None
 
     @classmethod
     def from_domain(cls, exercise: Exercise) -> "ExerciseResponse":
@@ -109,6 +111,8 @@ class ExerciseResponse(ApiModel):
             created_at=exercise.created_at,
             updated_at=exercise.updated_at,
             server_updated_at=exercise.server_updated_at,
+            revision=exercise.revision,
+            deleted_at=exercise.deleted_at,
         )
 
 
@@ -215,10 +219,23 @@ class SyncResult(ApiModel):
     aggregate_id: UUID
     status: SyncStatus
     server_updated_at: datetime
+    revision: int | None = None
 
 
 class SyncPushResponse(ApiModel):
     results: list[SyncResult]
+
+
+class ExerciseChange(ApiModel):
+    cursor: int
+    deleted: bool
+    exercise: ExerciseResponse
+
+
+class SyncPullResponse(ApiModel):
+    changes: list[ExerciseChange]
+    next_cursor: int
+    has_more: bool
 
 
 class HealthResponse(ApiModel):

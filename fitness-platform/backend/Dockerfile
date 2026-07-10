@@ -9,9 +9,10 @@ RUN pip install --no-cache-dir uv==0.10.0 \
     && useradd --system --gid fitness --create-home fitness
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+COPY tests ./tests
 COPY alembic.ini ./
 COPY alembic ./alembic
-RUN uv sync --frozen --no-dev \
+RUN uv sync --frozen --extra dev \
     && chown -R fitness:fitness /app
 USER fitness
 EXPOSE 8000

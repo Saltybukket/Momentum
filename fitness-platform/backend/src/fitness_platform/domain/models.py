@@ -55,6 +55,7 @@ class Exercise:
     updated_at: datetime
     server_updated_at: datetime | None = None
     deleted_at: datetime | None = None
+    revision: int = 0
 
 
 @dataclass(slots=True)

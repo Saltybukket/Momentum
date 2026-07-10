@@ -18,12 +18,14 @@ import at.fitnessplatform.core.network.FitnessApi
 import at.fitnessplatform.core.network.GuestSessionRequest
 import at.fitnessplatform.core.network.SyncOperationDto
 import at.fitnessplatform.core.network.SyncPushRequest
+import at.fitnessplatform.core.network.ExerciseChangeDto
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import java.time.Instant
 
 @HiltWorker
 class SyncWorker @AssistedInject constructor(
@@ -42,7 +44,7 @@ class SyncWorker @AssistedInject constructor(
         if (!sessionStore.isSyncEnabled()) return Result.success()
         val pending = outboxDao.pending()
         return when {
-            pending.isEmpty() -> Result.success()
+            pending.isEmpty() -> pullOnly()
             else -> {
                 val profile = profileDao.get()
                 if (profile == null) {
@@ -68,11 +70,58 @@ class SyncWorker @AssistedInject constructor(
             pending.joinToString("|") { it.id }.toByteArray(StandardCharsets.UTF_8),
         ).toString()
         val response = api.pushSync("Bearer $token", batchKey, SyncPushRequest(operations))
-        markSuccessful(pending, response.results.map { it.operationId }.toSet())
+        markSuccessful(pending, response.results.filter { it.status == "SYNCED" }.map { it.operationId }.toSet())
+        val conflicts = response.results.filter { it.status == "CONFLICT" }.map { it.aggregateId }
+        if (conflicts.isNotEmpty()) exerciseDao.markConflict(conflicts)
+        pullExercises(token)
         Result.success()
     } catch (exception: Exception) {
         outboxDao.markFailed(ids, exception.message?.take(500) ?: exception::class.java.simpleName)
         if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
+    }
+
+    private suspend fun pullOnly(): Result = try {
+        val profile = profileDao.get() ?: return Result.success()
+        pullExercises(tokenFor(profile))
+        Result.success()
+    } catch (exception: Exception) {
+        if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
+    }
+
+    private suspend fun pullExercises(token: String) {
+        var cursor = sessionStore.exerciseCursor()
+        do {
+            val page = api.pullExercises("Bearer $token", cursor)
+            database.withTransaction {
+                for (change in page.changes) applyRemoteChange(change)
+                sessionStore.saveExerciseCursor(page.nextCursor)
+            }
+            cursor = page.nextCursor
+        } while (page.hasMore)
+    }
+
+    private suspend fun applyRemoteChange(change: ExerciseChangeDto) {
+        val remote = change.exercise
+        val local = exerciseDao.get(remote.id)
+        if (local?.syncStatus in setOf("PENDING", "SYNCING")) return
+        exerciseDao.replace(
+            at.fitnessplatform.core.database.CustomExerciseEntity(
+                id = remote.id,
+                ownerProfileId = local?.ownerProfileId ?: profileDao.get()?.id ?: return,
+                name = remote.name,
+                description = remote.description,
+                primaryMuscleGroup = remote.primaryMuscleGroup,
+                requiredEquipment = remote.equipment,
+                trackingType = remote.trackingType,
+                notes = remote.notes,
+                createdAtEpochMs = Instant.parse(remote.createdAt).toEpochMilli(),
+                updatedAtEpochMs = Instant.parse(remote.updatedAt).toEpochMilli(),
+                syncStatus = "SYNCED",
+                serverId = remote.id,
+                conflictVersion = remote.revision,
+                deletedAtEpochMs = remote.deletedAt?.let { Instant.parse(it).toEpochMilli() },
+            ),
+        )
     }
 
     private suspend fun tokenFor(profile: GuestProfileEntity): String = sessionStore.tokenOrNull()

@@ -21,6 +21,8 @@ from fitness_platform.presentation.schemas import (
     SyncPushRequest,
     SyncPushResponse,
     SyncResult,
+    SyncPullResponse,
+    ExerciseChange,
     WorkoutPage,
     WorkoutResponse,
     WorkoutWrite,
@@ -328,4 +330,23 @@ async def sync_push(
         status_code=response_status,
         content=body,
         headers={"Idempotency-Replayed": str(replayed).lower()},
+    )
+
+
+@router.get("/api/v1/sync/exercises", response_model=SyncPullResponse, tags=["sync"])
+async def sync_pull_exercises(
+    user_id: CurrentUserId,
+    container: ContainerDep,
+    cursor: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> SyncPullResponse:
+    changes, next_cursor, has_more = await container.sync.pull(
+        user_id=user_id, cursor=cursor, limit=limit
+    )
+    return SyncPullResponse(
+        changes=[ExerciseChange(
+            cursor=int(change["cursor"]), deleted=bool(change["deleted"]),
+            exercise=ExerciseResponse.from_domain(change["exercise"]),
+        ) for change in changes],
+        next_cursor=next_cursor, has_more=has_more,
     )

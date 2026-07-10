@@ -94,6 +94,22 @@ class ExerciseRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     server_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class ExerciseChangeRow(Base):
+    __tablename__ = "exercise_changes"
+    __table_args__ = (Index("ix_exercise_changes_owner_sequence", "owner_user_id", "sequence"),)
+
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    exercise_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("exercises.id", ondelete="CASCADE"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class WorkoutRow(Base):

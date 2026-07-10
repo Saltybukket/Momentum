@@ -146,6 +146,7 @@ class RoomExerciseRepository @Inject constructor(
             put("equipment", exercise.requiredEquipment)
             put("tracking_type", exercise.trackingType.name)
             put("notes", exercise.notes)
+            put("base_revision", exercise.conflictVersion)
         }.toString()
         return outboxEntity(ids, clock, exercise.id, type, payload)
     }

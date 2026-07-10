@@ -35,3 +35,20 @@ import kotlinx.serialization.json.JsonObject
     @SerialName("server_updated_at") val serverUpdatedAt: String,
 )
 @Serializable data class SyncPushResponse(val results: List<SyncResultDto>)
+@Serializable data class ExerciseDto(
+    val id: String,
+    @SerialName("owner_user_id") val ownerUserId: String,
+    val name: String, val description: String,
+    @SerialName("primary_muscle_group") val primaryMuscleGroup: String,
+    val equipment: String,
+    @SerialName("tracking_type") val trackingType: String,
+    val notes: String, @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+    val revision: Long, @SerialName("deleted_at") val deletedAt: String? = null,
+)
+@Serializable data class ExerciseChangeDto(val cursor: Long, val deleted: Boolean, val exercise: ExerciseDto)
+@Serializable data class SyncPullResponse(
+    val changes: List<ExerciseChangeDto>,
+    @SerialName("next_cursor") val nextCursor: Long,
+    @SerialName("has_more") val hasMore: Boolean,
+)
