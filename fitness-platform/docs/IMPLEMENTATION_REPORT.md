@@ -33,7 +33,7 @@ The monorepository contains:
 | Android language/UI | Kotlin 2.3.21, Jetpack Compose BOM 2026.06.00, Material 3 |
 | Android build | AGP 8.13.2, Gradle 8.13, Kotlin DSL, version catalog, JDK 17 |
 | Android data/background | Room 2.8.4, DataStore 1.2.1, WorkManager 2.11.2 |
-| Android DI/network | Hilt 2.60.1, AndroidX Hilt 1.4.0, Retrofit 3.0.0, Kotlin Serialization |
+| Android DI/network | Hilt 2.58, AndroidX Hilt 1.3.0, Retrofit 3.0.0, Kotlin Serialization |
 | Backend | Python 3.12+, FastAPI, Pydantic 2, SQLAlchemy 2, Alembic |
 | Persistence/infrastructure | PostgreSQL 17, Redis 8, Docker Compose |
 | Backend quality | uv lockfile, Ruff, strict mypy, pytest, httpx, coverage |
@@ -122,7 +122,7 @@ The current synchronization direction is push-only. Pull synchronization, tombst
 
 ## 7. Tests and checks actually executed
 
-The following results were produced in the generation environment. They are reported separately from checks that could not run.
+The following results were produced in the generation environment and re-verified in WSL on 2026-07-10. They are reported separately from checks that could not run.
 
 ### Successfully executed
 
@@ -140,6 +140,7 @@ uv run alembic heads
 Results:
 
 - dependency lock check: passed;
+- the lockfile resolves through public PyPI and contains no environment-specific internal registry URLs;
 - Ruff formatting: passed;
 - Ruff linting: passed;
 - mypy strict type checking: passed;
@@ -151,6 +152,7 @@ Results:
 - idempotency tests: passed;
 - provider contract tests: passed;
 - module-cycle test: passed.
+- repository integrity check passed after local backend and Android build artifacts were generated.
 
 Runtime smoke checks also passed:
 
@@ -165,27 +167,33 @@ The generated OpenAPI document is stored in `shared/openapi.json`.
 
 ### Android checks successfully executed
 
-A dependency-independent Kotlin compilation was run over `core:model` and `domain`, including domain models, events, repository contracts and use cases. It completed without compiler errors.
+From `android/`, with `ANDROID_HOME=/home/student/Android/Sdk`:
 
-All repository JSON, TOML and XML files were parsed successfully. The Docker Compose and GitHub Actions YAML files were parsed successfully.
+```text
+./gradlew spotlessCheck detekt test lintDebug assembleDebug
+```
+
+Results:
+
+- the pinned Gradle 8.13 bootstrap download and SHA-256 verification succeeded;
+- Spotless formatting checks passed;
+- Detekt passed;
+- Android JVM unit tests passed;
+- Android Lint passed;
+- the debug APK build passed;
+- Gradle reported `BUILD SUCCESSFUL` with 567 actionable tasks (26 executed and 541 up-to-date in the final run);
+- the Room version-1 schema was exported to `android/core/database/schemas/`.
 
 ### Checks not executable in the generation environment
 
-The complete Android Gradle build, Android unit tests, Room instrumentation tests and Compose UI tests could not be executed because:
-
-- no Android SDK was installed;
-- `ANDROID_HOME` was unset;
-- the environment could not resolve `services.gradle.org`, so the included Gradle bootstrap could not download Gradle 8.13.
-
-The attempted wrapper invocation failed before project configuration with a DNS `UnknownHostException`. This is an environment limitation, not a claimed successful Android build. The expected verification commands are:
+Room instrumentation tests, Compose UI tests and navigation instrumentation tests were not run because no emulator or connected Android device was available. The remaining command is:
 
 ```bash
 cd android
-./gradlew spotlessCheck detekt test lintDebug assembleDebug
 ./gradlew connectedDebugAndroidTest
 ```
 
-Docker and Docker Compose were also unavailable in the generation environment. Therefore, the Compose file was syntax-validated but the full three-service stack and Docker image build were not executed here. The expected commands are:
+Docker and Docker Compose were unavailable inside distribution `ISP2025` because Docker Desktop WSL integration was disabled. Therefore, the full three-service stack and Docker image build were not executed in this verification pass. The expected commands are:
 
 ```bash
 cp .env.example .env
@@ -227,7 +235,7 @@ All included exercise, muscle, equipment and workout fixtures are self-authored 
 
 ## 10. Known limitations
 
-- Android Gradle compilation remains to be verified on a machine with JDK 17, Android SDK Platform 36 and network access to configured repositories.
+- Android instrumentation tests still require an emulator or connected device.
 - Synchronization is push-only and uses a development guest token.
 - There is no production account conversion or merge workflow.
 - There is no pull synchronization, user-visible conflict resolver or remote tombstone processing.

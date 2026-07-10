@@ -8,6 +8,11 @@ complexity:
     thresholdInFiles: 30
     thresholdInClasses: 20
     thresholdInInterfaces: 20
+    thresholdInObjects: 20
+naming:
+  FunctionNaming:
+    ignoreAnnotated:
+      - Composable
 style:
   MagicNumber:
     active: false

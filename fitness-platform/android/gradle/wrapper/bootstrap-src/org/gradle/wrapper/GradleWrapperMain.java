@@ -3,6 +3,7 @@ package org.gradle.wrapper;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileAttribute;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -90,7 +92,7 @@ public final class GradleWrapperMain {
         System.out.println("Downloading pinned Gradle distribution: " + distributionUrl);
         downloadFollowingRedirects(new URL(distributionUrl), archive, 0);
 
-        String actualSha256 = sha256(Files.readAllBytes(archive));
+        String actualSha256 = sha256(archive);
         if (!MessageDigest.isEqual(
                 actualSha256.getBytes(StandardCharsets.US_ASCII),
                 expectedSha256.getBytes(StandardCharsets.US_ASCII))) {
@@ -166,6 +168,15 @@ public final class GradleWrapperMain {
 
     private static String sha256(byte[] value) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));
+    }
+
+    private static String sha256(Path path) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream input = new DigestInputStream(
+                new BufferedInputStream(Files.newInputStream(path)), digest)) {
+            input.transferTo(OutputStream.nullOutputStream());
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 
     private static boolean isWindows() {

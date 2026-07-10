@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package at.fitnessplatform.core.testing
 
 import at.fitnessplatform.core.model.Clock

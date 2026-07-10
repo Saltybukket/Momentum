@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import sys
 import tomllib
 import xml.etree.ElementTree as ET
@@ -44,6 +46,28 @@ def fail(message: str, errors: list[str]) -> None:
     errors.append(message)
 
 
+def repository_files() -> list[Path]:
+    """Return tracked and non-ignored untracked files, excluding local build output."""
+    try:
+        git = shutil.which("git")
+        if git is None:
+            raise FileNotFoundError("git executable not found")
+        result = subprocess.run(  # noqa: S603 - fixed Git command, no untrusted arguments
+            [git, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return [
+            path
+            for path in ROOT.rglob("*")
+            if path.is_file()
+            and not any(part in FORBIDDEN_NAMES for part in path.relative_to(ROOT).parts)
+        ]
+    return [ROOT / raw.decode("utf-8") for raw in result.stdout.split(b"\0") if raw]
+
+
 def main() -> int:
     errors: list[str] = []
     for relative in REQUIRED_FILES:
@@ -51,33 +75,38 @@ def main() -> int:
         if not path.is_file() or path.stat().st_size == 0:
             fail(f"required file missing or empty: {relative}", errors)
 
-    for path in ROOT.rglob("*"):
+    files = repository_files()
+    forbidden_directories: set[Path] = set()
+    for path in files:
         relative = path.relative_to(ROOT)
-        if path.is_dir() and path.name in FORBIDDEN_NAMES:
-            fail(f"generated directory must not be committed: {relative}", errors)
-        if path.is_file() and path.name in FORBIDDEN_FILES:
+        for parent in relative.parents:
+            if parent.name in FORBIDDEN_NAMES:
+                forbidden_directories.add(parent)
+        if path.name in FORBIDDEN_FILES:
             fail(f"generated/secret file must not be committed: {relative}", errors)
+    for relative in sorted(forbidden_directories):
+        fail(f"generated directory must not be committed: {relative}", errors)
 
-    for path in ROOT.rglob("*.json"):
+    for path in (path for path in files if path.suffix == ".json"):
         try:
             json.loads(path.read_text(encoding="utf-8"))
         except Exception as exc:
             fail(f"invalid JSON {path.relative_to(ROOT)}: {exc}", errors)
 
-    for path in ROOT.rglob("*.toml"):
+    for path in (path for path in files if path.suffix == ".toml"):
         try:
             with path.open("rb") as handle:
                 tomllib.load(handle)
         except Exception as exc:
             fail(f"invalid TOML {path.relative_to(ROOT)}: {exc}", errors)
 
-    for path in ROOT.rglob("*.xml"):
+    for path in (path for path in files if path.suffix == ".xml"):
         try:
             ET.parse(path)  # noqa: S314 - repository-owned Android resource XML
         except Exception as exc:
             fail(f"invalid XML {path.relative_to(ROOT)}: {exc}", errors)
 
-    for path in ROOT.rglob("*.md"):
+    for path in (path for path in files if path.suffix == ".md"):
         text = path.read_text(encoding="utf-8")
         for raw_target in MARKDOWN_LINK.findall(text):
             target = raw_target.split("#", 1)[0].strip()

@@ -83,7 +83,7 @@ cd android
 ./gradlew lintDebug assembleDebug
 ```
 
-The included Gradle bootstrap downloads Gradle 8.13 on first use. The generator environment did not contain an Android SDK, so the Android build result is explicitly reported as unverified in `docs/IMPLEMENTATION_REPORT.md` rather than invented.
+The included Gradle bootstrap downloads and verifies Gradle 8.13 on first use. The full Android unit-test, formatting, static-analysis, lint and debug-build command has been verified in WSL with Android SDK Platform 36; see `docs/IMPLEMENTATION_REPORT.md` for the exact command and remaining instrumentation limitation.
 
 ## Windows PowerShell
 

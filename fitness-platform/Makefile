@@ -1,6 +1,12 @@
 SHELL := /bin/sh
 .DEFAULT_GOAL := help
 
+ifneq ($(wildcard $(HOME)/Android/Sdk),)
+ANDROID_HOME ?= $(HOME)/Android/Sdk
+ANDROID_SDK_ROOT ?= $(ANDROID_HOME)
+export ANDROID_HOME ANDROID_SDK_ROOT
+endif
+
 .PHONY: help setup dev backend backend-test backend-lint android-test android-build test lint migrate seed clean openapi smoke
 help:
 	@printf '%s\n' "setup dev backend backend-test backend-lint android-test android-build test lint migrate seed clean openapi smoke"

@@ -42,9 +42,13 @@ class CreateExerciseUseCase(private val repository: ExerciseRepository) {
         notes: String,
     ): CustomExercise {
         val normalizedName = name.trim()
-        if (normalizedName.isBlank()) throw ValidationException("Exercise name must not be empty.")
-        if (normalizedName.length > 120) throw ValidationException("Exercise name must not exceed 120 characters.")
-        if (primaryMuscleGroup.isBlank()) throw ValidationException("A primary muscle group is required.")
+        val validationError = when {
+            normalizedName.isBlank() -> "Exercise name must not be empty."
+            normalizedName.length > 120 -> "Exercise name must not exceed 120 characters."
+            primaryMuscleGroup.isBlank() -> "A primary muscle group is required."
+            else -> null
+        }
+        if (validationError != null) throw ValidationException(validationError)
         return repository.create(
             normalizedName,
             description.trim(),

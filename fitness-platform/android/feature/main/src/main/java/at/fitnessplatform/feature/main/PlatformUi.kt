@@ -34,6 +34,7 @@ private object Routes {
 @Composable
 fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val profile = state.profile
     val navController = rememberNavController()
     MaterialTheme {
         Scaffold(
@@ -47,7 +48,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
         ) { padding ->
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            } else if (state.profile == null) {
+            } else if (profile == null) {
                 CreateGuestScreen(
                     modifier = Modifier.padding(padding),
                     busy = state.operationInProgress,
@@ -57,7 +58,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                 NavHost(navController, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
                     composable(Routes.HOME) {
                         HomeScreen(
-                            displayName = state.profile.displayName,
+                            displayName = profile.displayName,
                             exerciseCount = state.exercises.size,
                             workoutCount = state.workouts.size,
                             onProfile = { navController.navigate(Routes.PROFILE) },
@@ -66,7 +67,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                         )
                     }
                     composable(Routes.PROFILE) {
-                        ProfileScreen(state.profile.displayName, state.operationInProgress, viewModel::renameGuest) { navController.popBackStack() }
+                        ProfileScreen(profile.displayName, state.operationInProgress, viewModel::renameGuest) { navController.popBackStack() }
                     }
                     composable(Routes.EXERCISES) {
                         ExerciseListScreen(

@@ -20,10 +20,12 @@ kotlin { jvmToolchain(17) }
 
 dependencies {
     implementation(project(":core:model"))
-    implementation(project(":domain"))
+    api(project(":domain"))
     implementation(project(":core:database"))
     implementation(project(":core:datastore"))
     implementation(project(":core:network"))
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
     implementation(libs.hilt.android)

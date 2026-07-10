@@ -32,7 +32,18 @@ spotless {
 }
 
 detekt {
-    source.setFrom(files("app", "core", "domain", "data", "feature"))
+    source.setFrom(
+        fileTree(rootDir) {
+            include(
+                "app/src/**/*.kt",
+                "core/**/src/**/*.kt",
+                "domain/src/**/*.kt",
+                "data/src/**/*.kt",
+                "feature/**/src/**/*.kt",
+            )
+            exclude("**/build/**", "**/generated/**")
+        },
+    )
     buildUponDefaultConfig = true
     config.setFrom(files("config/detekt/detekt.yml"))
     parallel = true

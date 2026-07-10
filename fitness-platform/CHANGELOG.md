@@ -2,6 +2,17 @@
 
 All notable scaffold changes are documented here. The project follows semantic versioning once public releases begin.
 
+## [Unreleased]
+
+### Fixed
+
+- Made the Linux Gradle bootstrap executable and checksum large distributions without loading the archive into the 64 MB wrapper heap.
+- Aligned Hilt, AndroidX Hilt and Lifecycle versions with the AGP 8.13/API 36 baseline.
+- Fixed Android module classpaths, Compose test BOM resolution, Detekt source selection and Compose compilation issues exposed by the first full build.
+- Exported the initial Room schema and verified Android unit tests, formatting, Detekt, lint and debug assembly in WSL.
+- Re-locked backend dependencies against public PyPI instead of an environment-specific internal package mirror.
+- Made repository integrity checks ignore local generated output while still rejecting tracked or non-ignored generated files.
+
 ## [0.1.0-scaffold] - 2026-07-10
 
 ### Added
