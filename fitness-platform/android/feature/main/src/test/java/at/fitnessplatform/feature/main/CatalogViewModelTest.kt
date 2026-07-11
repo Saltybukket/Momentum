@@ -1,0 +1,65 @@
+package at.fitnessplatform.feature.main
+
+import at.fitnessplatform.core.model.*
+import at.fitnessplatform.core.testing.MainDispatcherRule
+import at.fitnessplatform.domain.CatalogRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class CatalogViewModelTest {
+    @get:Rule val mainDispatcherRule = MainDispatcherRule()
+
+    @Test fun `offline first seed filters and refresh failure preserve catalog`() = runTest {
+        val repository = FakeCatalogRepository()
+        val viewModel = CatalogViewModel(repository)
+        val states = mutableListOf<CatalogUiState>()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect { states += it } }
+        advanceUntilIdle()
+        assertEquals(2, states.last().exercises.size)
+        viewModel.setMuscle("core")
+        advanceUntilIdle()
+        assertEquals(listOf("Plank"), states.last().exercises.map { it.name })
+        viewModel.setEquipment("bodyweight")
+        advanceUntilIdle()
+        assertEquals(1, states.last().exercises.size)
+        repository.failRefresh = true
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertTrue(states.last().offline)
+        assertFalse(states.last().loading)
+        assertEquals("Plank", states.last().exercises.single().name)
+        job.cancel()
+    }
+}
+
+private class FakeCatalogRepository : CatalogRepository {
+    private val rows = MutableStateFlow<List<CatalogExercise>>(emptyList())
+    var failRefresh = false
+    override fun observeCatalog(filter: CatalogFilter): Flow<List<CatalogExercise>> = rows.map { list ->
+        list.filter { row -> (filter.muscle == null || row.muscles.any { it.slug == filter.muscle }) && (filter.equipment == null || filter.equipment in row.equipment) }
+    }
+    override fun observeExercise(id: String) = rows.map { list -> list.firstOrNull { it.id == id } }
+    override fun observeMuscles() = MutableStateFlow(listOf(Muscle("core", "Core"), Muscle("legs", "Legs")))
+    override fun observeEquipment() = MutableStateFlow(listOf(Equipment("bodyweight", "Bodyweight"), Equipment("bench", "Bench")))
+    override suspend fun seedIfEmpty() {
+        if (rows.value.isEmpty()) rows.value = listOf(catalog("1", "Plank", "core", "bodyweight"), catalog("2", "Squat", "legs", "bench"))
+    }
+    override suspend fun refresh() { if (failRefresh) error("offline") }
+    private fun catalog(id: String, name: String, muscle: String, equipment: String) = CatalogExercise(
+        id, id, "demo", "self-authored", "CC0-1.0", "https://creativecommons.org/publicdomain/zero/1.0/", "1",
+        CatalogStatus.PUBLISHED, true, name, "description", TrackingType.REPS,
+        listOf(CatalogMuscle(muscle, MuscleRole.PRIMARY)), listOf(equipment),
+    )
+}

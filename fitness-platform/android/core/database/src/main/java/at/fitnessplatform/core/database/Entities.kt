@@ -129,3 +129,47 @@ data class ExerciseConflictEntity(
     val resolutionStatus: String,
     val resolvedAtEpochMs: Long?,
 )
+
+@Entity(tableName = "catalog_exercises", indices = [Index(value = ["source", "externalId"], unique = true), Index("name")])
+data class CatalogExerciseEntity(
+    @PrimaryKey val id: String,
+    val externalId: String,
+    val source: String,
+    val provenance: String,
+    val licenseName: String,
+    val licenseUrl: String,
+    val version: String,
+    val status: String,
+    val reviewed: Boolean,
+    val name: String,
+    val description: String,
+    val trackingType: String,
+)
+
+@Entity(tableName = "catalog_muscles")
+data class CatalogMuscleEntity(@PrimaryKey val slug: String, val name: String)
+
+@Entity(tableName = "catalog_equipment")
+data class CatalogEquipmentEntity(@PrimaryKey val slug: String, val name: String)
+
+@Entity(
+    tableName = "catalog_exercise_muscles",
+    primaryKeys = ["exerciseId", "muscleSlug"],
+    foreignKeys = [
+        ForeignKey(entity = CatalogExerciseEntity::class, parentColumns = ["id"], childColumns = ["exerciseId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = CatalogMuscleEntity::class, parentColumns = ["slug"], childColumns = ["muscleSlug"], onDelete = ForeignKey.RESTRICT),
+    ],
+    indices = [Index("exerciseId"), Index("muscleSlug")],
+)
+data class CatalogExerciseMuscleEntity(val exerciseId: String, val muscleSlug: String, val role: String)
+
+@Entity(
+    tableName = "catalog_exercise_equipment",
+    primaryKeys = ["exerciseId", "equipmentSlug"],
+    foreignKeys = [
+        ForeignKey(entity = CatalogExerciseEntity::class, parentColumns = ["id"], childColumns = ["exerciseId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = CatalogEquipmentEntity::class, parentColumns = ["slug"], childColumns = ["equipmentSlug"], onDelete = ForeignKey.RESTRICT),
+    ],
+    indices = [Index("exerciseId"), Index("equipmentSlug")],
+)
+data class CatalogExerciseEquipmentEntity(val exerciseId: String, val equipmentSlug: String)

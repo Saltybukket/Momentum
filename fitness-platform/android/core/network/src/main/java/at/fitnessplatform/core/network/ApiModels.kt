@@ -54,3 +54,22 @@ import kotlinx.serialization.json.JsonObject
     @SerialName("next_cursor") val nextCursor: Long,
     @SerialName("has_more") val hasMore: Boolean,
 )
+
+@Serializable data class CatalogMuscleDto(val slug: String, val role: String)
+@Serializable data class CatalogExerciseDto(
+    val id: String,
+    @SerialName("external_id") val externalId: String,
+    val source: String,
+    val provenance: String,
+    @SerialName("license_name") val licenseName: String,
+    @SerialName("license_url") val licenseUrl: String,
+    val version: String,
+    val status: String,
+    val reviewed: Boolean,
+    val name: String,
+    val description: String,
+    @SerialName("tracking_type") val trackingType: String,
+    val muscles: List<CatalogMuscleDto>,
+    val equipment: List<String>,
+)
+@Serializable data class CatalogFacetDto(val slug: String, val name: String)

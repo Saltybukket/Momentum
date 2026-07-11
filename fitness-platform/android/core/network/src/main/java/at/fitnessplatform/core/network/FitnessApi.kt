@@ -7,6 +7,15 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 interface FitnessApi {
+    @GET("api/v1/catalog/exercises")
+    suspend fun catalogExercises(
+        @Query("muscle") muscle: String? = null,
+        @Query("equipment") equipment: String? = null,
+    ): List<CatalogExerciseDto>
+
+    @GET("api/v1/catalog/muscles") suspend fun catalogMuscles(): List<CatalogFacetDto>
+    @GET("api/v1/catalog/equipment") suspend fun catalogEquipment(): List<CatalogFacetDto>
+
     @POST("api/v1/guest-sessions")
     suspend fun createGuestSession(
         @Header("Idempotency-Key") idempotencyKey: String,

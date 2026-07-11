@@ -1,6 +1,10 @@
 package at.fitnessplatform.domain
 
 import at.fitnessplatform.core.model.CustomExercise
+import at.fitnessplatform.core.model.CatalogExercise
+import at.fitnessplatform.core.model.CatalogFilter
+import at.fitnessplatform.core.model.Equipment
+import at.fitnessplatform.core.model.Muscle
 import at.fitnessplatform.core.model.DomainEvent
 import at.fitnessplatform.core.model.ExerciseConflict
 import at.fitnessplatform.core.model.ExerciseConflictResolution
@@ -42,6 +46,15 @@ interface WorkoutRepository {
     suspend fun create(title: String, exerciseIds: List<String>, notes: String): Workout
     suspend fun start(id: String): Workout
     suspend fun complete(id: String): Workout
+}
+
+interface CatalogRepository {
+    fun observeCatalog(filter: CatalogFilter = CatalogFilter()): Flow<List<CatalogExercise>>
+    fun observeExercise(id: String): Flow<CatalogExercise?>
+    fun observeMuscles(): Flow<List<Muscle>>
+    fun observeEquipment(): Flow<List<Equipment>>
+    suspend fun seedIfEmpty()
+    suspend fun refresh()
 }
 
 fun interface DomainEventHandler<T : DomainEvent> { suspend fun handle(event: T) }

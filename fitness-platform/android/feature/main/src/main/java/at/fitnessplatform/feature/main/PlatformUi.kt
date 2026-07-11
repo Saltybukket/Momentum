@@ -36,6 +36,8 @@ private object Routes {
     const val CONFLICTS = "conflicts"
     const val CONFLICT = "conflict/{exerciseId}"
     const val WORKOUTS = "workouts"
+    const val CATALOG = "catalog"
+    const val CATALOG_EXERCISE = "catalog/{catalogId}"
 }
 
 @Composable
@@ -71,6 +73,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             conflictCount = state.conflicts.size,
                             onProfile = { navController.navigate(Routes.PROFILE) },
                             onExercises = { navController.navigate(Routes.EXERCISES) },
+                            onCatalog = { navController.navigate(Routes.CATALOG) },
                             onWorkouts = { navController.navigate(Routes.WORKOUTS) },
                             onConflicts = { navController.navigate(Routes.CONFLICTS) },
                         )
@@ -130,6 +133,21 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable(Routes.CATALOG) {
+                        CatalogRoute(
+                            onOpen = { navController.navigate("catalog/$it") },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(
+                        Routes.CATALOG_EXERCISE,
+                        arguments = listOf(navArgument("catalogId") { type = NavType.StringType }),
+                    ) { entry ->
+                        CatalogDetailRoute(
+                            id = entry.arguments?.getString("catalogId").orEmpty(),
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
         }
@@ -150,12 +168,23 @@ private fun CreateGuestScreen(modifier: Modifier, busy: Boolean, onCreate: (Stri
 }
 
 @Composable
-private fun HomeScreen(displayName: String, exerciseCount: Int, workoutCount: Int, conflictCount: Int, onProfile: () -> Unit, onExercises: () -> Unit, onWorkouts: () -> Unit, onConflicts: () -> Unit) {
+private fun HomeScreen(
+    displayName: String,
+    exerciseCount: Int,
+    workoutCount: Int,
+    conflictCount: Int,
+    onProfile: () -> Unit,
+    onExercises: () -> Unit,
+    onCatalog: () -> Unit,
+    onWorkouts: () -> Unit,
+    onConflicts: () -> Unit,
+) {
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Hello, $displayName", style = MaterialTheme.typography.headlineMedium)
         Text("$exerciseCount custom exercises · $workoutCount workouts")
         Button(onClick = onProfile, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
         Button(onClick = onExercises, modifier = Modifier.fillMaxWidth()) { Text("Custom exercises") }
+        OutlinedButton(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("Public offline exercise catalog") }
         if (conflictCount > 0) Button(onClick = onConflicts, modifier = Modifier.fillMaxWidth()) { Text("Resolve $conflictCount sync conflict(s)") }
         Button(onClick = onWorkouts, modifier = Modifier.fillMaxWidth()) { Text("Workouts") }
         HorizontalDivider()

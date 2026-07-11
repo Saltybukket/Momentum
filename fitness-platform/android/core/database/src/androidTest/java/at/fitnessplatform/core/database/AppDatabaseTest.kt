@@ -2,8 +2,11 @@ package at.fitnessplatform.core.database
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.withTransaction
+import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import at.fitnessplatform.core.model.*
 import java.io.File
 import kotlinx.coroutines.flow.first
@@ -12,11 +15,16 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AppDatabaseTest {
+    @get:Rule val migrationHelper = MigrationTestHelper(
+        InstrumentationRegistry.getInstrumentation(),
+        AppDatabase::class.java,
+    )
     private lateinit var context: Context
     private lateinit var database: AppDatabase
     private val name = "database-restart-test.db"
@@ -72,5 +80,29 @@ class AppDatabaseTest {
         val conflict = database.exerciseConflictDao().getOpenForExercise("e1")
         assertNotNull(conflict)
         assertEquals(2, conflict?.remoteRevision)
+    }
+
+    @Test fun catalogRelationsAndCombinedFiltersPersistOffline() = runTest {
+        val exercise = CatalogExerciseEntity("catalog-1", "squat", "demo", "self-authored", "CC0-1.0", "https://creativecommons.org/publicdomain/zero/1.0/", "1", "PUBLISHED", true, "Squat", "Description", "REPS")
+        database.withTransaction {
+            database.catalogDao().insertMuscles(listOf(CatalogMuscleEntity("legs", "Legs")))
+            database.catalogDao().insertEquipment(listOf(CatalogEquipmentEntity("bodyweight", "Bodyweight")))
+            database.catalogDao().insertExercises(listOf(exercise))
+            database.catalogDao().insertExerciseMuscles(listOf(CatalogExerciseMuscleEntity(exercise.id, "legs", "PRIMARY")))
+            database.catalogDao().insertExerciseEquipment(listOf(CatalogExerciseEquipmentEntity(exercise.id, "bodyweight")))
+        }
+        assertEquals(1, database.catalogDao().observe("legs", "bodyweight").first().size)
+        assertEquals(0, database.catalogDao().observe("unknown", null).first().size)
+        database.close()
+        database = Room.databaseBuilder(context, AppDatabase::class.java, name).allowMainThreadQueries().build()
+        assertEquals("Squat", database.catalogDao().observe(null, null).first().single().exercise.name)
+        assertEquals(0, database.exerciseDao().observeActive().first().size)
+    }
+
+    @Test fun migrationTwoToThreeCreatesCatalogSchema() {
+        val migrationName = "catalog-migration.db"
+        migrationHelper.createDatabase(migrationName, 2).close()
+        migrationHelper.runMigrationsAndValidate(migrationName, 3, true, MIGRATION_2_3).close()
+        context.deleteDatabase(migrationName)
     }
 }

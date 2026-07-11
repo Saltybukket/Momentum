@@ -86,3 +86,21 @@ fun Workout.toEntity() = WorkoutEntity(
     createdAtEpochMs, updatedAtEpochMs, syncStatus.name, serverId, conflictVersion,
 )
 fun WorkoutExercise.toEntity() = WorkoutExerciseEntity(id, workoutId, exerciseId, position)
+
+fun CatalogExerciseWithRelations.toModel() = CatalogExercise(
+    id = exercise.id, externalId = exercise.externalId, source = exercise.source,
+    provenance = exercise.provenance, licenseName = exercise.licenseName,
+    licenseUrl = exercise.licenseUrl, version = exercise.version,
+    status = CatalogStatus.valueOf(exercise.status), reviewed = exercise.reviewed,
+    name = exercise.name, description = exercise.description,
+    trackingType = TrackingType.valueOf(exercise.trackingType),
+    muscles = muscles.map { CatalogMuscle(it.muscleSlug, MuscleRole.valueOf(it.role)) },
+    equipment = equipment.map { it.equipmentSlug },
+)
+
+fun CatalogExercise.toEntity() = CatalogExerciseEntity(
+    id, externalId, source, provenance, licenseName, licenseUrl, version, status.name,
+    reviewed, name, description, trackingType.name,
+)
+fun CatalogExercise.toMuscleEntities() = muscles.map { CatalogExerciseMuscleEntity(id, it.slug, it.role.name) }
+fun CatalogExercise.toEquipmentEntities() = equipment.map { CatalogExerciseEquipmentEntity(id, it) }

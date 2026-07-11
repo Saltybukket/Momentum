@@ -124,3 +124,40 @@ interface OutboxDao {
     @Query("SELECT COUNT(*) FROM sync_outbox WHERE status IN ('PENDING','FAILED')")
     fun observePendingCount(): Flow<Int>
 }
+
+data class CatalogExerciseWithRelations(
+    @androidx.room.Embedded val exercise: CatalogExerciseEntity,
+    @androidx.room.Relation(parentColumn = "id", entityColumn = "exerciseId")
+    val muscles: List<CatalogExerciseMuscleEntity>,
+    @androidx.room.Relation(parentColumn = "id", entityColumn = "exerciseId")
+    val equipment: List<CatalogExerciseEquipmentEntity>,
+)
+
+@Dao
+interface CatalogDao {
+    @Transaction
+    @Query(
+        """SELECT DISTINCT c.* FROM catalog_exercises c
+        LEFT JOIN catalog_exercise_muscles m ON m.exerciseId = c.id
+        LEFT JOIN catalog_exercise_equipment e ON e.exerciseId = c.id
+        WHERE (:muscle IS NULL OR m.muscleSlug = :muscle)
+          AND (:equipment IS NULL OR e.equipmentSlug = :equipment)
+        ORDER BY c.name"""
+    )
+    fun observe(muscle: String?, equipment: String?): Flow<List<CatalogExerciseWithRelations>>
+
+    @Transaction @Query("SELECT * FROM catalog_exercises WHERE id = :id LIMIT 1")
+    fun observeOne(id: String): Flow<CatalogExerciseWithRelations?>
+
+    @Query("SELECT * FROM catalog_muscles ORDER BY name") fun observeMuscles(): Flow<List<CatalogMuscleEntity>>
+    @Query("SELECT * FROM catalog_equipment ORDER BY name") fun observeEquipment(): Flow<List<CatalogEquipmentEntity>>
+    @Query("SELECT COUNT(*) FROM catalog_exercises") suspend fun count(): Int
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertExercises(rows: List<CatalogExerciseEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertMuscles(rows: List<CatalogMuscleEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertEquipment(rows: List<CatalogEquipmentEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertExerciseMuscles(rows: List<CatalogExerciseMuscleEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertExerciseEquipment(rows: List<CatalogExerciseEquipmentEntity>)
+    @Query("DELETE FROM catalog_exercises") suspend fun deleteExercises()
+    @Query("DELETE FROM catalog_muscles") suspend fun deleteMuscles()
+    @Query("DELETE FROM catalog_equipment") suspend fun deleteEquipment()
+}

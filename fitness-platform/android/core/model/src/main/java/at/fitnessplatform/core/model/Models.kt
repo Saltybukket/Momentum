@@ -13,6 +13,35 @@ enum class ConflictResolutionStatus { OPEN, PENDING_CONFIRMATION, RESOLVED }
 
 enum class ExerciseConflictResolution { KEEP_LOCAL, TAKE_SERVER, MERGE }
 
+enum class CatalogStatus { DRAFT, PUBLISHED, DEPRECATED }
+
+enum class MuscleRole { PRIMARY, SECONDARY }
+
+data class Muscle(val slug: String, val name: String)
+
+data class Equipment(val slug: String, val name: String)
+
+data class CatalogMuscle(val slug: String, val role: MuscleRole)
+
+data class CatalogExercise(
+    val id: String,
+    val externalId: String,
+    val source: String,
+    val provenance: String,
+    val licenseName: String,
+    val licenseUrl: String,
+    val version: String,
+    val status: CatalogStatus,
+    val reviewed: Boolean,
+    val name: String,
+    val description: String,
+    val trackingType: TrackingType,
+    val muscles: List<CatalogMuscle>,
+    val equipment: List<String>,
+)
+
+data class CatalogFilter(val muscle: String? = null, val equipment: String? = null)
+
 enum class UnitSystem { METRIC, IMPERIAL }
 
 enum class OnboardingStatus { NOT_STARTED, SKIPPED, IN_PROGRESS, COMPLETED }

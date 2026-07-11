@@ -14,6 +14,7 @@ abstract class RepositoryBindings {
     @Binds @Singleton abstract fun bindProfileRepository(impl: RoomGuestProfileRepository): GuestProfileRepository
     @Binds @Singleton abstract fun bindExerciseRepository(impl: RoomExerciseRepository): ExerciseRepository
     @Binds @Singleton abstract fun bindWorkoutRepository(impl: RoomWorkoutRepository): WorkoutRepository
+    @Binds @Singleton abstract fun bindCatalogRepository(impl: RoomCatalogRepository): CatalogRepository
     @Binds @Singleton abstract fun bindEventDispatcher(impl: LocalEventDispatcher): DomainEventDispatcher
 }
 

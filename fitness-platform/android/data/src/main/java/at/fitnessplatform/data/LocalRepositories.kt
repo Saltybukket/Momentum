@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import at.fitnessplatform.core.database.*
 import at.fitnessplatform.core.model.*
 import at.fitnessplatform.domain.*
+import at.fitnessplatform.core.network.CatalogExerciseDto
+import at.fitnessplatform.core.network.FitnessApi
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import javax.inject.Inject
@@ -31,6 +33,90 @@ private fun outboxEntity(
     retryCount = 0,
     lastError = null,
 )
+
+private fun CatalogExerciseDto.toCatalogModel() = CatalogExercise(
+    id, externalId, source, provenance, licenseName, licenseUrl, version,
+    CatalogStatus.valueOf(status), reviewed, name, description, TrackingType.valueOf(trackingType),
+    muscles.map { CatalogMuscle(it.slug, MuscleRole.valueOf(it.role)) }, equipment,
+)
+
+private val demoCatalog = listOf(
+    demo(
+        "85e855ce-5a45-5af2-bf23-500030d34e11", "bodyweight-squat", "Bodyweight Squat",
+        "A technical demo movement record for testing catalog behavior.", TrackingType.REPS,
+        listOf(CatalogMuscle("quadriceps", MuscleRole.PRIMARY), CatalogMuscle("glutes", MuscleRole.SECONDARY)),
+        "none",
+    ),
+    demo(
+        "766f74ee-877f-5d6c-af72-783a8c79bb04", "incline-push-up", "Incline Push-up",
+        "A self-authored technical demo entry without medical or coaching claims.", TrackingType.REPS,
+        listOf(CatalogMuscle("chest", MuscleRole.PRIMARY), CatalogMuscle("triceps", MuscleRole.SECONDARY)),
+        "none",
+    ),
+    demo(
+        "396dc274-797d-5473-b3e3-2d3879701fde", "front-plank", "Front Plank",
+        "A self-authored technical demo entry for duration tracking.", TrackingType.DURATION,
+        listOf(CatalogMuscle("core", MuscleRole.PRIMARY)), "mat",
+    ),
+)
+
+private fun demo(
+    id: String,
+    externalId: String,
+    name: String,
+    description: String,
+    type: TrackingType,
+    muscles: List<CatalogMuscle>,
+    equipment: String,
+) = CatalogExercise(
+    id, externalId, "momentum-self-authored-demo",
+    "Self-authored by the Momentum project for technical demonstration.", "CC0-1.0",
+    "https://creativecommons.org/publicdomain/zero/1.0/", "1", CatalogStatus.PUBLISHED,
+    true, name, description, type, muscles, listOf(equipment),
+)
+
+@Singleton
+class RoomCatalogRepository @Inject constructor(
+    private val database: AppDatabase,
+    private val catalogDao: CatalogDao,
+    private val api: FitnessApi,
+) : CatalogRepository {
+    override fun observeCatalog(filter: CatalogFilter) =
+        catalogDao.observe(filter.muscle, filter.equipment).map { rows -> rows.map { it.toModel() } }
+    override fun observeExercise(id: String) = catalogDao.observeOne(id).map { it?.toModel() }
+    override fun observeMuscles() = catalogDao.observeMuscles().map { rows -> rows.map { Muscle(it.slug, it.name) } }
+    override fun observeEquipment() = catalogDao.observeEquipment().map { rows -> rows.map { Equipment(it.slug, it.name) } }
+
+    override suspend fun seedIfEmpty() {
+        if (catalogDao.count() == 0) {
+            val muscles = demoCatalog.flatMap { it.muscles }.map { it.slug }.distinct().associateWith(::displayName)
+            val equipment = demoCatalog.flatMap { it.equipment }.distinct().associateWith(::displayName)
+            replace(demoCatalog, muscles, equipment)
+        }
+    }
+
+    override suspend fun refresh() {
+        val exercises = api.catalogExercises().map { it.toCatalogModel() }
+        val muscles = api.catalogMuscles().associate { it.slug to it.name }
+        val equipment = api.catalogEquipment().associate { it.slug to it.name }
+        replace(exercises, muscles, equipment)
+    }
+
+    private suspend fun replace(exercises: List<CatalogExercise>, muscles: Map<String, String>, equipment: Map<String, String>) {
+        database.withTransaction {
+            catalogDao.deleteExercises()
+            catalogDao.deleteMuscles()
+            catalogDao.deleteEquipment()
+            catalogDao.insertMuscles(muscles.map { CatalogMuscleEntity(it.key, it.value) })
+            catalogDao.insertEquipment(equipment.map { CatalogEquipmentEntity(it.key, it.value) })
+            catalogDao.insertExercises(exercises.map { it.toEntity() })
+            catalogDao.insertExerciseMuscles(exercises.flatMap { it.toMuscleEntities() })
+            catalogDao.insertExerciseEquipment(exercises.flatMap { it.toEquipmentEntities() })
+        }
+    }
+
+    private fun displayName(slug: String) = slug.replace('-', ' ').replaceFirstChar(Char::uppercase)
+}
 
 @Singleton
 class RoomGuestProfileRepository @Inject constructor(
