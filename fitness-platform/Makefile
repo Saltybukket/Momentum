@@ -7,9 +7,12 @@ ANDROID_SDK_ROOT ?= $(ANDROID_HOME)
 export ANDROID_HOME ANDROID_SDK_ROOT
 endif
 
-.PHONY: help setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke
+.PHONY: help doctor setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke
 help:
-	@printf '%s\n' "setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke"
+	@printf '%s\n' "doctor setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke"
+
+doctor:
+	./scripts/doctor.sh
 
 setup:
 	@test -f .env || cp .env.example .env
