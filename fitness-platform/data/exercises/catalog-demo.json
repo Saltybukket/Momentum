@@ -1,0 +1,40 @@
+{
+  "batch_id": "momentum-self-authored-demo-v1",
+  "muscles": [
+    {"slug": "quadriceps", "name": "Quadriceps"},
+    {"slug": "glutes", "name": "Glutes"},
+    {"slug": "chest", "name": "Chest"},
+    {"slug": "triceps", "name": "Triceps"},
+    {"slug": "core", "name": "Core"}
+  ],
+  "equipment": [
+    {"slug": "none", "name": "No equipment"},
+    {"slug": "mat", "name": "Exercise mat"}
+  ],
+  "exercises": [
+    {
+      "source": "momentum-self-authored-demo", "external_id": "bodyweight-squat", "version": "1",
+      "name": "Bodyweight Squat", "description": "A technical demo movement record for testing catalog behavior.",
+      "tracking_type": "REPS", "muscles": [{"slug": "quadriceps", "role": "PRIMARY"}, {"slug": "glutes", "role": "SECONDARY"}],
+      "equipment": ["none"], "status": "PUBLISHED", "reviewed": true,
+      "provenance": "Self-authored by the Momentum project for technical demonstration.",
+      "license_name": "CC0-1.0", "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "source": "momentum-self-authored-demo", "external_id": "incline-push-up", "version": "1",
+      "name": "Incline Push-up", "description": "A self-authored technical demo entry without medical or coaching claims.",
+      "tracking_type": "REPS", "muscles": [{"slug": "chest", "role": "PRIMARY"}, {"slug": "triceps", "role": "SECONDARY"}],
+      "equipment": ["none"], "status": "PUBLISHED", "reviewed": true,
+      "provenance": "Self-authored by the Momentum project for technical demonstration.",
+      "license_name": "CC0-1.0", "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    },
+    {
+      "source": "momentum-self-authored-demo", "external_id": "front-plank", "version": "1",
+      "name": "Front Plank", "description": "A self-authored technical demo entry for duration tracking.",
+      "tracking_type": "DURATION", "muscles": [{"slug": "core", "role": "PRIMARY"}],
+      "equipment": ["mat"], "status": "PUBLISHED", "reviewed": true,
+      "provenance": "Self-authored by the Momentum project for technical demonstration.",
+      "license_name": "CC0-1.0", "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  ]
+}

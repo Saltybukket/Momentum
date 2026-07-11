@@ -7,12 +7,15 @@ ANDROID_SDK_ROOT ?= $(ANDROID_HOME)
 export ANDROID_HOME ANDROID_SDK_ROOT
 endif
 
-.PHONY: help doctor setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke
+.PHONY: help doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import clean openapi smoke
 help:
-	@printf '%s\n' "doctor setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke"
+	@printf '%s\n' "doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import clean openapi smoke"
 
 doctor:
 	./scripts/doctor.sh
+
+doctor-connected:
+	./scripts/doctor.sh --connected
 
 setup:
 	@test -f .env || cp .env.example .env
@@ -50,11 +53,14 @@ migrate:
 seed:
 	cd backend && uv run fitness-seed
 
+catalog-import:
+	cd backend && uv run python -m fitness_platform.catalog_import ../data/exercises/catalog-demo.json --report ../data/licenses/catalog-import-report.json
+
 openapi:
 	cd backend && uv run python ../scripts/export_openapi.py
 
 smoke:
-	python scripts/smoke_test.py
+	cd backend && uv run python ../scripts/smoke_test.py
 
 clean:
 	rm -rf backend/.venv backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache backend/.coverage backend/htmlcov
