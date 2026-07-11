@@ -3,6 +3,8 @@ from datetime import datetime
 from uuid import UUID
 
 from fitness_platform.domain.enums import (
+    CatalogStatus,
+    MuscleRole,
     OnboardingStatus,
     SyncStatus,
     TrackingType,
@@ -10,6 +12,26 @@ from fitness_platform.domain.enums import (
     UserKind,
     WorkoutStatus,
 )
+
+
+@dataclass(slots=True)
+class CatalogExercise:
+    id: UUID
+    external_id: str
+    source: str
+    provenance: str
+    license_name: str
+    license_url: str
+    version: str
+    status: CatalogStatus
+    reviewed: bool
+    name: str
+    description: str
+    tracking_type: TrackingType
+    muscles: list[tuple[str, MuscleRole]]
+    equipment: list[str]
+    created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(slots=True)

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -18,6 +19,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fitness_platform.core.database import Base
 from fitness_platform.domain.enums import (
+    CatalogStatus,
+    MuscleRole,
     OnboardingStatus,
     SyncStatus,
     TrackingType,
@@ -110,6 +113,79 @@ class ExerciseChangeRow(Base):
     )
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CatalogExerciseRow(Base):
+    __tablename__ = "catalog_exercises"
+    __table_args__ = (
+        UniqueConstraint("source", "external_id", name="uq_catalog_exercise_source_external_id"),
+        Index("ix_catalog_exercises_status_reviewed", "status", "reviewed"),
+        CheckConstraint(
+            "status IN ('DRAFT','PUBLISHED','DEPRECATED')", name="ck_catalog_exercise_status"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    provenance: Mapped[str] = mapped_column(Text, nullable=False)
+    license_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    license_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[CatalogStatus] = mapped_column(enum_column(CatalogStatus), nullable=False)
+    reviewed: Mapped[bool] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    tracking_type: Mapped[TrackingType] = mapped_column(enum_column(TrackingType), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    muscles: Mapped[list["CatalogExerciseMuscleRow"]] = relationship(cascade="all, delete-orphan")
+    equipment: Mapped[list["CatalogExerciseEquipmentRow"]] = relationship(
+        cascade="all, delete-orphan"
+    )
+
+
+class MuscleRow(Base):
+    __tablename__ = "muscles"
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+
+
+class EquipmentRow(Base):
+    __tablename__ = "equipment"
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+
+
+class CatalogExerciseMuscleRow(Base):
+    __tablename__ = "catalog_exercise_muscles"
+    __table_args__ = (
+        Index("ix_catalog_exercise_muscles_muscle", "muscle_id", "exercise_id"),
+        CheckConstraint("role IN ('PRIMARY','SECONDARY')", name="ck_catalog_exercise_muscle_role"),
+    )
+    exercise_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("catalog_exercises.id", ondelete="CASCADE"), primary_key=True
+    )
+    muscle_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("muscles.id", ondelete="RESTRICT"), primary_key=True
+    )
+    role: Mapped[MuscleRole] = mapped_column(enum_column(MuscleRole), nullable=False)
+
+
+class CatalogExerciseEquipmentRow(Base):
+    __tablename__ = "catalog_exercise_equipment"
+    __table_args__ = (
+        Index("ix_catalog_exercise_equipment_equipment", "equipment_id", "exercise_id"),
+    )
+    exercise_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("catalog_exercises.id", ondelete="CASCADE"), primary_key=True
+    )
+    equipment_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("equipment.id", ondelete="RESTRICT"), primary_key=True
+    )
 
 
 class WorkoutRow(Base):

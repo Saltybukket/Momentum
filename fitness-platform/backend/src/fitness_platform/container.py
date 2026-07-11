@@ -3,6 +3,7 @@ from typing import cast
 
 from fitness_platform.application.idempotency import IdempotencyService
 from fitness_platform.application.services import (
+    CatalogService,
     ExerciseService,
     GuestService,
     ProfileService,
@@ -30,6 +31,7 @@ class AppContainer:
     guests: GuestService
     profiles: ProfileService
     exercises: ExerciseService
+    catalog: CatalogService
     workouts: WorkoutService
     sync: SyncService
     idempotency: IdempotencyService
@@ -66,6 +68,7 @@ class AppContainer:
                 ids=ids,
                 event_dispatcher=events,
             ),
+            catalog=CatalogService(uow_factory=uow_factory),
             workouts=WorkoutService(
                 uow_factory=uow_factory,
                 clock=clock,

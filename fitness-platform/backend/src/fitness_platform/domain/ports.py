@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from fitness_platform.domain.models import Exercise, GuestSession, Profile, Workout
+from fitness_platform.domain.models import CatalogExercise, Exercise, GuestSession, Profile, Workout
 
 
 class UserRepository(Protocol):
@@ -37,7 +37,9 @@ class ExerciseRepository(Protocol):
 
     async def soft_delete(self, user_id: UUID, exercise_id: UUID, deleted_at: datetime) -> bool: ...
     async def record_change(self, exercise: Exercise, changed_at: datetime) -> int: ...
-    async def changes_since(self, user_id: UUID, cursor: int, limit: int) -> Sequence[tuple[int, Exercise]]: ...
+    async def changes_since(
+        self, user_id: UUID, cursor: int, limit: int
+    ) -> Sequence[tuple[int, Exercise]]: ...
 
 
 class WorkoutRepository(Protocol):
@@ -46,6 +48,17 @@ class WorkoutRepository(Protocol):
     async def get(self, user_id: UUID, workout_id: UUID) -> Workout | None: ...
 
     async def upsert(self, workout: Workout) -> Workout: ...
+
+
+class CatalogRepository(Protocol):
+    async def list(
+        self, muscle: str | None, equipment: str | None
+    ) -> Sequence[CatalogExercise]: ...
+    async def get(self, exercise_id: UUID) -> CatalogExercise | None: ...
+    async def find(self, source: str, external_id: str) -> CatalogExercise | None: ...
+    async def list_muscles(self) -> Sequence[tuple[str, str]]: ...
+    async def list_equipment(self) -> Sequence[tuple[str, str]]: ...
+    async def upsert(self, exercise: CatalogExercise) -> CatalogExercise: ...
 
 
 class OutboxRepository(Protocol):
@@ -83,6 +96,7 @@ class UnitOfWork(Protocol, AbstractAsyncContextManager["UnitOfWork"]):
     profiles: ProfileRepository
     exercises: ExerciseRepository
     workouts: WorkoutRepository
+    catalog: CatalogRepository
     outbox: OutboxRepository
     idempotency: IdempotencyRepository
 

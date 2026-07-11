@@ -39,3 +39,14 @@ class WorkoutStatus(StrEnum):
 class UserKind(StrEnum):
     GUEST = "GUEST"
     REGISTERED = "REGISTERED"
+
+
+class CatalogStatus(StrEnum):
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    DEPRECATED = "DEPRECATED"
+
+
+class MuscleRole(StrEnum):
+    PRIMARY = "PRIMARY"
+    SECONDARY = "SECONDARY"

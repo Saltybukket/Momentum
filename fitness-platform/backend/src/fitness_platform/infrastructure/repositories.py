@@ -2,23 +2,221 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from fitness_platform.domain.enums import UserKind
-from fitness_platform.domain.models import Exercise, GuestSession, Profile, Workout, WorkoutExercise
+from fitness_platform.domain.enums import CatalogStatus, MuscleRole, UserKind
+from fitness_platform.domain.models import (
+    CatalogExercise,
+    Exercise,
+    GuestSession,
+    Profile,
+    Workout,
+    WorkoutExercise,
+)
 from fitness_platform.infrastructure.orm import (
-    ExerciseRow,
+    CatalogExerciseEquipmentRow,
+    CatalogExerciseMuscleRow,
+    CatalogExerciseRow,
+    EquipmentRow,
     ExerciseChangeRow,
+    ExerciseRow,
     GuestSessionRow,
     IdempotencyRecordRow,
+    MuscleRow,
     OutboxEventRow,
     ProfileRow,
     UserRow,
     WorkoutExerciseRow,
     WorkoutRow,
 )
+
+
+class SqlAlchemyCatalogRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list(self, muscle: str | None, equipment: str | None) -> Sequence[CatalogExercise]:
+        statement = select(CatalogExerciseRow).where(
+            CatalogExerciseRow.status == CatalogStatus.PUBLISHED,
+            CatalogExerciseRow.reviewed.is_(True),
+        )
+        if muscle:
+            statement = (
+                statement.join(CatalogExerciseMuscleRow)
+                .join(MuscleRow)
+                .where(MuscleRow.slug == muscle)
+            )
+        if equipment:
+            statement = (
+                statement.join(CatalogExerciseEquipmentRow)
+                .join(EquipmentRow)
+                .where(EquipmentRow.slug == equipment)
+            )
+        rows = (await self._session.execute(statement.distinct())).scalars().all()
+        return [await self._to_model(row) for row in rows]
+
+    async def get(self, exercise_id: UUID) -> CatalogExercise | None:
+        row = await self._session.get(CatalogExerciseRow, exercise_id)
+        if row is None or row.status != CatalogStatus.PUBLISHED or not row.reviewed:
+            return None
+        return await self._to_model(row)
+
+    async def find(self, source: str, external_id: str) -> CatalogExercise | None:
+        row = (
+            await self._session.execute(
+                select(CatalogExerciseRow).where(
+                    CatalogExerciseRow.source == source,
+                    CatalogExerciseRow.external_id == external_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return await self._to_model(row) if row else None
+
+    async def list_muscles(self) -> Sequence[tuple[str, str]]:
+        rows = (
+            await self._session.execute(
+                select(MuscleRow.slug, MuscleRow.name)
+                .join(CatalogExerciseMuscleRow)
+                .join(CatalogExerciseRow)
+                .where(
+                    CatalogExerciseRow.status == CatalogStatus.PUBLISHED,
+                    CatalogExerciseRow.reviewed.is_(True),
+                )
+                .distinct()
+                .order_by(MuscleRow.name)
+            )
+        ).all()
+        return [(slug, name) for slug, name in rows]
+
+    async def list_equipment(self) -> Sequence[tuple[str, str]]:
+        rows = (
+            await self._session.execute(
+                select(EquipmentRow.slug, EquipmentRow.name)
+                .join(CatalogExerciseEquipmentRow)
+                .join(CatalogExerciseRow)
+                .where(
+                    CatalogExerciseRow.status == CatalogStatus.PUBLISHED,
+                    CatalogExerciseRow.reviewed.is_(True),
+                )
+                .distinct()
+                .order_by(EquipmentRow.name)
+            )
+        ).all()
+        return [(slug, name) for slug, name in rows]
+
+    async def upsert(self, exercise: CatalogExercise) -> CatalogExercise:
+        row = (
+            await self._session.execute(
+                select(CatalogExerciseRow).where(
+                    CatalogExerciseRow.source == exercise.source,
+                    CatalogExerciseRow.external_id == exercise.external_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            row = CatalogExerciseRow(
+                id=exercise.id,
+                external_id=exercise.external_id,
+                source=exercise.source,
+                provenance=exercise.provenance,
+                license_name=exercise.license_name,
+                license_url=exercise.license_url,
+                version=exercise.version,
+                status=exercise.status,
+                reviewed=exercise.reviewed,
+                name=exercise.name,
+                description=exercise.description,
+                tracking_type=exercise.tracking_type,
+                created_at=exercise.created_at,
+                updated_at=exercise.updated_at,
+            )
+            self._session.add(row)
+        else:
+            for key in (
+                "provenance",
+                "license_name",
+                "license_url",
+                "version",
+                "status",
+                "reviewed",
+                "name",
+                "description",
+                "tracking_type",
+                "updated_at",
+            ):
+                setattr(row, key, getattr(exercise, key))
+            await self._session.execute(
+                delete(CatalogExerciseMuscleRow).where(
+                    CatalogExerciseMuscleRow.exercise_id == row.id
+                )
+            )
+            await self._session.execute(
+                delete(CatalogExerciseEquipmentRow).where(
+                    CatalogExerciseEquipmentRow.exercise_id == row.id
+                )
+            )
+        for slug, role in exercise.muscles:
+            muscle = (
+                await self._session.execute(select(MuscleRow).where(MuscleRow.slug == slug))
+            ).scalar_one_or_none()
+            if muscle is None:
+                muscle = MuscleRow(id=uuid4(), slug=slug, name=slug.replace("-", " ").title())
+                self._session.add(muscle)
+                await self._session.flush()
+            self._session.add(
+                CatalogExerciseMuscleRow(exercise_id=row.id, muscle_id=muscle.id, role=role)
+            )
+        for slug in exercise.equipment:
+            item = (
+                await self._session.execute(select(EquipmentRow).where(EquipmentRow.slug == slug))
+            ).scalar_one_or_none()
+            if item is None:
+                item = EquipmentRow(id=uuid4(), slug=slug, name=slug.replace("-", " ").title())
+                self._session.add(item)
+                await self._session.flush()
+            self._session.add(CatalogExerciseEquipmentRow(exercise_id=row.id, equipment_id=item.id))
+        await self._session.flush()
+        return await self._to_model(row)
+
+    async def _to_model(self, row: CatalogExerciseRow) -> CatalogExercise:
+        muscles = (
+            await self._session.execute(
+                select(MuscleRow.slug, CatalogExerciseMuscleRow.role)
+                .join(CatalogExerciseMuscleRow)
+                .where(CatalogExerciseMuscleRow.exercise_id == row.id)
+            )
+        ).all()
+        equipment = (
+            (
+                await self._session.execute(
+                    select(EquipmentRow.slug)
+                    .join(CatalogExerciseEquipmentRow)
+                    .where(CatalogExerciseEquipmentRow.exercise_id == row.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return CatalogExercise(
+            row.id,
+            row.external_id,
+            row.source,
+            row.provenance,
+            row.license_name,
+            row.license_url,
+            row.version,
+            CatalogStatus(row.status),
+            row.reviewed,
+            row.name,
+            row.description,
+            row.tracking_type,
+            [(str(slug), MuscleRole(role)) for slug, role in muscles],
+            list(equipment),
+            row.created_at,
+            row.updated_at,
+        )
 
 
 def profile_from_row(row: ProfileRow) -> Profile:
@@ -241,13 +439,20 @@ class SqlAlchemyExerciseRepository:
         await self._session.flush()
         return change.sequence
 
-    async def changes_since(self, user_id: UUID, cursor: int, limit: int) -> Sequence[tuple[int, Exercise]]:
-        rows = (await self._session.execute(
-            select(ExerciseChangeRow, ExerciseRow)
-            .join(ExerciseRow, ExerciseRow.id == ExerciseChangeRow.exercise_id)
-            .where(ExerciseChangeRow.owner_user_id == user_id, ExerciseChangeRow.sequence > cursor)
-            .order_by(ExerciseChangeRow.sequence.asc()).limit(limit)
-        )).all()
+    async def changes_since(
+        self, user_id: UUID, cursor: int, limit: int
+    ) -> Sequence[tuple[int, Exercise]]:
+        rows = (
+            await self._session.execute(
+                select(ExerciseChangeRow, ExerciseRow)
+                .join(ExerciseRow, ExerciseRow.id == ExerciseChangeRow.exercise_id)
+                .where(
+                    ExerciseChangeRow.owner_user_id == user_id, ExerciseChangeRow.sequence > cursor
+                )
+                .order_by(ExerciseChangeRow.sequence.asc())
+                .limit(limit)
+            )
+        ).all()
         return [(change.sequence, exercise_from_row(exercise)) for change, exercise in rows]
 
 

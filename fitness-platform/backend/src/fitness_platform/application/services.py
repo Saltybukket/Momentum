@@ -22,7 +22,14 @@ from fitness_platform.domain.events import (
     WorkoutCreated,
     WorkoutStarted,
 )
-from fitness_platform.domain.models import Exercise, GuestSession, Profile, Workout, WorkoutExercise
+from fitness_platform.domain.models import (
+    CatalogExercise,
+    Exercise,
+    GuestSession,
+    Profile,
+    Workout,
+    WorkoutExercise,
+)
 from fitness_platform.domain.ports import UnitOfWork
 
 UowFactory = Callable[[], UnitOfWork]
@@ -434,6 +441,30 @@ class WorkoutService:
         if inserted:
             await self._events.dispatch(event)
         return result, inserted
+
+
+class CatalogService:
+    def __init__(self, *, uow_factory: UowFactory) -> None:
+        self._uow_factory = uow_factory
+
+    async def list(self, muscle: str | None, equipment: str | None) -> Sequence[CatalogExercise]:
+        async with self._uow_factory() as uow:
+            return await uow.catalog.list(muscle, equipment)
+
+    async def get(self, exercise_id: UUID) -> CatalogExercise:
+        async with self._uow_factory() as uow:
+            exercise = await uow.catalog.get(exercise_id)
+        if exercise is None:
+            raise NotFoundError("Catalog exercise not found.")
+        return exercise
+
+    async def muscles(self) -> Sequence[tuple[str, str]]:
+        async with self._uow_factory() as uow:
+            return await uow.catalog.list_muscles()
+
+    async def equipment(self) -> Sequence[tuple[str, str]]:
+        async with self._uow_factory() as uow:
+            return await uow.catalog.list_equipment()
 
 
 class SyncService:

@@ -10,6 +10,8 @@ from fitness_platform.core.security import request_fingerprint
 from fitness_platform.domain.models import Exercise
 from fitness_platform.presentation.dependencies import ContainerDep, CurrentUserId
 from fitness_platform.presentation.schemas import (
+    CatalogExerciseResponse,
+    CatalogFacetResponse,
     ExerciseChange,
     ExercisePage,
     ExerciseResponse,
@@ -30,6 +32,49 @@ from fitness_platform.presentation.schemas import (
 )
 
 router = APIRouter()
+
+
+@router.get(
+    "/api/v1/catalog/exercises", response_model=list[CatalogExerciseResponse], tags=["catalog"]
+)
+async def list_catalog_exercises(
+    container: ContainerDep,
+    muscle: str | None = None,
+    equipment: str | None = None,
+) -> list[CatalogExerciseResponse]:
+    return [
+        CatalogExerciseResponse.from_domain(item)
+        for item in await container.catalog.list(muscle, equipment)
+    ]
+
+
+@router.get(
+    "/api/v1/catalog/exercises/{exercise_id}",
+    response_model=CatalogExerciseResponse,
+    tags=["catalog"],
+)
+async def get_catalog_exercise(
+    exercise_id: UUID, container: ContainerDep
+) -> CatalogExerciseResponse:
+    return CatalogExerciseResponse.from_domain(await container.catalog.get(exercise_id))
+
+
+@router.get("/api/v1/catalog/muscles", response_model=list[CatalogFacetResponse], tags=["catalog"])
+async def list_catalog_muscles(container: ContainerDep) -> list[CatalogFacetResponse]:
+    return [
+        CatalogFacetResponse(slug=slug, name=name)
+        for slug, name in await container.catalog.muscles()
+    ]
+
+
+@router.get(
+    "/api/v1/catalog/equipment", response_model=list[CatalogFacetResponse], tags=["catalog"]
+)
+async def list_catalog_equipment(container: ContainerDep) -> list[CatalogFacetResponse]:
+    return [
+        CatalogFacetResponse(slug=slug, name=name)
+        for slug, name in await container.catalog.equipment()
+    ]
 
 
 def _hash_model(payload: BaseModel) -> str:

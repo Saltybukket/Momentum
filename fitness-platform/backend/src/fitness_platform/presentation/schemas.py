@@ -244,3 +244,38 @@ class HealthResponse(ApiModel):
     database: str
     redis: str
     version: str
+
+
+class CatalogMuscleResponse(ApiModel):
+    slug: str
+    role: str
+
+
+class CatalogExerciseResponse(ApiModel):
+    id: UUID
+    external_id: str
+    source: str
+    provenance: str
+    license_name: str
+    license_url: str
+    version: str
+    status: str
+    reviewed: bool
+    name: str
+    description: str
+    tracking_type: TrackingType
+    muscles: list[CatalogMuscleResponse]
+    equipment: list[str]
+
+    @classmethod
+    def from_domain(cls, exercise: Any) -> "CatalogExerciseResponse":
+        payload = {field: getattr(exercise, field) for field in cls.model_fields}
+        payload["muscles"] = [
+            CatalogMuscleResponse(slug=slug, role=role.value) for slug, role in exercise.muscles
+        ]
+        return cls(**payload)
+
+
+class CatalogFacetResponse(ApiModel):
+    slug: str
+    name: str
