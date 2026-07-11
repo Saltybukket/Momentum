@@ -7,27 +7,37 @@ import androidx.work.WorkerParameters
 import androidx.room.withTransaction
 import at.fitnessplatform.core.database.AppDatabase
 import at.fitnessplatform.core.database.ExerciseDao
+import at.fitnessplatform.core.database.ExerciseConflictDao
+import at.fitnessplatform.core.database.ExerciseConflictEntity
+import at.fitnessplatform.core.database.ExerciseConflictSnapshot
 import at.fitnessplatform.core.database.GuestProfileDao
 import at.fitnessplatform.core.database.GuestProfileEntity
 import at.fitnessplatform.core.database.OutboxDao
 import at.fitnessplatform.core.database.OutboxEntity
 import at.fitnessplatform.core.database.WorkoutDao
+import at.fitnessplatform.core.database.toConflictSnapshot
 import at.fitnessplatform.core.datastore.GuestSessionStore
 import at.fitnessplatform.core.model.OutboxOperationType
+import at.fitnessplatform.core.model.Clock
+import at.fitnessplatform.core.model.ConflictResolutionStatus
+import at.fitnessplatform.core.model.ExerciseConflictType
 import at.fitnessplatform.core.network.FitnessApi
 import at.fitnessplatform.core.network.GuestSessionRequest
 import at.fitnessplatform.core.network.SyncOperationDto
 import at.fitnessplatform.core.network.SyncPushRequest
 import at.fitnessplatform.core.network.ExerciseChangeDto
+import at.fitnessplatform.core.network.ExerciseDto
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.encodeToString
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.time.Instant
 
 @HiltWorker
+@Suppress("LongParameterList", "TooGenericExceptionCaught", "SwallowedException")
 class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
@@ -35,10 +45,12 @@ class SyncWorker @AssistedInject constructor(
     private val outboxDao: OutboxDao,
     private val profileDao: GuestProfileDao,
     private val exerciseDao: ExerciseDao,
+    private val conflictDao: ExerciseConflictDao,
     private val workoutDao: WorkoutDao,
     private val sessionStore: GuestSessionStore,
     private val api: FitnessApi,
     private val json: Json,
+    private val clock: Clock,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         if (!sessionStore.isSyncEnabled()) return Result.success()
@@ -71,8 +83,8 @@ class SyncWorker @AssistedInject constructor(
         ).toString()
         val response = api.pushSync("Bearer $token", batchKey, SyncPushRequest(operations))
         markSuccessful(pending, response.results.filter { it.status == "SYNCED" }.map { it.operationId }.toSet())
-        val conflicts = response.results.filter { it.status == "CONFLICT" }.map { it.aggregateId }
-        if (conflicts.isNotEmpty()) exerciseDao.markConflict(conflicts)
+        val conflicts = response.results.filter { it.status == "CONFLICT" }
+        if (conflicts.isNotEmpty()) recordConflicts(conflicts)
         pullExercises(token)
         Result.success()
     } catch (exception: Exception) {
@@ -103,7 +115,7 @@ class SyncWorker @AssistedInject constructor(
     private suspend fun applyRemoteChange(change: ExerciseChangeDto) {
         val remote = change.exercise
         val local = exerciseDao.get(remote.id)
-        if (local?.syncStatus in setOf("PENDING", "SYNCING")) return
+        if (local?.syncStatus in setOf("PENDING", "SYNCING", "CONFLICT")) return
         exerciseDao.replace(
             at.fitnessplatform.core.database.CustomExerciseEntity(
                 id = remote.id,
@@ -165,9 +177,57 @@ class SyncWorker @AssistedInject constructor(
                 .map { it.aggregateId }
             profiles.forEach { profileDao.markSynced(it) }
             if (exercises.isNotEmpty()) exerciseDao.markSynced(exercises)
+            exercises.forEach { conflictDao.markResolutionConfirmed(it, clock.nowEpochMs()) }
             if (workouts.isNotEmpty()) workoutDao.markSynced(workouts)
         }
     }
+
+    private suspend fun recordConflicts(results: List<at.fitnessplatform.core.network.SyncResultDto>) {
+        database.withTransaction {
+            val aggregateIds = results.map { it.aggregateId }
+            outboxDao.markConflict(aggregateIds)
+            exerciseDao.markConflict(aggregateIds)
+            results.forEach { result ->
+                val remote = result.remoteExercise ?: return@forEach
+                val local = exerciseDao.get(result.aggregateId) ?: return@forEach
+                val type = when {
+                    remote.deletedAt != null && local.deletedAtEpochMs == null -> ExerciseConflictType.REMOTE_DELETED_LOCAL_MODIFIED
+                    remote.deletedAt == null && local.deletedAtEpochMs != null -> ExerciseConflictType.LOCAL_DELETED_REMOTE_MODIFIED
+                    local.conflictVersion != null -> ExerciseConflictType.BOTH_MODIFIED
+                    else -> ExerciseConflictType.REVISION_MISMATCH
+                }
+                conflictDao.upsert(
+                    ExerciseConflictEntity(
+                        id = "exercise-conflict-${result.aggregateId}",
+                        exerciseId = result.aggregateId,
+                        conflictType = type.name,
+                        localRevision = local.conflictVersion,
+                        remoteRevision = remote.revision,
+                        localSnapshotJson = json.encodeToString(local.toConflictSnapshot()),
+                        remoteSnapshotJson = json.encodeToString(remote.toConflictSnapshot(local.ownerProfileId)),
+                        detectedAtEpochMs = Instant.parse(remote.updatedAt).toEpochMilli(),
+                        resolutionStatus = ConflictResolutionStatus.OPEN.name,
+                        resolvedAtEpochMs = null,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun ExerciseDto.toConflictSnapshot(ownerProfileId: String) = ExerciseConflictSnapshot(
+        id = id,
+        ownerProfileId = ownerProfileId,
+        name = name,
+        description = description,
+        primaryMuscleGroup = primaryMuscleGroup,
+        requiredEquipment = equipment,
+        trackingType = trackingType,
+        notes = notes,
+        createdAtEpochMs = Instant.parse(createdAt).toEpochMilli(),
+        updatedAtEpochMs = Instant.parse(updatedAt).toEpochMilli(),
+        revision = revision,
+        deletedAtEpochMs = deletedAt?.let { Instant.parse(it).toEpochMilli() },
+    )
 
     private companion object { const val MAX_RETRIES = 5 }
 }

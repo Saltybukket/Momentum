@@ -25,10 +25,19 @@ class PlatformViewModelTest {
         val exercises = FakeExerciseRepository()
         val workouts = FakeWorkoutRepository()
         val viewModel = PlatformViewModel(
-            ObserveProfileUseCase(profiles), ObserveExercisesUseCase(exercises), ObserveWorkoutsUseCase(workouts),
-            CreateGuestProfileUseCase(profiles), UpdateGuestProfileUseCase(profiles),
-            CreateExerciseUseCase(exercises), UpdateExerciseUseCase(exercises), DeleteExerciseUseCase(exercises),
-            CreateWorkoutUseCase(workouts), StartWorkoutUseCase(workouts), CompleteWorkoutUseCase(workouts),
+            observeProfile = ObserveProfileUseCase(profiles),
+            observeExercises = ObserveExercisesUseCase(exercises),
+            observeWorkouts = ObserveWorkoutsUseCase(workouts),
+            observeConflicts = ObserveExerciseConflictsUseCase(exercises),
+            createProfile = CreateGuestProfileUseCase(profiles),
+            updateProfile = UpdateGuestProfileUseCase(profiles),
+            createExercise = CreateExerciseUseCase(exercises),
+            updateExercise = UpdateExerciseUseCase(exercises),
+            deleteExercise = DeleteExerciseUseCase(exercises),
+            resolveExerciseConflict = ResolveExerciseConflictUseCase(exercises),
+            createWorkout = CreateWorkoutUseCase(workouts),
+            startWorkout = StartWorkoutUseCase(workouts),
+            completeWorkout = CompleteWorkoutUseCase(workouts),
         )
         val values = mutableListOf<PlatformUiState>()
         val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect { values += it } }
@@ -52,12 +61,15 @@ private class FakeProfileRepository : GuestProfileRepository {
 }
 private class FakeExerciseRepository : ExerciseRepository {
     private val state = MutableStateFlow<List<CustomExercise>>(emptyList())
+    private val conflicts = MutableStateFlow<List<ExerciseConflict>>(emptyList())
     override fun observeExercises(): Flow<List<CustomExercise>> = state
+    override fun observeExerciseConflicts(): Flow<List<ExerciseConflict>> = conflicts
     override suspend fun getExercise(id: String) = state.value.firstOrNull { it.id == id }
     override suspend fun create(name: String, description: String, primaryMuscleGroup: String, requiredEquipment: String, trackingType: TrackingType, notes: String) =
         CustomExercise("e", "p", name, description, primaryMuscleGroup, requiredEquipment, trackingType, notes, 1, 1).also { state.value += it }
     override suspend fun update(exercise: CustomExercise) = exercise.also { updated -> state.value = state.value.map { if (it.id == updated.id) updated else it } }
     override suspend fun delete(id: String) { state.value = state.value.filterNot { it.id == id } }
+    override suspend fun resolveConflict(exerciseId: String, resolution: ExerciseConflictResolution, mergedExercise: CustomExercise?) = Unit
 }
 private class FakeWorkoutRepository : WorkoutRepository {
     private val state = MutableStateFlow<List<Workout>>(emptyList())

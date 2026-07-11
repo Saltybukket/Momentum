@@ -2,6 +2,8 @@ package at.fitnessplatform.domain
 
 import at.fitnessplatform.core.model.CustomExercise
 import at.fitnessplatform.core.model.DomainEvent
+import at.fitnessplatform.core.model.ExerciseConflict
+import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.Workout
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +17,7 @@ interface GuestProfileRepository {
 
 interface ExerciseRepository {
     fun observeExercises(): Flow<List<CustomExercise>>
+    fun observeExerciseConflicts(): Flow<List<ExerciseConflict>>
     suspend fun getExercise(id: String): CustomExercise?
     suspend fun create(
         name: String,
@@ -26,6 +29,11 @@ interface ExerciseRepository {
     ): CustomExercise
     suspend fun update(exercise: CustomExercise): CustomExercise
     suspend fun delete(id: String)
+    suspend fun resolveConflict(
+        exerciseId: String,
+        resolution: ExerciseConflictResolution,
+        mergedExercise: CustomExercise? = null,
+    )
 }
 
 interface WorkoutRepository {

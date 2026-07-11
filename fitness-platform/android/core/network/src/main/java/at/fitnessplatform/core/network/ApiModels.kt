@@ -33,6 +33,8 @@ import kotlinx.serialization.json.JsonObject
     @SerialName("aggregate_id") val aggregateId: String,
     val status: String,
     @SerialName("server_updated_at") val serverUpdatedAt: String,
+    val revision: Long? = null,
+    @SerialName("remote_exercise") val remoteExercise: ExerciseDto? = null,
 )
 @Serializable data class SyncPushResponse(val results: List<SyncResultDto>)
 @Serializable data class ExerciseDto(

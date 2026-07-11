@@ -1,6 +1,8 @@
 package at.fitnessplatform.domain
 
 import at.fitnessplatform.core.model.CustomExercise
+import at.fitnessplatform.core.model.ExerciseConflict
+import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.Workout
@@ -30,6 +32,10 @@ class UpdateGuestProfileUseCase(private val repository: GuestProfileRepository) 
 
 class ObserveExercisesUseCase(private val repository: ExerciseRepository) {
     operator fun invoke(): Flow<List<CustomExercise>> = repository.observeExercises()
+}
+
+class ObserveExerciseConflictsUseCase(private val repository: ExerciseRepository) {
+    operator fun invoke(): Flow<List<ExerciseConflict>> = repository.observeExerciseConflicts()
 }
 
 class CreateExerciseUseCase(private val repository: ExerciseRepository) {
@@ -69,6 +75,14 @@ class UpdateExerciseUseCase(private val repository: ExerciseRepository) {
 
 class DeleteExerciseUseCase(private val repository: ExerciseRepository) {
     suspend operator fun invoke(id: String) = repository.delete(id)
+}
+
+class ResolveExerciseConflictUseCase(private val repository: ExerciseRepository) {
+    suspend operator fun invoke(
+        exerciseId: String,
+        resolution: ExerciseConflictResolution,
+        mergedExercise: CustomExercise? = null,
+    ) = repository.resolveConflict(exerciseId, resolution, mergedExercise)
 }
 
 class ObserveWorkoutsUseCase(private val repository: WorkoutRepository) {

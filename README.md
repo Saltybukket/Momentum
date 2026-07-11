@@ -26,8 +26,8 @@ cd fitness-platform/android
 
 - [Platform README](fitness-platform/README.md) — setup and verification commands
 - [Architecture](fitness-platform/ARCHITECTURE.md) — boundaries and module direction
-- [Implementation report](fitness-platform/IMPLEMENTATION_REPORT.md) — delivered scaffold and constraints
-- [Research reference](FITNESS_RESEARCH_REFERENCE.md) — product research source material
+- [Implementation report](fitness-platform/docs/IMPLEMENTATION_REPORT.md) — delivered scaffold and constraints
+- [Research reference](Research/FITNESS_RESEARCH_REFERENCE.md) — product research source material
 
 The first implemented synchronization slice covers private custom exercises: outbox push,
 optimistic server revisions, cursor-based pull, tombstones and local conflict state. Workouts and

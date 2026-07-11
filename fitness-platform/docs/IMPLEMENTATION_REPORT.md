@@ -1,6 +1,6 @@
 # Implementation Report
 
-**Generated:** 2026-07-10  
+**Generated:** 2026-07-11
 **Scope:** architecture assignment only  
 **Repository version:** `0.1.0`
 
@@ -261,7 +261,25 @@ The backend provides deterministic, clearly named test adapters for the prepared
 
 They return fixed, automation-friendly values and are covered by provider contract tests. These adapters are test doubles only; no production provider or completed product feature is implied.
 
-## 12. Recommended next Codex assignments
+## 12. Post-scaffold synchronization update
+
+The private-exercise synchronization slice now includes cursor pull, tombstone application and
+user-facing conflict resolution. Room schema version 2 adds persisted local/remote conflict
+snapshots. A revision mismatch carries the remote exercise in the backend sync response, so the
+client marks the stale outbox operation as `CONFLICT` instead of retrying it indefinitely.
+
+The Android UI displays a conflict badge, version comparison and explicit keep-local, take-server
+or manual-merge choices. Local/merge operations use the remote revision as their new base and the
+conflict closes only after a successful server acknowledgment. Backend coverage includes the
+returned remote snapshot contract.
+
+AndroidX Test dependencies resolve to AndroidX Test Core/Runner/Rules 1.7.0, Ext JUnit 1.3.0 and
+Espresso 3.7.0. The repository provides `connectedProjectAndroidTest` for the two real modules and
+`scripts/android-connected-tests.sh` for direct Windows-emulator/WSL ADB execution. The direct
+runner records raw results and avoids UTP installation when emulator-console authentication is not
+available.
+
+## 13. Recommended next Codex assignments
 
 ### Assignment 1 — Complete bidirectional offline synchronization
 

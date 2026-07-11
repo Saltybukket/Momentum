@@ -83,6 +83,7 @@ class RoomExerciseRepository @Inject constructor(
     private val database: AppDatabase,
     private val profileDao: GuestProfileDao,
     private val exerciseDao: ExerciseDao,
+    private val conflictDao: ExerciseConflictDao,
     private val outboxDao: OutboxDao,
     private val ids: UuidProvider,
     private val clock: Clock,
@@ -90,6 +91,7 @@ class RoomExerciseRepository @Inject constructor(
     private val syncEnqueuer: SyncEnqueuer,
 ) : ExerciseRepository {
     override fun observeExercises(): Flow<List<CustomExercise>> = exerciseDao.observeActive().map { rows -> rows.map { it.toModel() } }
+    override fun observeExerciseConflicts() = conflictDao.observeOpen().map { rows -> rows.map { it.toModel() } }
     override suspend fun getExercise(id: String): CustomExercise? = exerciseDao.get(id)?.toModel()
 
     override suspend fun create(
@@ -117,6 +119,7 @@ class RoomExerciseRepository @Inject constructor(
     }
 
     override suspend fun update(exercise: CustomExercise): CustomExercise {
+        require(exercise.syncStatus != SyncStatus.CONFLICT) { "Resolve the sync conflict before editing this exercise." }
         val updated = exercise.copy(updatedAtEpochMs = clock.nowEpochMs(), syncStatus = SyncStatus.PENDING)
         database.withTransaction {
             exerciseDao.update(updated.toEntity())
@@ -128,6 +131,7 @@ class RoomExerciseRepository @Inject constructor(
 
     override suspend fun delete(id: String) {
         val current = exerciseDao.get(id)?.toModel() ?: return
+        require(current.syncStatus != SyncStatus.CONFLICT) { "Resolve the sync conflict before deleting this exercise." }
         if (current.deletedAtEpochMs != null) return
         val deleted = current.copy(deletedAtEpochMs = clock.nowEpochMs(), syncStatus = SyncStatus.PENDING)
         database.withTransaction {
@@ -135,6 +139,47 @@ class RoomExerciseRepository @Inject constructor(
             outboxDao.insert(exerciseOutbox(deleted, OutboxOperationType.DELETE_EXERCISE))
         }
         syncEnqueuer.enqueue()
+    }
+
+    override suspend fun resolveConflict(
+        exerciseId: String,
+        resolution: ExerciseConflictResolution,
+        mergedExercise: CustomExercise?,
+    ) {
+        val conflict = conflictDao.getOpenForExercise(exerciseId)?.toModel()
+            ?: error("No open conflict exists for this exercise.")
+        val current = exerciseDao.get(exerciseId) ?: error("Conflicted exercise is missing locally.")
+        val remote = conflict.remoteSnapshot
+        database.withTransaction {
+            when (resolution) {
+                ExerciseConflictResolution.TAKE_SERVER -> {
+                    exerciseDao.replace(remote.copy(ownerProfileId = current.ownerProfileId, syncStatus = SyncStatus.SYNCED).toEntity())
+                    outboxDao.deleteUnacknowledgedForAggregate(exerciseId)
+                    conflictDao.updateStatus(exerciseId, ConflictResolutionStatus.RESOLVED.name, clock.nowEpochMs())
+                }
+                ExerciseConflictResolution.KEEP_LOCAL,
+                ExerciseConflictResolution.MERGE -> {
+                    val selected = when (resolution) {
+                        ExerciseConflictResolution.KEEP_LOCAL -> conflict.localSnapshot
+                        ExerciseConflictResolution.MERGE -> requireNotNull(mergedExercise) { "A merged exercise is required." }
+                        ExerciseConflictResolution.TAKE_SERVER -> error("Handled above")
+                    }
+                    val resolved = selected.copy(
+                        id = exerciseId,
+                        ownerProfileId = current.ownerProfileId,
+                        updatedAtEpochMs = clock.nowEpochMs(),
+                        syncStatus = SyncStatus.PENDING,
+                        serverId = remote.serverId ?: exerciseId,
+                        conflictVersion = remote.conflictVersion,
+                    )
+                    outboxDao.deleteUnacknowledgedForAggregate(exerciseId)
+                    exerciseDao.replace(resolved.toEntity())
+                    outboxDao.insert(exerciseOutbox(resolved, if (resolved.deletedAtEpochMs == null) OutboxOperationType.UPSERT_EXERCISE else OutboxOperationType.DELETE_EXERCISE))
+                    conflictDao.updateStatus(exerciseId, ConflictResolutionStatus.PENDING_CONFIRMATION.name, null)
+                }
+            }
+        }
+        if (resolution != ExerciseConflictResolution.TAKE_SERVER) syncEnqueuer.enqueue()
     }
 
     private fun exerciseOutbox(exercise: CustomExercise, type: OutboxOperationType): OutboxEntity {

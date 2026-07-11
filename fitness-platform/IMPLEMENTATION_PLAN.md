@@ -42,8 +42,8 @@ DoD: complete offline flow, deterministic lifecycle, no duplicate completion eve
 
 Slices:
 
-- Pull cursor/change feed and tombstones.
-- Conflict versioning/resolution UI.
+- Pull cursor/change feed and tombstones. **Delivered for private custom exercises.**
+- Conflict versioning/resolution UI. **Delivered for private custom exercises; profile and workout conflicts remain future slices.**
 - Secure session/token storage and rotation.
 - Credential Manager Google login plus backend token validation.
 - Email registration/verification/reset.

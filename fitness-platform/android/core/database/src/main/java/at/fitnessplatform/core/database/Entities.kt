@@ -106,3 +106,26 @@ data class OutboxEntity(
     val retryCount: Int,
     val lastError: String?,
 )
+
+@Entity(
+    tableName = "exercise_conflicts",
+    foreignKeys = [ForeignKey(
+        entity = CustomExerciseEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["exerciseId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index(value = ["exerciseId"], unique = true), Index("resolutionStatus")],
+)
+data class ExerciseConflictEntity(
+    @PrimaryKey val id: String,
+    val exerciseId: String,
+    val conflictType: String,
+    val localRevision: Long?,
+    val remoteRevision: Long,
+    val localSnapshotJson: String,
+    val remoteSnapshotJson: String,
+    val detectedAtEpochMs: Long,
+    val resolutionStatus: String,
+    val resolvedAtEpochMs: Long?,
+)

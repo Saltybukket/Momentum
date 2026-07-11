@@ -1,6 +1,29 @@
 {
   "components": {
     "schemas": {
+      "ExerciseChange": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "title": "Cursor",
+            "type": "integer"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "exercise": {
+            "$ref": "#/components/schemas/ExerciseResponse"
+          }
+        },
+        "required": [
+          "cursor",
+          "deleted",
+          "exercise"
+        ],
+        "title": "ExerciseChange",
+        "type": "object"
+      },
       "ExercisePage": {
         "additionalProperties": false,
         "properties": {
@@ -29,6 +52,18 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
           },
           "description": {
             "title": "Description",
@@ -59,6 +94,10 @@
           "primary_muscle_group": {
             "title": "Primary Muscle Group",
             "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
           },
           "server_updated_at": {
             "anyOf": [
@@ -96,7 +135,8 @@
           "sync_status",
           "created_at",
           "updated_at",
-          "server_updated_at"
+          "server_updated_at",
+          "revision"
         ],
         "title": "ExerciseResponse",
         "type": "object"
@@ -393,6 +433,33 @@
         "title": "SyncOperation",
         "type": "object"
       },
+      "SyncPullResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ExerciseChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changes",
+          "next_cursor",
+          "has_more"
+        ],
+        "title": "SyncPullResponse",
+        "type": "object"
+      },
       "SyncPushRequest": {
         "additionalProperties": false,
         "properties": {
@@ -441,6 +508,27 @@
             "format": "uuid",
             "title": "Operation Id",
             "type": "string"
+          },
+          "remote_exercise": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExerciseResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
           },
           "server_updated_at": {
             "format": "date-time",
@@ -1097,6 +1185,67 @@
         "summary": "Update Profile",
         "tags": [
           "profile"
+        ]
+      }
+    },
+    "/api/v1/sync/exercises": {
+      "get": {
+        "operationId": "sync_pull_exercises_api_v1_sync_exercises_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncPullResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Sync Pull Exercises",
+        "tags": [
+          "sync"
         ]
       }
     },

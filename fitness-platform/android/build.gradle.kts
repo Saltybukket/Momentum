@@ -49,3 +49,17 @@ detekt {
     parallel = true
     autoCorrect = false
 }
+
+subprojects {
+    plugins.withId("com.android.library") {
+        tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
+            onlyIf { file("src/androidTest").isDirectory }
+        }
+    }
+}
+
+tasks.register("connectedProjectAndroidTest") {
+    group = "verification"
+    description = "Runs only Android modules that currently contain instrumentation tests."
+    dependsOn(":core:database:connectedDebugAndroidTest", ":app:connectedDebugAndroidTest")
+}

@@ -1,6 +1,50 @@
 package at.fitnessplatform.core.database
 
 import at.fitnessplatform.core.model.*
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
+private val conflictJson = Json { ignoreUnknownKeys = true }
+
+@Serializable
+data class ExerciseConflictSnapshot(
+    val id: String,
+    val ownerProfileId: String,
+    val name: String,
+    val description: String,
+    val primaryMuscleGroup: String,
+    val requiredEquipment: String,
+    val trackingType: String,
+    val notes: String,
+    val createdAtEpochMs: Long,
+    val updatedAtEpochMs: Long,
+    val revision: Long?,
+    val deletedAtEpochMs: Long?,
+)
+
+fun CustomExerciseEntity.toConflictSnapshot() = ExerciseConflictSnapshot(
+    id, ownerProfileId, name, description, primaryMuscleGroup, requiredEquipment, trackingType,
+    notes, createdAtEpochMs, updatedAtEpochMs, conflictVersion, deletedAtEpochMs,
+)
+
+fun ExerciseConflictSnapshot.toModel(syncStatus: SyncStatus = SyncStatus.CONFLICT) = CustomExercise(
+    id, ownerProfileId, name, description, primaryMuscleGroup, requiredEquipment,
+    TrackingType.valueOf(trackingType), notes, createdAtEpochMs, updatedAtEpochMs, syncStatus,
+    id, revision, deletedAtEpochMs,
+)
+
+fun ExerciseConflictEntity.toModel(): ExerciseConflict = ExerciseConflict(
+    id = id,
+    exerciseId = exerciseId,
+    type = ExerciseConflictType.valueOf(conflictType),
+    localRevision = localRevision,
+    remoteRevision = remoteRevision,
+    localSnapshot = conflictJson.decodeFromString<ExerciseConflictSnapshot>(localSnapshotJson).toModel(),
+    remoteSnapshot = conflictJson.decodeFromString<ExerciseConflictSnapshot>(remoteSnapshotJson).toModel(SyncStatus.SYNCED),
+    detectedAtEpochMs = detectedAtEpochMs,
+    resolutionStatus = ConflictResolutionStatus.valueOf(resolutionStatus),
+    resolvedAtEpochMs = resolvedAtEpochMs,
+)
 
 fun GuestProfileEntity.toModel() = GuestProfile(
     id, displayName, createdAtEpochMs, UnitSystem.valueOf(unitSystem),

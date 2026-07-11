@@ -46,23 +46,58 @@ async def test_exercise_pull_returns_tombstone_and_conflict(app_client) -> None:
     token, _ = await create_guest(client)
     headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "sync-feed"}
     exercise_id, first_operation = str(uuid4()), str(uuid4())
-    payload = {"operations": [{"operation_id": first_operation, "entity_type": "exercise", "action": "UPSERT", "payload": {
-        "id": exercise_id, "name": "Private", "tracking_type": "REPS", "base_revision": None,
-    }}]}
+    payload = {
+        "operations": [
+            {
+                "operation_id": first_operation,
+                "entity_type": "exercise",
+                "action": "UPSERT",
+                "payload": {
+                    "id": exercise_id,
+                    "name": "Private",
+                    "tracking_type": "REPS",
+                    "base_revision": None,
+                },
+            }
+        ]
+    }
     created = await client.post("/api/v1/sync/push", headers=headers, json=payload)
     assert created.status_code == 200, created.text
     assert created.json()["results"][0]["revision"] == 1
 
-    stale = await client.post("/api/v1/sync/push", headers={**headers, "Idempotency-Key": "stale"}, json={"operations": [{
-        "operation_id": str(uuid4()), "entity_type": "exercise", "action": "UPSERT", "payload": {
-            "id": exercise_id, "name": "Stale", "tracking_type": "REPS", "base_revision": 0,
-        }}]})
+    stale = await client.post(
+        "/api/v1/sync/push",
+        headers={**headers, "Idempotency-Key": "stale"},
+        json={
+            "operations": [
+                {
+                    "operation_id": str(uuid4()),
+                    "entity_type": "exercise",
+                    "action": "UPSERT",
+                    "payload": {
+                        "id": exercise_id,
+                        "name": "Stale",
+                        "tracking_type": "REPS",
+                        "base_revision": 0,
+                    },
+                }
+            ]
+        },
+    )
     assert stale.status_code == 200
     assert stale.json()["results"][0]["status"] == "CONFLICT"
+    remote = stale.json()["results"][0]["remote_exercise"]
+    assert remote["id"] == exercise_id
+    assert remote["revision"] == 1
+    assert remote["name"] == "Private"
 
-    deleted = await client.delete(f"/api/v1/exercises/{exercise_id}", headers={"Authorization": f"Bearer {token}"})
+    deleted = await client.delete(
+        f"/api/v1/exercises/{exercise_id}", headers={"Authorization": f"Bearer {token}"}
+    )
     assert deleted.status_code == 204
-    pulled = await client.get("/api/v1/sync/exercises?cursor=0&limit=10", headers={"Authorization": f"Bearer {token}"})
+    pulled = await client.get(
+        "/api/v1/sync/exercises?cursor=0&limit=10", headers={"Authorization": f"Bearer {token}"}
+    )
     assert pulled.status_code == 200, pulled.text
     changes = pulled.json()["changes"]
     assert len(changes) == 2

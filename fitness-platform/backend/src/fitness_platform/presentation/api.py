@@ -7,8 +7,10 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from fitness_platform.core.security import request_fingerprint
+from fitness_platform.domain.models import Exercise
 from fitness_platform.presentation.dependencies import ContainerDep, CurrentUserId
 from fitness_platform.presentation.schemas import (
+    ExerciseChange,
     ExercisePage,
     ExerciseResponse,
     ExerciseWrite,
@@ -18,11 +20,10 @@ from fitness_platform.presentation.schemas import (
     PageMeta,
     ProfileResponse,
     ProfileUpdate,
+    SyncPullResponse,
     SyncPushRequest,
     SyncPushResponse,
     SyncResult,
-    SyncPullResponse,
-    ExerciseChange,
     WorkoutPage,
     WorkoutResponse,
     WorkoutWrite,
@@ -343,10 +344,17 @@ async def sync_pull_exercises(
     changes, next_cursor, has_more = await container.sync.pull(
         user_id=user_id, cursor=cursor, limit=limit
     )
-    return SyncPullResponse(
-        changes=[ExerciseChange(
-            cursor=int(change["cursor"]), deleted=bool(change["deleted"]),
-            exercise=ExerciseResponse.from_domain(change["exercise"]),
-        ) for change in changes],
-        next_cursor=next_cursor, has_more=has_more,
-    )
+    serialized_changes = []
+    for change in changes:
+        cursor_value = change["cursor"]
+        exercise_value = change["exercise"]
+        if not isinstance(cursor_value, int) or not isinstance(exercise_value, Exercise):
+            raise RuntimeError("Exercise sync change violated its internal contract.")
+        serialized_changes.append(
+            ExerciseChange(
+                cursor=cursor_value,
+                deleted=bool(change["deleted"]),
+                exercise=ExerciseResponse.from_domain(exercise_value),
+            )
+        )
+    return SyncPullResponse(changes=serialized_changes, next_cursor=next_cursor, has_more=has_more)

@@ -1,5 +1,5 @@
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import timedelta
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -242,10 +242,15 @@ class ExerciseService:
             existing = await uow.exercises.get(user_id, exercise_id)
             if existing is None:
                 raise NotFoundError("Exercise not found.")
-            deleted = await uow.exercises.upsert(replace(
-                existing, deleted_at=now, updated_at=now, server_updated_at=now,
-                revision=existing.revision + 1,
-            ))
+            deleted = await uow.exercises.upsert(
+                replace(
+                    existing,
+                    deleted_at=now,
+                    updated_at=now,
+                    server_updated_at=now,
+                    revision=existing.revision + 1,
+                )
+            )
             await uow.exercises.record_change(deleted, now)
             await uow.commit()
 
@@ -474,26 +479,48 @@ class SyncService:
                 elif entity_type == "exercise":
                     exercise_id = UUID(str(payload["id"]))
                     aggregate_id = exercise_id
-                    existing_exercise = await uow.exercises.get_including_deleted(user_id, exercise_id)
+                    existing_exercise = await uow.exercises.get_including_deleted(
+                        user_id, exercise_id
+                    )
                     base_revision = payload.get("base_revision")
-                    if existing_exercise is not None and base_revision != existing_exercise.revision:
-                        results.append({
-                            "operation_id": str(operation_id), "aggregate_id": str(exercise_id),
-                            "status": "CONFLICT", "server_updated_at": existing_exercise.server_updated_at.isoformat(),
-                            "revision": existing_exercise.revision,
-                        })
+                    if (
+                        existing_exercise is not None
+                        and base_revision != existing_exercise.revision
+                    ):
+                        results.append(
+                            {
+                                "operation_id": str(operation_id),
+                                "aggregate_id": str(exercise_id),
+                                "status": "CONFLICT",
+                                "server_updated_at": (
+                                    existing_exercise.server_updated_at
+                                    or existing_exercise.updated_at
+                                ).isoformat(),
+                                "revision": existing_exercise.revision,
+                                "remote_exercise": asdict(existing_exercise),
+                            }
+                        )
                         continue
                     if action == "DELETE":
                         if existing_exercise is None:
                             raise ValidationAppError("Cannot delete a missing exercise.")
                         exercise = Exercise(
-                            **{**existing_exercise.__dict__} if hasattr(existing_exercise, "__dict__") else {
-                                "id": existing_exercise.id, "owner_user_id": existing_exercise.owner_user_id,
-                                "name": existing_exercise.name, "description": existing_exercise.description,
-                                "primary_muscle_group": existing_exercise.primary_muscle_group, "equipment": existing_exercise.equipment,
-                                "tracking_type": existing_exercise.tracking_type, "notes": existing_exercise.notes,
-                                "sync_status": SyncStatus.SYNCED, "created_at": existing_exercise.created_at,
-                                "updated_at": now, "server_updated_at": now, "deleted_at": now,
+                            **{**existing_exercise.__dict__}
+                            if hasattr(existing_exercise, "__dict__")
+                            else {
+                                "id": existing_exercise.id,
+                                "owner_user_id": existing_exercise.owner_user_id,
+                                "name": existing_exercise.name,
+                                "description": existing_exercise.description,
+                                "primary_muscle_group": existing_exercise.primary_muscle_group,
+                                "equipment": existing_exercise.equipment,
+                                "tracking_type": existing_exercise.tracking_type,
+                                "notes": existing_exercise.notes,
+                                "sync_status": SyncStatus.SYNCED,
+                                "created_at": existing_exercise.created_at,
+                                "updated_at": now,
+                                "server_updated_at": now,
+                                "deleted_at": now,
                                 "revision": existing_exercise.revision + 1,
                             }
                         )
@@ -569,13 +596,23 @@ class SyncService:
             await uow.commit()
         return results
 
-    async def pull(self, *, user_id: UUID, cursor: int, limit: int) -> tuple[list[dict[str, object]], int, bool]:
+    async def pull(
+        self, *, user_id: UUID, cursor: int, limit: int
+    ) -> tuple[list[dict[str, object]], int, bool]:
         async with self._uow_factory() as uow:
             changes = await uow.exercises.changes_since(user_id, cursor, limit + 1)
         has_more = len(changes) > limit
         page = changes[:limit]
         next_cursor = page[-1][0] if page else cursor
-        return [
-            {"cursor": sequence, "exercise": exercise, "deleted": exercise.deleted_at is not None}
-            for sequence, exercise in page
-        ], next_cursor, has_more
+        return (
+            [
+                {
+                    "cursor": sequence,
+                    "exercise": exercise,
+                    "deleted": exercise.deleted_at is not None,
+                }
+                for sequence, exercise in page
+            ],
+            next_cursor,
+            has_more,
+        )

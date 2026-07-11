@@ -3,6 +3,8 @@ package at.fitnessplatform.feature.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import at.fitnessplatform.core.model.CustomExercise
+import at.fitnessplatform.core.model.ExerciseConflict
+import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.Workout
@@ -19,32 +21,47 @@ data class PlatformUiState(
     val isLoading: Boolean = true,
     val profile: GuestProfile? = null,
     val exercises: List<CustomExercise> = emptyList(),
+    val conflicts: List<ExerciseConflict> = emptyList(),
     val workouts: List<Workout> = emptyList(),
     val operationInProgress: Boolean = false,
     val errorMessage: String? = null,
 )
 
 @HiltViewModel
+@Suppress("LongParameterList")
 class PlatformViewModel @Inject constructor(
     observeProfile: ObserveProfileUseCase,
     observeExercises: ObserveExercisesUseCase,
+    observeConflicts: ObserveExerciseConflictsUseCase,
     observeWorkouts: ObserveWorkoutsUseCase,
     private val createProfile: CreateGuestProfileUseCase,
     private val updateProfile: UpdateGuestProfileUseCase,
     private val createExercise: CreateExerciseUseCase,
     private val updateExercise: UpdateExerciseUseCase,
     private val deleteExercise: DeleteExerciseUseCase,
+    private val resolveExerciseConflict: ResolveExerciseConflictUseCase,
     private val createWorkout: CreateWorkoutUseCase,
     private val startWorkout: StartWorkoutUseCase,
     private val completeWorkout: CompleteWorkoutUseCase,
 ) : ViewModel() {
+    private data class PlatformData(
+        val profile: GuestProfile?,
+        val exercises: List<CustomExercise>,
+        val workouts: List<Workout>,
+        val conflicts: List<ExerciseConflict>,
+    )
+
     private val operationInProgress = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
 
-    val uiState = combine(
-        observeProfile(), observeExercises(), observeWorkouts(), operationInProgress, errorMessage,
-    ) { profile, exercises, workouts, busy, error ->
-        PlatformUiState(false, profile, exercises, workouts, busy, error)
+    private val platformData = combine(
+        observeProfile(), observeExercises(), observeWorkouts(), observeConflicts(),
+    ) { profile, exercises, workouts, conflicts ->
+        PlatformData(profile, exercises, workouts, conflicts)
+    }
+
+    val uiState = combine(platformData, operationInProgress, errorMessage) { data, busy, error ->
+        PlatformUiState(false, data.profile, data.exercises, data.conflicts, data.workouts, busy, error)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlatformUiState())
 
     fun clearError() { errorMessage.value = null }
@@ -82,6 +99,9 @@ class PlatformViewModel @Inject constructor(
     }
 
     fun deleteExercise(id: String) = runOperation { deleteExercise.invoke(id) }
+
+    fun resolveConflict(exerciseId: String, resolution: ExerciseConflictResolution, merged: CustomExercise? = null) =
+        runOperation { resolveExerciseConflict(exerciseId, resolution, merged) }
 
     fun createWorkout(title: String, exerciseIds: List<String>) = runOperation {
         createWorkout(title, exerciseIds, "")

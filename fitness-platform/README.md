@@ -83,6 +83,10 @@ cd android
 ./gradlew lintDebug assembleDebug
 ```
 
+For a Windows emulator used from WSL, run `scripts/android-connected-tests.sh`. It builds and
+installs test APKs with ADB directly, records raw output and intentionally targets only modules
+with instrumentation sources. See [`android/README.md`](android/README.md).
+
 The included Gradle bootstrap downloads and verifies Gradle 8.13 on first use. The full Android unit-test, formatting, static-analysis, lint and debug-build command has been verified in WSL with Android SDK Platform 36; see `docs/IMPLEMENTATION_REPORT.md` for the exact command and remaining instrumentation limitation.
 
 ## Windows PowerShell
@@ -130,8 +134,8 @@ The temporary guest-token mechanism is a development foundation, not production 
 
 - No production account linking, Google sign-in or email login.
 - No Health Connect or vendor production adapters.
-- Sync is push-only; pull, tombstone reconciliation and user-facing conflict resolution are planned.
-- Sync acknowledgements mark local aggregate rows and outbox operations as `SYNCED`; pull sync, server deletions and conflict resolution are not yet implemented.
+- Private custom exercises use push-then-pull synchronization with revisions, a cursor feed and tombstones.
+- Exercise conflicts preserve local and remote snapshots and require an explicit local/server/manual-merge choice; workouts and profiles remain push-only.
 - No server-authoritative gamification, social, commerce, ads, AI or Play Integrity implementation.
 - Demo exercise text is technical fixture data, not professional training guidance.
 

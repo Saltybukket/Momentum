@@ -2,6 +2,17 @@ package at.fitnessplatform.core.model
 
 enum class SyncStatus { LOCAL_ONLY, PENDING, SYNCING, SYNCED, FAILED, CONFLICT }
 
+enum class ExerciseConflictType {
+    BOTH_MODIFIED,
+    REMOTE_DELETED_LOCAL_MODIFIED,
+    LOCAL_DELETED_REMOTE_MODIFIED,
+    REVISION_MISMATCH,
+}
+
+enum class ConflictResolutionStatus { OPEN, PENDING_CONFIRMATION, RESOLVED }
+
+enum class ExerciseConflictResolution { KEEP_LOCAL, TAKE_SERVER, MERGE }
+
 enum class UnitSystem { METRIC, IMPERIAL }
 
 enum class OnboardingStatus { NOT_STARTED, SKIPPED, IN_PROGRESS, COMPLETED }
@@ -36,6 +47,19 @@ data class CustomExercise(
     val serverId: String? = null,
     val conflictVersion: Long? = null,
     val deletedAtEpochMs: Long? = null,
+)
+
+data class ExerciseConflict(
+    val id: String,
+    val exerciseId: String,
+    val type: ExerciseConflictType,
+    val localRevision: Long?,
+    val remoteRevision: Long,
+    val localSnapshot: CustomExercise,
+    val remoteSnapshot: CustomExercise,
+    val detectedAtEpochMs: Long,
+    val resolutionStatus: ConflictResolutionStatus,
+    val resolvedAtEpochMs: Long? = null,
 )
 
 data class WorkoutExercise(

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Added persisted private-exercise conflict records with local and remote snapshots, explicit
+  keep-local, take-server and manual-merge resolution paths, and confirmation after push success.
+- Extended sync conflicts to return the server exercise snapshot so the Android client never
+  resolves a conflict without both comparison versions.
+- Added Room database version 2 and exported schema for conflict persistence.
+- Added a focused connected-test aggregation task and a Windows-emulator/WSL ADB runner that
+  bypasses UTP's external-emulator console limitation.
+
 All notable scaffold changes are documented here. The project follows semantic versioning once public releases begin.
 
 ## [Unreleased]

@@ -51,6 +51,24 @@ interface ExerciseDao {
     suspend fun markConflict(ids: List<String>)
 }
 
+@Dao
+interface ExerciseConflictDao {
+    @Query("SELECT * FROM exercise_conflicts WHERE resolutionStatus != 'RESOLVED' ORDER BY detectedAtEpochMs DESC")
+    fun observeOpen(): Flow<List<ExerciseConflictEntity>>
+
+    @Query("SELECT * FROM exercise_conflicts WHERE exerciseId = :exerciseId AND resolutionStatus != 'RESOLVED' LIMIT 1")
+    suspend fun getOpenForExercise(exerciseId: String): ExerciseConflictEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: ExerciseConflictEntity)
+
+    @Query("UPDATE exercise_conflicts SET resolutionStatus = :status, resolvedAtEpochMs = :resolvedAtEpochMs WHERE exerciseId = :exerciseId")
+    suspend fun updateStatus(exerciseId: String, status: String, resolvedAtEpochMs: Long?)
+
+    @Query("UPDATE exercise_conflicts SET resolutionStatus = 'RESOLVED', resolvedAtEpochMs = :resolvedAtEpochMs WHERE exerciseId = :exerciseId AND resolutionStatus = 'PENDING_CONFIRMATION'")
+    suspend fun markResolutionConfirmed(exerciseId: String, resolvedAtEpochMs: Long)
+}
+
 data class WorkoutWithExercises(
     @androidx.room.Embedded val workout: WorkoutEntity,
     @androidx.room.Relation(parentColumn = "id", entityColumn = "workoutId")
@@ -96,6 +114,12 @@ interface OutboxDao {
 
     @Query("UPDATE sync_outbox SET status = 'FAILED', retryCount = retryCount + 1, lastError = :error WHERE id IN (:ids)")
     suspend fun markFailed(ids: List<String>, error: String)
+
+    @Query("UPDATE sync_outbox SET status = 'CONFLICT', lastError = 'Conflict requires resolution' WHERE aggregateId IN (:aggregateIds) AND status = 'SYNCING'")
+    suspend fun markConflict(aggregateIds: List<String>)
+
+    @Query("DELETE FROM sync_outbox WHERE aggregateId = :aggregateId AND status IN ('PENDING', 'FAILED', 'SYNCING', 'CONFLICT')")
+    suspend fun deleteUnacknowledgedForAggregate(aggregateId: String)
 
     @Query("SELECT COUNT(*) FROM sync_outbox WHERE status IN ('PENDING','FAILED')")
     fun observePendingCount(): Flow<Int>

@@ -19,3 +19,20 @@ The repository uses the standard Gradle 8.13 wrapper with a pinned distribution 
 ```bash
 ./gradlew test lintDebug assembleDebug
 ```
+
+## Connected tests from WSL
+
+Use a Windows-hosted emulator with WSL mirrored networking. The repository script defaults to
+the Windows ADB server (`tcp:127.0.0.1:5037`), validates a device in the `device` state, builds
+only real instrumentation modules and runs their registered runners directly through ADB. It
+avoids UTP installation when an external emulator's console authentication is unavailable.
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ADB_SERVER_SOCKET="tcp:127.0.0.1:5037"
+../scripts/android-connected-tests.sh core:database
+```
+
+The current real instrumentation modules are `core:database` and `app`. Their raw output is
+stored under `android/build/connected-test-results/`. `connectedProjectAndroidTest` is the Gradle
+aggregation task for those two modules; empty Android-test source sets are skipped.

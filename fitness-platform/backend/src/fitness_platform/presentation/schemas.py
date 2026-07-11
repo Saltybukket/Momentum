@@ -220,6 +220,7 @@ class SyncResult(ApiModel):
     status: SyncStatus
     server_updated_at: datetime
     revision: int | None = None
+    remote_exercise: ExerciseResponse | None = None
 
 
 class SyncPushResponse(ApiModel):

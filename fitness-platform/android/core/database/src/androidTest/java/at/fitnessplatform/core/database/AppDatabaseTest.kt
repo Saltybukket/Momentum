@@ -56,4 +56,21 @@ class AppDatabaseTest {
         assertNotNull(database.workoutDao().get("w1"))
         assertEquals(1, database.outboxDao().pending().size)
     }
+
+    @Test fun exerciseConflictSnapshotsPersistAcrossRestart() = runTest {
+        database.guestProfileDao().insert(GuestProfile("p1", "Guest", 1).toEntity())
+        database.exerciseDao().insert(CustomExercise("e1", "p1", "Squat", "", "Legs", "None", TrackingType.REPS, "", 1, 1).toEntity())
+        database.exerciseConflictDao().upsert(
+            ExerciseConflictEntity(
+                id = "c1", exerciseId = "e1", conflictType = ExerciseConflictType.BOTH_MODIFIED.name,
+                localRevision = 1, remoteRevision = 2, localSnapshotJson = "{}", remoteSnapshotJson = "{}",
+                detectedAtEpochMs = 2, resolutionStatus = ConflictResolutionStatus.OPEN.name, resolvedAtEpochMs = null,
+            ),
+        )
+        database.close()
+        database = Room.databaseBuilder(context, AppDatabase::class.java, name).allowMainThreadQueries().build()
+        val conflict = database.exerciseConflictDao().getOpenForExercise("e1")
+        assertNotNull(conflict)
+        assertEquals(2, conflict?.remoteRevision)
+    }
 }
