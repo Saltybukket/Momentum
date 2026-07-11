@@ -43,3 +43,9 @@ All notable scaffold changes are documented here. The project follows semantic v
 ### Explicitly not complete
 
 Production authentication, Health Connect/vendor adapters, full workout/planning/nutrition/analytics, gamification, social/groups/bosses, commerce/ads, AI, Play Integrity and administration.
+
+### Offline exercise catalog foundation
+
+- Added validated atomic catalog import, CC0 demo data, machine-readable report and public filter API.
+- Added Room 3 catalog storage, atomic refresh, offline seed, list/detail/filter UI and accessibility semantics.
+- Made guest synchronization opt-in by default and moved executable CI to the repository root.

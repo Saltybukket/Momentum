@@ -112,3 +112,11 @@ The endpoint processes at most 100 operations per request. UUID upsert and opera
 - Unknown request fields are rejected to catch client drift early.
 - Response additions are backward-compatible; removals/renames require v2.
 - Provider-specific payloads do not enter public domain endpoints without normalization.
+
+## Public exercise catalog
+
+- `GET /api/v1/catalog/exercises?muscle={slug}&equipment={slug}` returns only reviewed published records; filters combine and unknown facets return an empty list.
+- `GET /api/v1/catalog/exercises/{id}` returns public detail or 404.
+- `GET /api/v1/catalog/muscles` and `/api/v1/catalog/equipment` return referenced public facets.
+
+Responses include source, external ID, provenance, license name/URL, version, tracking type and normalized relations. Private custom exercises never appear on these routes.

@@ -23,7 +23,7 @@ class GuestSessionStore @Inject constructor(@ApplicationContext private val cont
     }
 
     val token: Flow<String?> = context.sessionDataStore.data.map { it[Keys.token] }
-    val syncEnabled: Flow<Boolean> = context.sessionDataStore.data.map { it[Keys.syncEnabled] ?: true }
+    val syncEnabled: Flow<Boolean> = context.sessionDataStore.data.map { it[Keys.syncEnabled] ?: false }
 
     suspend fun tokenOrNull(): String? = token.first()
     suspend fun isSyncEnabled(): Boolean = syncEnabled.first()

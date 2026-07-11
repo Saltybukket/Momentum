@@ -114,3 +114,7 @@ Body weight, body fat, calories, health records and exact location are never pub
 - [ ] User-facing privacy notice and age/minor flow.
 - [ ] Incident response and breach notification procedure.
 - [ ] Accessibility/usability review of consent and withdrawal.
+
+## Guest synchronization consent
+
+Guest profiles and private exercises remain local by default. The persisted sync preference defaults to disabled and must be explicitly enabled before first upload. Public catalog refreshes are anonymous reads and never serialize private exercise or workout data.

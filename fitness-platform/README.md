@@ -142,3 +142,9 @@ The temporary guest-token mechanism is a development foundation, not production 
 ## Next steps
 
 Follow [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). The next three recommended vertical slices are also expressed as concrete Codex assignments in `docs/IMPLEMENTATION_REPORT.md`.
+
+## Offline exercise catalog
+
+Android ships three self-authored CC0 technical demo exercises and keeps the public catalog in Room as its source of truth. List, detail, muscle/equipment filters and offline/error states remain separate from user-owned custom exercises. `make catalog-import` validates and atomically imports the matching backend dataset, with an idempotent `(source, external_id)` upsert and JSON report under `data/licenses/`.
+
+Public endpoints are `GET /api/v1/catalog/exercises`, `/api/v1/catalog/exercises/{id}`, `/api/v1/catalog/muscles` and `/api/v1/catalog/equipment`.

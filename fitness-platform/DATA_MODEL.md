@@ -150,3 +150,7 @@ Every syncable aggregate carries local UUID, optional server ID, sync status and
 ## Planned model boundaries
 
 The following are intentionally not added as generic placeholder tables: nutrition, body measurements, health records, XP ledger, quests, streaks, bosses, social content, moderation, groups, tournaments, products, entitlements, purchases, ad receipts, AI consent and integrity evidence. Each requires domain-specific constraints and retention/privacy rules; creating empty generic tables now would lock in poor semantics.
+
+## Exercise catalog
+
+Alembic head `c1a4e6d91b0f` adds `catalog_exercises`, `muscles`, `equipment` and the two relation tables. `(source, external_id)` is unique; controlled status/role values are constrained and lookup/publication paths indexed. Android Room schema 3 mirrors these normalized records and remains disjoint from owner-bound `custom_exercises`. Schemas 1–3 are exported under `android/core/database/schemas/`.

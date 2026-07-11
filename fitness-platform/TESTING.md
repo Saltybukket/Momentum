@@ -147,3 +147,9 @@ Current automation covers both sides up to the network boundary and provides `sc
 ## CI behavior
 
 CI fails on formatting, lint, type errors, test failures, migration drift, Android lint/build failure, secret findings, dependency audit failure or Docker build failure. No check is documented as successful unless it actually ran in the relevant environment.
+
+## Catalog verification
+
+Backend coverage includes repeat/update import, duplicates, missing provenance/license/source, unknown relationships, review/publication rules, rollback, filters and private/public separation. Android JVM tests cover ViewModel/filter/offline state; Room/repository instrumentation sources cover persistence, migration 2→3, seed idempotency, combined filters and atomic failure preservation.
+
+`make doctor` warns for a missing Windows stable API-36 AVD; `make doctor-connected` is strict. Install with `sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, then `avdmanager.bat create avd -n Momentum_API_36 -k "system-images;android-36;google_apis;x86_64"`.

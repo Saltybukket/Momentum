@@ -123,3 +123,7 @@ Slices:
 - Security/privacy/legal review and staged rollout/kill switches.
 
 DoD: production threat model, incident/restore exercises, signed release, Play policy checks, privacy documentation and monitored staged rollout.
+
+## Completed slice: offline exercise catalog foundation
+
+Backend catalog/import/API, Alembic migration, Android Room/network/repository/UI, tests and documentation are implemented. The sole environment-only follow-up is connected UI acceptance after installing a stable Windows API-36 system image/AVD; it does not block backend, JVM, lint, migration or build checks.

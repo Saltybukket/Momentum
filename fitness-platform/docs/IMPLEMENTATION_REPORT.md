@@ -330,3 +330,9 @@ Introduce reviewed catalog entities, muscle/equipment relationships, source/lice
 8. Execute the local guest/exercise/workout flow.
 9. Run `python scripts/smoke_test.py` against the backend.
 10. Review `SECURITY.md`, `PRIVACY.md` and all accepted ADRs before extending production-sensitive functionality.
+
+## Offline exercise catalog foundation
+
+Implemented a self-authored CC0 three-record dataset through a validated atomic backend importer and reviewed-only API into an offline-first Android Room 3 cache. Android provides public list/detail, combined filters, loading/empty/error/offline states and provenance, structurally separated from private exercises. Guest upload now requires opt-in.
+
+Backend head is `c1a4e6d91b0f`; Android schema is 3. The backend suite collects 24 tests and reports 76.98% coverage. Connected execution alone remains externally blocked by the absent stable Windows API-36 system image/AVD; instrumentation code compiles independently.

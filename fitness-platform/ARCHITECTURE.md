@@ -261,3 +261,9 @@ A future integrity adapter supplies evidence/risk signals. XP, currency, quest c
 ## 10. Deployment evolution
 
 The modular monolith remains preferred until evidence justifies separation. A module is a candidate service only when it has a clear ownership boundary, independent scaling/availability needs, stable contracts and an operational team capable of supporting it. Likely later candidates are notifications, provider ingestion and asynchronous analytics—not identity/workout transactions by default.
+
+## 11. Public catalog boundary
+
+The reviewed public exercise catalog is not an extension of private `custom_exercises`. Backend records require provenance, license, stable source/external IDs and normalized relations; only reviewed `PUBLISHED` records are exposed. Android mirrors the catalog in Room 3 and renders Room flows; a Retrofit refresh replaces it atomically. Private exercise changes continue through the owner-scoped outbox and can never enter catalog queries.
+
+Guest data is local by default. `GuestSessionStore.syncEnabled` defaults to `false`; upload starts only after explicit opt-in. Catalog refresh contains no private payload.
