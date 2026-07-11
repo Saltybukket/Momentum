@@ -33,6 +33,8 @@ export ADB_SERVER_SOCKET="tcp:127.0.0.1:5037"
 ../scripts/android-connected-tests.sh core:database
 ```
 
-The current real instrumentation modules are `core:database` and `app`. Their raw output is
+The current real instrumentation modules are `core:database`, `data` and `app`. Their raw output is
 stored under `android/build/connected-test-results/`. `connectedProjectAndroidTest` is the Gradle
-aggregation task for those two modules; empty Android-test source sets are skipped.
+aggregation task for those three modules; empty Android-test source sets are skipped. The project
+baseline is a stable API-36 Google APIs/x86_64 AVD; pass `ANDROID_SERIAL` when more than one
+device is attached.

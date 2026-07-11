@@ -3,7 +3,7 @@ set -euo pipefail
 
 ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 ADB_SERVER_SOCKET="${ADB_SERVER_SOCKET:-tcp:127.0.0.1:5037}"
-INSTRUMENTATION_TIMEOUT_SECONDS="${INSTRUMENTATION_TIMEOUT_SECONDS:-600}"
+INSTRUMENTATION_TIMEOUT_SECONDS="${INSTRUMENTATION_TIMEOUT_SECONDS:-180}"
 export ANDROID_HOME ADB_SERVER_SOCKET
 export PATH="$ANDROID_HOME/platform-tools:$PATH"
 
@@ -12,11 +12,16 @@ if [[ ! -x "$ANDROID_HOME/platform-tools/adb" ]]; then
   exit 2
 fi
 
-if ! adb get-state 2>/dev/null | grep -qx device; then
-  echo "No usable Android device is connected through ADB_SERVER_SOCKET=$ADB_SERVER_SOCKET." >&2
-  echo "Start a Windows emulator, then verify from WSL with: adb devices" >&2
+mapfile -t connected_devices < <(adb devices | awk '$2 == "device" { print $1 }')
+if [[ -n "${ANDROID_SERIAL:-}" ]]; then
+  connected_devices=("$ANDROID_SERIAL")
+fi
+if [[ "${#connected_devices[@]}" -ne 1 ]]; then
+  echo "Expected exactly one usable Android device through ADB_SERVER_SOCKET=$ADB_SERVER_SOCKET; found ${#connected_devices[@]}." >&2
+  echo "Start the stable API 36 emulator or set ANDROID_SERIAL explicitly, then verify with: adb devices" >&2
   exit 3
 fi
+ADB=(adb -s "${connected_devices[0]}")
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_DIR="$ROOT_DIR/android"
@@ -26,9 +31,10 @@ RESULT_FILE="$RESULT_DIR/$(date -u +%Y%m%dT%H%M%SZ).txt"
 
 declare -A RUNNERS=(
   [core:database]="at.fitnessplatform.core.database.test/androidx.test.runner.AndroidJUnitRunner"
+  [data]="at.fitnessplatform.data.test/androidx.test.runner.AndroidJUnitRunner"
   [app]="at.fitnessplatform.app.test/androidx.test.runner.AndroidJUnitRunner"
 )
-MODULES=("${@:-core:database app}")
+MODULES=("${@:-core:database data app}")
 
 for module in "${MODULES[@]}"; do
   if [[ -z "${RUNNERS[$module]:-}" ]]; then
@@ -39,7 +45,7 @@ done
 
 {
   echo "ADB server socket: $ADB_SERVER_SOCKET"
-  adb devices
+  "${ADB[@]}" devices
   for module in "${MODULES[@]}"; do
     gradle_module=":$module"
     module_path="${module//:/\/}"
@@ -49,12 +55,12 @@ done
     echo "Building and installing $gradle_module without UTP"
     "$ANDROID_DIR/gradlew" -p "$ANDROID_DIR" "${gradle_module}:assembleDebug" "${gradle_module}:assembleDebugAndroidTest"
     if [[ "$module" == "app" ]]; then
-      adb install -r "$app_apk"
+      "${ADB[@]}" install -r "$app_apk"
     fi
-    adb install -r "$test_apk"
+    "${ADB[@]}" install -r "$test_apk"
     echo "Running ${RUNNERS[$module]}"
-    adb shell pm list instrumentation | grep -F "${RUNNERS[$module]}"
-    timeout "$INSTRUMENTATION_TIMEOUT_SECONDS" adb shell am instrument -w -r "${RUNNERS[$module]}"
+    "${ADB[@]}" shell pm list instrumentation | grep -F "${RUNNERS[$module]}"
+    timeout "$INSTRUMENTATION_TIMEOUT_SECONDS" "${ADB[@]}" shell am instrument -w -r "${RUNNERS[$module]}"
   done
 } 2>&1 | tee "$RESULT_FILE"
 

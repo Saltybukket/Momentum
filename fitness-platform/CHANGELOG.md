@@ -9,6 +9,9 @@
 - Added Room database version 2 and exported schema for conflict persistence.
 - Added a focused connected-test aggregation task and a Windows-emulator/WSL ADB runner that
   bypasses UTP's external-emulator console limitation.
+- Added atomic Room repository instrumentation coverage for keep-local, take-server and manual
+  exercise-conflict resolution, plus a `make android-connected-test` workflow with explicit
+  device selection and bounded runner timeouts.
 
 All notable scaffold changes are documented here. The project follows semantic versioning once public releases begin.
 

@@ -7,9 +7,9 @@ ANDROID_SDK_ROOT ?= $(ANDROID_HOME)
 export ANDROID_HOME ANDROID_SDK_ROOT
 endif
 
-.PHONY: help setup dev backend backend-test backend-lint android-test android-build test lint migrate seed clean openapi smoke
+.PHONY: help setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke
 help:
-	@printf '%s\n' "setup dev backend backend-test backend-lint android-test android-build test lint migrate seed clean openapi smoke"
+	@printf '%s\n' "setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed clean openapi smoke"
 
 setup:
 	@test -f .env || cp .env.example .env
@@ -32,6 +32,9 @@ android-test:
 
 android-build:
 	cd android && ./gradlew lintDebug assembleDebug
+
+android-connected-test:
+	./scripts/android-connected-tests.sh
 
 test: backend-test android-test
 

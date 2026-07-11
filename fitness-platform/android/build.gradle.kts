@@ -61,5 +61,9 @@ subprojects {
 tasks.register("connectedProjectAndroidTest") {
     group = "verification"
     description = "Runs only Android modules that currently contain instrumentation tests."
-    dependsOn(":core:database:connectedDebugAndroidTest", ":app:connectedDebugAndroidTest")
+    dependsOn(
+        ":core:database:connectedDebugAndroidTest",
+        ":data:connectedDebugAndroidTest",
+        ":app:connectedDebugAndroidTest",
+    )
 }

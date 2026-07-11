@@ -55,6 +55,7 @@ Test layers:
 - **Use-case tests:** validation and orchestration against fakes.
 - **ViewModel tests:** loading/success/error state with test dispatchers.
 - **Room instrumentation tests:** persistence after database reopen, CRUD, relationships and outbox.
+- **Repository instrumentation tests:** conflict snapshots and atomic keep-local/take-server/manual-merge transactions.
 - **Repository/event tests:** atomic write/outbox behavior and domain-event idempotence.
 - **Compose instrumentation:** guest creation and navigation smoke path.
 - **WorkManager tests:** worker retry and status transitions are the next sync slice.
@@ -64,9 +65,23 @@ Commands:
 ```bash
 cd android
 ./gradlew test
-./gradlew connectedDebugAndroidTest   # emulator/device required
+./gradlew connectedProjectAndroidTest # only modules with AndroidTest sources
 ./gradlew lintDebug assembleDebug
 ```
+
+For the Windows-hosted emulator from WSL, use the controlled direct-ADB workflow instead of a
+root `connectedDebugAndroidTest` run:
+
+```bash
+make android-connected-test
+# or: ANDROID_SERIAL=emulator-5556 ./scripts/android-connected-tests.sh data
+```
+
+It requires exactly one device (or an explicit `ANDROID_SERIAL`), builds only `core:database`,
+`data` and `app`, writes raw logs to `android/build/connected-test-results/`, parses successful
+test counts and times out after 180 seconds per runner. API 36 with Google APIs/x86_64 is the
+project baseline. The currently installed Windows emulator image is API 37 preview and is not a
+valid substitute for acceptance verification.
 
 `core:testing` provides `FakeClock`, `FakeUuidProvider`, deterministic test values and `MainDispatcherRule`.
 

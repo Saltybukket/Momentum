@@ -279,7 +279,26 @@ Espresso 3.7.0. The repository provides `connectedProjectAndroidTest` for the tw
 runner records raw results and avoids UTP installation when emulator-console authentication is not
 available.
 
-## 13. Recommended next Codex assignments
+## 13. Test-environment stabilization update
+
+The standard local workflow is `make test` for all backend and Android JVM checks and
+`make android-connected-test` for the three non-empty instrumentation modules
+(`core:database`, `data`, `app`). The latter verifies SDK/ADB/device prerequisites, requires one
+device or an explicit `ANDROID_SERIAL`, builds and installs APKs directly through ADB, writes a
+timestamped raw log and uses a 180-second per-runner timeout. It does not report empty modules as
+tested.
+
+The new `data` instrumentation suite covers atomic server adoption, keep-local pending
+confirmation and manual merge queueing for persisted exercise conflicts. The suite compiles with
+the Android test APK. Execution remains blocked in this workstation session: the Windows SDK has
+only Android 17/API 37 preview, while the stable API-36 image is installed inside WSL and cannot
+be used as a Windows emulator system directory. The preview image previously exposed an Espresso
+`InputManager.getInstance` incompatibility and is intentionally not accepted as the baseline.
+
+Docker Compose was verified with PostgreSQL, Redis and backend healthy; the container migration
+head is `4f3b20b5b92a`, the smoke flow passed, and Gitleaks found no secrets in the repository.
+
+## 14. Recommended next Codex assignments
 
 ### Assignment 1 — Complete bidirectional offline synchronization
 
