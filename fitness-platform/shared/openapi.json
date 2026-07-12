@@ -253,6 +253,58 @@
         "title": "ExerciseChange",
         "type": "object"
       },
+      "ExerciseDeleteSyncOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "DELETE",
+            "title": "Action",
+            "type": "string"
+          },
+          "entity_type": {
+            "const": "exercise",
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExerciseDeleteSyncPayload"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_type",
+          "action",
+          "payload"
+        ],
+        "title": "ExerciseDeleteSyncOperation",
+        "type": "object"
+      },
+      "ExerciseDeleteSyncPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision": {
+            "minimum": 1.0,
+            "title": "Base Revision",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "base_revision"
+        ],
+        "title": "ExerciseDeleteSyncPayload",
+        "type": "object"
+      },
       "ExercisePage": {
         "additionalProperties": false,
         "properties": {
@@ -368,6 +420,102 @@
           "revision"
         ],
         "title": "ExerciseResponse",
+        "type": "object"
+      },
+      "ExerciseUpsertSyncOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "UPSERT",
+            "title": "Action",
+            "type": "string"
+          },
+          "entity_type": {
+            "const": "exercise",
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExerciseUpsertSyncPayload"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_type",
+          "action",
+          "payload"
+        ],
+        "title": "ExerciseUpsertSyncOperation",
+        "type": "object"
+      },
+      "ExerciseUpsertSyncPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Revision"
+          },
+          "description": {
+            "maxLength": 4000,
+            "title": "Description",
+            "type": "string"
+          },
+          "equipment": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Equipment",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "maxLength": 4000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "primary_muscle_group": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Primary Muscle Group",
+            "type": "string"
+          },
+          "tracking_type": {
+            "$ref": "#/components/schemas/TrackingType"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "primary_muscle_group",
+          "equipment",
+          "tracking_type",
+          "notes",
+          "base_revision"
+        ],
+        "title": "ExerciseUpsertSyncPayload",
         "type": "object"
       },
       "ExerciseWrite": {
@@ -612,6 +760,61 @@
         "title": "ProfileResponse",
         "type": "object"
       },
+      "ProfileSyncOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "UPSERT",
+            "title": "Action",
+            "type": "string"
+          },
+          "entity_type": {
+            "const": "profile",
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ProfileSyncPayload"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_type",
+          "action",
+          "payload"
+        ],
+        "title": "ProfileSyncOperation",
+        "type": "object"
+      },
+      "ProfileSyncPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "onboarding_status": {
+            "$ref": "#/components/schemas/OnboardingStatus"
+          },
+          "unit_system": {
+            "$ref": "#/components/schemas/UnitSystem"
+          }
+        },
+        "required": [
+          "display_name",
+          "unit_system",
+          "onboarding_status"
+        ],
+        "title": "ProfileSyncPayload",
+        "type": "object"
+      },
       "ProfileUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -634,52 +837,6 @@
           "onboarding_status"
         ],
         "title": "ProfileUpdate",
-        "type": "object"
-      },
-      "SyncAction": {
-        "enum": [
-          "UPSERT",
-          "DELETE"
-        ],
-        "title": "SyncAction",
-        "type": "string"
-      },
-      "SyncEntityType": {
-        "enum": [
-          "profile",
-          "exercise",
-          "workout"
-        ],
-        "title": "SyncEntityType",
-        "type": "string"
-      },
-      "SyncOperation": {
-        "additionalProperties": false,
-        "properties": {
-          "action": {
-            "$ref": "#/components/schemas/SyncAction"
-          },
-          "entity_type": {
-            "$ref": "#/components/schemas/SyncEntityType"
-          },
-          "operation_id": {
-            "format": "uuid",
-            "title": "Operation Id",
-            "type": "string"
-          },
-          "payload": {
-            "additionalProperties": true,
-            "title": "Payload",
-            "type": "object"
-          }
-        },
-        "required": [
-          "operation_id",
-          "entity_type",
-          "action",
-          "payload"
-        ],
-        "title": "SyncOperation",
         "type": "object"
       },
       "SyncPullResponse": {
@@ -714,7 +871,20 @@
         "properties": {
           "operations": {
             "items": {
-              "$ref": "#/components/schemas/SyncOperation"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ProfileSyncOperation"
+                },
+                {
+                  "$ref": "#/components/schemas/ExerciseUpsertSyncOperation"
+                },
+                {
+                  "$ref": "#/components/schemas/ExerciseDeleteSyncOperation"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkoutUpsertSyncOperation"
+                }
+              ]
             },
             "maxItems": 100,
             "minItems": 1,
@@ -1021,6 +1191,75 @@
         ],
         "title": "WorkoutStatus",
         "type": "string"
+      },
+      "WorkoutUpsertSyncOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "UPSERT",
+            "title": "Action",
+            "type": "string"
+          },
+          "entity_type": {
+            "const": "workout",
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkoutUpsertSyncPayload"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_type",
+          "action",
+          "payload"
+        ],
+        "title": "WorkoutUpsertSyncOperation",
+        "type": "object"
+      },
+      "WorkoutUpsertSyncPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "exercise_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Exercise Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "maxLength": 4000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "notes",
+          "exercise_ids"
+        ],
+        "title": "WorkoutUpsertSyncPayload",
+        "type": "object"
       },
       "WorkoutWrite": {
         "additionalProperties": false,
