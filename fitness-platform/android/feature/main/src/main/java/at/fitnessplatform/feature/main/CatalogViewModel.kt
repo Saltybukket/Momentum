@@ -51,6 +51,7 @@ class CatalogViewModel @Inject constructor(private val repository: CatalogReposi
     init { viewModelScope.launch { repository.seedIfEmpty(); refreshing.value = false } }
     fun setMuscle(slug: String?) { filter.value = filter.value.copy(muscle = slug) }
     fun setEquipment(slug: String?) { filter.value = filter.value.copy(equipment = slug) }
+    fun setQuery(query: String) { filter.value = filter.value.copy(query = query) }
     fun refresh() = viewModelScope.launch {
         refreshing.value = true
         error.value = null

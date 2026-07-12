@@ -26,8 +26,9 @@ import javax.inject.Singleton
         CatalogEquipmentEntity::class,
         CatalogExerciseMuscleEntity::class,
         CatalogExerciseEquipmentEntity::class,
+        CatalogMetadataEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -89,6 +90,20 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `sync_outbox` ADD COLUMN `claimOwner` TEXT")
+        database.execSQL("ALTER TABLE `sync_outbox` ADD COLUMN `claimExpiresAtEpochMs` INTEGER")
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS `catalog_metadata` " +
+                "(`singletonId` INTEGER NOT NULL, `schemaVersion` TEXT NOT NULL, " +
+                "`catalogVersion` TEXT NOT NULL, `contentHash` TEXT NOT NULL, " +
+                "`retrievedAtEpochMs` INTEGER NOT NULL, `source` TEXT NOT NULL, " +
+                "PRIMARY KEY(`singletonId`))",
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -96,7 +111,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "fitness-platform.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

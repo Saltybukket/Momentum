@@ -40,7 +40,11 @@ data class CatalogExercise(
     val equipment: List<String>,
 )
 
-data class CatalogFilter(val muscle: String? = null, val equipment: String? = null)
+data class CatalogFilter(
+    val query: String = "",
+    val muscle: String? = null,
+    val equipment: String? = null,
+)
 
 enum class UnitSystem { METRIC, IMPERIAL }
 

@@ -38,6 +38,7 @@ private object Routes {
     const val WORKOUTS = "workouts"
     const val CATALOG = "catalog"
     const val CATALOG_EXERCISE = "catalog/{catalogId}"
+    const val PRIVACY = "privacy"
 }
 
 @Composable
@@ -45,15 +46,17 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val profile = state.profile
     val navController = rememberNavController()
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
     MaterialTheme {
         Scaffold(
             topBar = { TopAppBar(title = { Text("Fitness Platform Scaffold") }) },
-            snackbarHost = {
-                val message = state.errorMessage
-                if (message != null) {
-                    LaunchedEffect(message) { viewModel.clearError() }
-                }
-            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -74,6 +77,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onProfile = { navController.navigate(Routes.PROFILE) },
                             onExercises = { navController.navigate(Routes.EXERCISES) },
                             onCatalog = { navController.navigate(Routes.CATALOG) },
+                            onPrivacy = { navController.navigate(Routes.PRIVACY) },
                             onWorkouts = { navController.navigate(Routes.WORKOUTS) },
                             onConflicts = { navController.navigate(Routes.CONFLICTS) },
                         )
@@ -139,6 +143,9 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable(Routes.PRIVACY) {
+                        PrivacyScreen(onBack = { navController.popBackStack() })
+                    }
                     composable(
                         Routes.CATALOG_EXERCISE,
                         arguments = listOf(navArgument("catalogId") { type = NavType.StringType }),
@@ -176,6 +183,7 @@ private fun HomeScreen(
     onProfile: () -> Unit,
     onExercises: () -> Unit,
     onCatalog: () -> Unit,
+    onPrivacy: () -> Unit,
     onWorkouts: () -> Unit,
     onConflicts: () -> Unit,
 ) {
@@ -185,6 +193,7 @@ private fun HomeScreen(
         Button(onClick = onProfile, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
         Button(onClick = onExercises, modifier = Modifier.fillMaxWidth()) { Text("Custom exercises") }
         OutlinedButton(onClick = onCatalog, modifier = Modifier.fillMaxWidth()) { Text("Public offline exercise catalog") }
+        OutlinedButton(onClick = onPrivacy, modifier = Modifier.fillMaxWidth()) { Text("Privacy and private-data sync") }
         if (conflictCount > 0) Button(onClick = onConflicts, modifier = Modifier.fillMaxWidth()) { Text("Resolve $conflictCount sync conflict(s)") }
         Button(onClick = onWorkouts, modifier = Modifier.fillMaxWidth()) { Text("Workouts") }
         HorizontalDivider()

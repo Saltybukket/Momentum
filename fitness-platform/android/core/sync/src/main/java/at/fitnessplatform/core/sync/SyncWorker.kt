@@ -54,7 +54,9 @@ class SyncWorker @AssistedInject constructor(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         if (!sessionStore.isSyncEnabled()) return Result.success()
-        val pending = outboxDao.pending()
+        val claimOwner = id.toString()
+        val now = clock.nowEpochMs()
+        val pending = outboxDao.claimBatch(claimOwner, now, now + LEASE_DURATION_MS)
         return when {
             pending.isEmpty() -> pullOnly()
             else -> {
@@ -62,9 +64,7 @@ class SyncWorker @AssistedInject constructor(
                 if (profile == null) {
                     Result.failure()
                 } else {
-                    val ids = pending.map { it.id }
-                    outboxDao.markSyncing(ids)
-                    synchronize(profile, pending, ids)
+                    synchronize(profile, pending, pending.map { it.id })
                 }
             }
         }
@@ -137,10 +137,11 @@ class SyncWorker @AssistedInject constructor(
     }
 
     private suspend fun tokenFor(profile: GuestProfileEntity): String = sessionStore.tokenOrNull()
-        ?: api.createGuestSession(
-            idempotencyKey = "guest-session-${profile.id}",
-            request = GuestSessionRequest(profile.displayName),
-        ).let { session ->
+        ?: sessionStore.bootstrapCredentials().let { (installationId, recoverySecret) ->
+            api.createGuestSession(
+                request = GuestSessionRequest(profile.displayName, installationId, recoverySecret),
+            )
+        }.let { session ->
             sessionStore.saveToken(session.guestToken)
             profileDao.markSynced(profile.id, session.profile.userId)
             session.guestToken
@@ -229,5 +230,8 @@ class SyncWorker @AssistedInject constructor(
         deletedAtEpochMs = deletedAt?.let { Instant.parse(it).toEpochMilli() },
     )
 
-    private companion object { const val MAX_RETRIES = 5 }
+    private companion object {
+        const val MAX_RETRIES = 5
+        const val LEASE_DURATION_MS = 5 * 60 * 1000L
+    }
 }

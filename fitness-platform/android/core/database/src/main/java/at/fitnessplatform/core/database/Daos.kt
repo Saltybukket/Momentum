@@ -103,16 +103,34 @@ interface OutboxDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entity: OutboxEntity): Long
 
-    @Query("SELECT * FROM sync_outbox WHERE status IN ('PENDING','FAILED') ORDER BY createdAtEpochMs ASC LIMIT :limit")
-    suspend fun pending(limit: Int = 100): List<OutboxEntity>
+    @Query("SELECT * FROM sync_outbox WHERE status IN ('PENDING','FAILED') ORDER BY createdAtEpochMs ASC")
+    suspend fun pending(): List<OutboxEntity>
 
-    @Query("UPDATE sync_outbox SET status = 'SYNCING' WHERE id IN (:ids)")
-    suspend fun markSyncing(ids: List<String>)
+    @Query("""SELECT id FROM sync_outbox
+        WHERE status IN ('PENDING','FAILED') OR (status = 'SYNCING' AND claimExpiresAtEpochMs <= :now)
+        ORDER BY createdAtEpochMs ASC LIMIT :limit""")
+    suspend fun claimableIds(now: Long, limit: Int): List<String>
 
-    @Query("UPDATE sync_outbox SET status = 'SYNCED', lastError = NULL WHERE id IN (:ids)")
+    @Query("""UPDATE sync_outbox SET status = 'SYNCING', claimOwner = :owner,
+        claimExpiresAtEpochMs = :expiresAt WHERE id IN (:ids)
+        AND (status IN ('PENDING','FAILED') OR (status = 'SYNCING' AND claimExpiresAtEpochMs <= :now))""")
+    suspend fun claim(ids: List<String>, owner: String, now: Long, expiresAt: Long)
+
+    @Query("SELECT * FROM sync_outbox WHERE claimOwner = :owner AND status = 'SYNCING' ORDER BY createdAtEpochMs")
+    suspend fun claimedBy(owner: String): List<OutboxEntity>
+
+    @Transaction
+    suspend fun claimBatch(owner: String, now: Long, expiresAt: Long, limit: Int = 100): List<OutboxEntity> {
+        val ids = claimableIds(now, limit)
+        if (ids.isEmpty()) return emptyList()
+        claim(ids, owner, now, expiresAt)
+        return claimedBy(owner)
+    }
+
+    @Query("UPDATE sync_outbox SET status = 'SYNCED', lastError = NULL, claimOwner = NULL, claimExpiresAtEpochMs = NULL WHERE id IN (:ids)")
     suspend fun markSynced(ids: List<String>)
 
-    @Query("UPDATE sync_outbox SET status = 'FAILED', retryCount = retryCount + 1, lastError = :error WHERE id IN (:ids)")
+    @Query("UPDATE sync_outbox SET status = 'FAILED', retryCount = retryCount + 1, lastError = :error, claimOwner = NULL, claimExpiresAtEpochMs = NULL WHERE id IN (:ids)")
     suspend fun markFailed(ids: List<String>, error: String)
 
     @Query("UPDATE sync_outbox SET status = 'CONFLICT', lastError = 'Conflict requires resolution' WHERE aggregateId IN (:aggregateIds) AND status = 'SYNCING'")
@@ -121,7 +139,7 @@ interface OutboxDao {
     @Query("DELETE FROM sync_outbox WHERE aggregateId = :aggregateId AND status IN ('PENDING', 'FAILED', 'SYNCING', 'CONFLICT')")
     suspend fun deleteUnacknowledgedForAggregate(aggregateId: String)
 
-    @Query("SELECT COUNT(*) FROM sync_outbox WHERE status IN ('PENDING','FAILED')")
+    @Query("SELECT COUNT(*) FROM sync_outbox WHERE status IN ('PENDING','FAILED','SYNCING','CONFLICT')")
     fun observePendingCount(): Flow<Int>
 }
 
@@ -140,11 +158,12 @@ interface CatalogDao {
         """SELECT DISTINCT c.* FROM catalog_exercises c
         LEFT JOIN catalog_exercise_muscles m ON m.exerciseId = c.id
         LEFT JOIN catalog_exercise_equipment e ON e.exerciseId = c.id
-        WHERE (:muscle IS NULL OR m.muscleSlug = :muscle)
+        WHERE (:query = '' OR c.name LIKE '%' || :query || '%' COLLATE NOCASE)
+          AND (:muscle IS NULL OR m.muscleSlug = :muscle)
           AND (:equipment IS NULL OR e.equipmentSlug = :equipment)
         ORDER BY c.name"""
     )
-    fun observe(muscle: String?, equipment: String?): Flow<List<CatalogExerciseWithRelations>>
+    fun observe(query: String, muscle: String?, equipment: String?): Flow<List<CatalogExerciseWithRelations>>
 
     @Transaction @Query("SELECT * FROM catalog_exercises WHERE id = :id LIMIT 1")
     fun observeOne(id: String): Flow<CatalogExerciseWithRelations?>
@@ -152,6 +171,8 @@ interface CatalogDao {
     @Query("SELECT * FROM catalog_muscles ORDER BY name") fun observeMuscles(): Flow<List<CatalogMuscleEntity>>
     @Query("SELECT * FROM catalog_equipment ORDER BY name") fun observeEquipment(): Flow<List<CatalogEquipmentEntity>>
     @Query("SELECT COUNT(*) FROM catalog_exercises") suspend fun count(): Int
+    @Query("SELECT * FROM catalog_metadata WHERE singletonId = 1") suspend fun metadata(): CatalogMetadataEntity?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMetadata(row: CatalogMetadataEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertExercises(rows: List<CatalogExerciseEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertMuscles(rows: List<CatalogMuscleEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertEquipment(rows: List<CatalogEquipmentEntity>)
@@ -160,4 +181,5 @@ interface CatalogDao {
     @Query("DELETE FROM catalog_exercises") suspend fun deleteExercises()
     @Query("DELETE FROM catalog_muscles") suspend fun deleteMuscles()
     @Query("DELETE FROM catalog_equipment") suspend fun deleteEquipment()
+    @Query("DELETE FROM catalog_metadata") suspend fun deleteMetadata()
 }

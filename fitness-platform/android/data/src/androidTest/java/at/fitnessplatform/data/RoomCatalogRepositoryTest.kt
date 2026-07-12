@@ -9,6 +9,7 @@ import at.fitnessplatform.core.model.CatalogFilter
 import at.fitnessplatform.core.network.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -23,17 +24,18 @@ class RoomCatalogRepositoryTest {
     private lateinit var repository: RoomCatalogRepository
 
     @Before fun setUp() {
-        database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), AppDatabase::class.java).allowMainThreadQueries().build()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         api = FakeFitnessApi()
-        repository = RoomCatalogRepository(database, database.catalogDao(), api)
+        repository = RoomCatalogRepository(context, database, database.catalogDao(), api, Json { ignoreUnknownKeys = true })
     }
     @After fun tearDown() = database.close()
 
     @Test fun seedSupportsOfflineFirstStartAndCombinedFilters() = runTest {
         repository.seedIfEmpty()
         assertEquals(3, repository.observeCatalog().first().size)
-        assertEquals(1, repository.observeCatalog(CatalogFilter("core", "mat")).first().size)
-        assertTrue(repository.observeCatalog(CatalogFilter("unknown", null)).first().isEmpty())
+        assertEquals(1, repository.observeCatalog(CatalogFilter(muscle = "core", equipment = "mat")).first().size)
+        assertTrue(repository.observeCatalog(CatalogFilter(muscle = "unknown")).first().isEmpty())
         repository.seedIfEmpty()
         assertEquals(3, repository.observeCatalog().first().size)
     }
@@ -52,9 +54,13 @@ private class FakeFitnessApi : FitnessApi {
         if (fail) error("offline")
         return emptyList()
     }
+    override suspend fun catalogSnapshot(): CatalogSnapshotDto {
+        if (fail) error("offline")
+        return CatalogSnapshotDto("1", "test", "test-hash", "2026-07-12T00:00:00Z", emptyList(), emptyList(), emptyList())
+    }
     override suspend fun catalogMuscles() = emptyList<CatalogFacetDto>()
     override suspend fun catalogEquipment() = emptyList<CatalogFacetDto>()
-    override suspend fun createGuestSession(idempotencyKey: String, request: GuestSessionRequest): GuestSessionResponse = error("unused")
+    override suspend fun createGuestSession(request: GuestSessionRequest): GuestSessionResponse = error("unused")
     override suspend fun pushSync(authorization: String, idempotencyKey: String, request: SyncPushRequest): SyncPushResponse = error("unused")
     override suspend fun pullExercises(authorization: String, cursor: Long, limit: Int): SyncPullResponse = error("unused")
 }

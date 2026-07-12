@@ -91,11 +91,11 @@ class AppDatabaseTest {
             database.catalogDao().insertExerciseMuscles(listOf(CatalogExerciseMuscleEntity(exercise.id, "legs", "PRIMARY")))
             database.catalogDao().insertExerciseEquipment(listOf(CatalogExerciseEquipmentEntity(exercise.id, "bodyweight")))
         }
-        assertEquals(1, database.catalogDao().observe("legs", "bodyweight").first().size)
-        assertEquals(0, database.catalogDao().observe("unknown", null).first().size)
+        assertEquals(1, database.catalogDao().observe("", "legs", "bodyweight").first().size)
+        assertEquals(0, database.catalogDao().observe("", "unknown", null).first().size)
         database.close()
         database = Room.databaseBuilder(context, AppDatabase::class.java, name).allowMainThreadQueries().build()
-        assertEquals("Squat", database.catalogDao().observe(null, null).first().single().exercise.name)
+        assertEquals("Squat", database.catalogDao().observe("squ", null, null).first().single().exercise.name)
         assertEquals(0, database.exerciseDao().observeActive().first().size)
     }
 
@@ -104,5 +104,24 @@ class AppDatabaseTest {
         migrationHelper.createDatabase(migrationName, 2).close()
         migrationHelper.runMigrationsAndValidate(migrationName, 3, true, MIGRATION_2_3).close()
         context.deleteDatabase(migrationName)
+    }
+
+    @Test fun migrationThreeToFourAddsOutboxLeaseColumns() {
+        val migrationName = "outbox-lease-migration.db"
+        migrationHelper.createDatabase(migrationName, 3).close()
+        migrationHelper.runMigrationsAndValidate(migrationName, 4, true, MIGRATION_3_4).close()
+        context.deleteDatabase(migrationName)
+    }
+
+    @Test fun outboxClaimsAreExclusiveAndStaleClaimsAreReclaimed() = runTest {
+        val row = OutboxEntity("lease-1", "aggregate", "UPSERT_PROFILE", "{}", 1, "PENDING", 0, null)
+        database.outboxDao().insert(row)
+        val first = database.outboxDao().claimBatch("worker-a", 100, 200)
+        val activeSecond = database.outboxDao().claimBatch("worker-b", 150, 250)
+        val reclaimed = database.outboxDao().claimBatch("worker-b", 201, 301)
+        assertEquals(listOf("lease-1"), first.map { it.id })
+        assertEquals(0, activeSecond.size)
+        assertEquals(listOf("lease-1"), reclaimed.map { it.id })
+        assertEquals("worker-b", reclaimed.single().claimOwner)
     }
 }

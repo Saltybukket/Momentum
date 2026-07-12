@@ -1,15 +1,19 @@
 package at.fitnessplatform.data
 
 import androidx.room.withTransaction
+import android.content.Context
 import at.fitnessplatform.core.database.*
 import at.fitnessplatform.core.model.*
 import at.fitnessplatform.domain.*
 import at.fitnessplatform.core.network.CatalogExerciseDto
+import at.fitnessplatform.core.network.CatalogSnapshotDto
 import at.fitnessplatform.core.network.FitnessApi
+import at.fitnessplatform.core.datastore.GuestSessionStore
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -34,88 +38,72 @@ private fun outboxEntity(
     lastError = null,
 )
 
+@Singleton
+class RoomSyncPreferencesRepository @Inject constructor(
+    private val sessionStore: GuestSessionStore,
+    private val outboxDao: OutboxDao,
+) : SyncPreferencesRepository {
+    override fun observeEnabled() = sessionStore.syncEnabled
+    override fun observePendingCount() = outboxDao.observePendingCount()
+    override suspend fun setEnabled(enabled: Boolean) {
+        sessionStore.setSyncEnabled(enabled)
+    }
+}
+
 private fun CatalogExerciseDto.toCatalogModel() = CatalogExercise(
     id, externalId, source, provenance, licenseName, licenseUrl, version,
     CatalogStatus.valueOf(status), reviewed, name, description, TrackingType.valueOf(trackingType),
     muscles.map { CatalogMuscle(it.slug, MuscleRole.valueOf(it.role)) }, equipment,
 )
 
-private val demoCatalog = listOf(
-    demo(
-        "85e855ce-5a45-5af2-bf23-500030d34e11", "bodyweight-squat", "Bodyweight Squat",
-        "A technical demo movement record for testing catalog behavior.", TrackingType.REPS,
-        listOf(CatalogMuscle("quadriceps", MuscleRole.PRIMARY), CatalogMuscle("glutes", MuscleRole.SECONDARY)),
-        "none",
-    ),
-    demo(
-        "766f74ee-877f-5d6c-af72-783a8c79bb04", "incline-push-up", "Incline Push-up",
-        "A self-authored technical demo entry without medical or coaching claims.", TrackingType.REPS,
-        listOf(CatalogMuscle("chest", MuscleRole.PRIMARY), CatalogMuscle("triceps", MuscleRole.SECONDARY)),
-        "none",
-    ),
-    demo(
-        "396dc274-797d-5473-b3e3-2d3879701fde", "front-plank", "Front Plank",
-        "A self-authored technical demo entry for duration tracking.", TrackingType.DURATION,
-        listOf(CatalogMuscle("core", MuscleRole.PRIMARY)), "mat",
-    ),
-)
-
-private fun demo(
-    id: String,
-    externalId: String,
-    name: String,
-    description: String,
-    type: TrackingType,
-    muscles: List<CatalogMuscle>,
-    equipment: String,
-) = CatalogExercise(
-    id, externalId, "momentum-self-authored-demo",
-    "Self-authored by the Momentum project for technical demonstration.", "CC0-1.0",
-    "https://creativecommons.org/publicdomain/zero/1.0/", "1", CatalogStatus.PUBLISHED,
-    true, name, description, type, muscles, listOf(equipment),
-)
-
 @Singleton
 class RoomCatalogRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val catalogDao: CatalogDao,
     private val api: FitnessApi,
+    private val json: Json,
 ) : CatalogRepository {
     override fun observeCatalog(filter: CatalogFilter) =
-        catalogDao.observe(filter.muscle, filter.equipment).map { rows -> rows.map { it.toModel() } }
+        catalogDao.observe(filter.query, filter.muscle, filter.equipment).map { rows -> rows.map { it.toModel() } }
     override fun observeExercise(id: String) = catalogDao.observeOne(id).map { it?.toModel() }
     override fun observeMuscles() = catalogDao.observeMuscles().map { rows -> rows.map { Muscle(it.slug, it.name) } }
     override fun observeEquipment() = catalogDao.observeEquipment().map { rows -> rows.map { Equipment(it.slug, it.name) } }
 
     override suspend fun seedIfEmpty() {
         if (catalogDao.count() == 0) {
-            val muscles = demoCatalog.flatMap { it.muscles }.map { it.slug }.distinct().associateWith(::displayName)
-            val equipment = demoCatalog.flatMap { it.equipment }.distinct().associateWith(::displayName)
-            replace(demoCatalog, muscles, equipment)
+            val snapshot = context.assets.open("catalog-demo.json").bufferedReader().use {
+                json.decodeFromString<CatalogSnapshotDto>(it.readText())
+            }
+            replace(snapshot, "bundled-seed")
         }
     }
 
     override suspend fun refresh() {
-        val exercises = api.catalogExercises().map { it.toCatalogModel() }
-        val muscles = api.catalogMuscles().associate { it.slug to it.name }
-        val equipment = api.catalogEquipment().associate { it.slug to it.name }
-        replace(exercises, muscles, equipment)
+        replace(api.catalogSnapshot(), "network")
     }
 
-    private suspend fun replace(exercises: List<CatalogExercise>, muscles: Map<String, String>, equipment: Map<String, String>) {
+    private suspend fun replace(snapshot: CatalogSnapshotDto, source: String) {
+        if (catalogDao.metadata()?.contentHash == snapshot.contentHash) return
+        val exercises = snapshot.exercises.map { it.toCatalogModel() }
         database.withTransaction {
             catalogDao.deleteExercises()
             catalogDao.deleteMuscles()
             catalogDao.deleteEquipment()
-            catalogDao.insertMuscles(muscles.map { CatalogMuscleEntity(it.key, it.value) })
-            catalogDao.insertEquipment(equipment.map { CatalogEquipmentEntity(it.key, it.value) })
+            catalogDao.insertMuscles(snapshot.muscles.map { CatalogMuscleEntity(it.slug, it.name) })
+            catalogDao.insertEquipment(snapshot.equipment.map { CatalogEquipmentEntity(it.slug, it.name) })
             catalogDao.insertExercises(exercises.map { it.toEntity() })
             catalogDao.insertExerciseMuscles(exercises.flatMap { it.toMuscleEntities() })
             catalogDao.insertExerciseEquipment(exercises.flatMap { it.toEquipmentEntities() })
+            catalogDao.putMetadata(CatalogMetadataEntity(
+                schemaVersion = snapshot.schemaVersion,
+                catalogVersion = snapshot.catalogVersion,
+                contentHash = snapshot.contentHash,
+                retrievedAtEpochMs = System.currentTimeMillis(),
+                source = source,
+            ))
         }
     }
-
-    private fun displayName(slug: String) = slug.replace('-', ' ').replaceFirstChar(Char::uppercase)
 }
 
 @Singleton

@@ -57,6 +57,12 @@ interface CatalogRepository {
     suspend fun refresh()
 }
 
+interface SyncPreferencesRepository {
+    fun observeEnabled(): Flow<Boolean>
+    fun observePendingCount(): Flow<Int>
+    suspend fun setEnabled(enabled: Boolean)
+}
+
 fun interface DomainEventHandler<T : DomainEvent> { suspend fun handle(event: T) }
 
 interface DomainEventDispatcher {

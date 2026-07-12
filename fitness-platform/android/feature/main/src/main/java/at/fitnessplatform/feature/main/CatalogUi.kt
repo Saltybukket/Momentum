@@ -42,6 +42,12 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
         Text("Public exercise catalog", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text("Reviewed public exercises saved on this device. Your custom exercises remain separate.")
         if (state.offline) AssistChip(onClick = viewModel::refresh, label = { Text("Offline · saved catalog") })
+        OutlinedTextField(
+            value = state.filter.query,
+            onValueChange = viewModel::setQuery,
+            label = { Text("Search exercises") },
+            modifier = Modifier.fillMaxWidth(),
+        )
         CatalogFilterMenu("Muscle", state.filter.muscle, state.muscles.map { it.slug to it.name }, viewModel::setMuscle)
         CatalogFilterMenu("Equipment", state.filter.equipment, state.equipment.map { it.slug to it.name }, viewModel::setEquipment)
         when {

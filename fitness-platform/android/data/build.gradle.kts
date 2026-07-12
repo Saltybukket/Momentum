@@ -14,6 +14,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    sourceSets["main"].assets.srcDir("../../data/exercises")
 }
 
 kotlin { jvmToolchain(17) }
@@ -23,6 +24,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
     implementation(project(":core:network"))
+    implementation(project(":core:datastore"))
     implementation(libs.androidx.room.ktx)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)

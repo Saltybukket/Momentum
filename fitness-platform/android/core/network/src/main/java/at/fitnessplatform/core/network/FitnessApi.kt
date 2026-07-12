@@ -7,6 +7,8 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 interface FitnessApi {
+    @GET("api/v1/catalog/snapshot")
+    suspend fun catalogSnapshot(): CatalogSnapshotDto
     @GET("api/v1/catalog/exercises")
     suspend fun catalogExercises(
         @Query("muscle") muscle: String? = null,
@@ -18,7 +20,6 @@ interface FitnessApi {
 
     @POST("api/v1/guest-sessions")
     suspend fun createGuestSession(
-        @Header("Idempotency-Key") idempotencyKey: String,
         @Body request: GuestSessionRequest,
     ): GuestSessionResponse
 

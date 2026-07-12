@@ -4,7 +4,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
-@Serializable data class GuestSessionRequest(@SerialName("display_name") val displayName: String)
+@Serializable data class GuestSessionRequest(
+    @SerialName("display_name") val displayName: String,
+    @SerialName("installation_id") val installationId: String,
+    @SerialName("recovery_secret") val recoverySecret: String,
+)
 @Serializable data class ProfileDto(
     @SerialName("user_id") val userId: String,
     @SerialName("display_name") val displayName: String,
@@ -20,6 +24,7 @@ import kotlinx.serialization.json.JsonObject
     val profile: ProfileDto,
     @SerialName("expires_in_seconds") val expiresInSeconds: Int,
     @SerialName("development_only") val developmentOnly: Boolean,
+    val recovered: Boolean = false,
 )
 @Serializable data class SyncOperationDto(
     @SerialName("operation_id") val operationId: String,
@@ -73,3 +78,12 @@ import kotlinx.serialization.json.JsonObject
     val equipment: List<String>,
 )
 @Serializable data class CatalogFacetDto(val slug: String, val name: String)
+@Serializable data class CatalogSnapshotDto(
+    @SerialName("schema_version") val schemaVersion: String,
+    @SerialName("catalog_version") val catalogVersion: String,
+    @SerialName("content_hash") val contentHash: String,
+    @SerialName("published_at") val publishedAt: String,
+    val muscles: List<CatalogFacetDto>,
+    val equipment: List<CatalogFacetDto>,
+    val exercises: List<CatalogExerciseDto>,
+)

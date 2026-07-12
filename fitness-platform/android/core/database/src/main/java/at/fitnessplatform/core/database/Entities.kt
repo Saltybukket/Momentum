@@ -105,6 +105,8 @@ data class OutboxEntity(
     val status: String,
     val retryCount: Int,
     val lastError: String?,
+    val claimOwner: String? = null,
+    val claimExpiresAtEpochMs: Long? = null,
 )
 
 @Entity(
@@ -173,3 +175,13 @@ data class CatalogExerciseMuscleEntity(val exerciseId: String, val muscleSlug: S
     indices = [Index("exerciseId"), Index("equipmentSlug")],
 )
 data class CatalogExerciseEquipmentEntity(val exerciseId: String, val equipmentSlug: String)
+
+@Entity(tableName = "catalog_metadata")
+data class CatalogMetadataEntity(
+    @PrimaryKey val singletonId: Int = 1,
+    val schemaVersion: String,
+    val catalogVersion: String,
+    val contentHash: String,
+    val retrievedAtEpochMs: Long,
+    val source: String,
+)
