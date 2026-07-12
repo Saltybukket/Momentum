@@ -18,6 +18,7 @@ Branch: `codex/fix-scaffold-reproducibility`
 - Backend full suite with isolated PostgreSQL: **95 passed**. Combined coverage **79.03%**; statement coverage **83.23%** (1,990/2,391); branch coverage **51.11%** (184/360).
 - Fresh SQLite upgrade/check: passed; fresh PostgreSQL tests and production-container upgrade/check: passed. Head: `f26c8d0e531a`.
 - Android `spotlessCheck detekt test lintDebug assembleDebug`: passed.
+- Android JVM tests: 9 unique tests across 5 suites, passed for debug and release variants.
 - AndroidTest source compilation for `core:database`, `core:sync`, `data` and `app`: passed.
 - Connected execution: not run; external blocker remains the absent stable Windows API-36 system image/AVD.
 - Docker Compose config/build/up, healthy services, container Alembic check and smoke flow: passed.
@@ -25,6 +26,7 @@ Branch: `codex/fix-scaffold-reproducibility`
 - Gitleaks 8.28.0: 30 commits / about 3.83 MB scanned, no leaks.
 - Trivy 0.66.0: gate failed on 20 Debian 13 base-image HIGH/CRITICAL findings, including deferred/unfixed Perl and util-linux-family advisories. No Python-package vulnerability was reported. This external base-image remediation remains open; do not misreport the scan as green.
 - Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk`, 40,240,659 bytes, SHA-256 `09ebda887ea8a3e36194f4b71d9f296f5f6645f4cbe974bd4456566d0808544c`.
+- GitHub Actions run `29213415409` for commit `a3761c5193cdff8fc01612284a449725c5f7749c` passed: backend 1m14s, Android 6m04s and repository/security 44s. URL: <https://github.com/Saltybukket/Momentum/actions/runs/29213415409>.
 
 ## Next boundary
 
