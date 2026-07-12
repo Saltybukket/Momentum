@@ -5,6 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from fitness_platform.container import AppContainer
 from fitness_platform.core.config import Settings
@@ -26,6 +27,7 @@ async def app_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, AppCont
     database = Database(settings)
     async with database.engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        assert await connection.scalar(text("PRAGMA foreign_keys")) == 1
     container = AppContainer.build(settings, database=database)
     app = create_app(settings, container)
     transport = ASGITransport(app=app)

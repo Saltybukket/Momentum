@@ -43,7 +43,10 @@ def test_migrations_apply_to_empty_database(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_idempotency_migration_hashes_existing_keys(tmp_path: Path) -> None:
+@pytest.mark.parametrize("legacy_key", ["raw-client-key", "a" * 64])
+def test_idempotency_migration_purges_ambiguous_legacy_keys(
+    tmp_path: Path, legacy_key: str
+) -> None:
     backend_dir = Path(__file__).resolve().parents[1]
     database_path = tmp_path / "idempotency-migration.db"
     sync_url = f"sqlite:///{database_path}"
@@ -70,7 +73,7 @@ def test_idempotency_migration_hashes_existing_keys(tmp_path: Path) -> None:
             {
                 "id": "88be75ba-0a72-4726-82bc-2b6e8cc02760",
                 "scope": "POST:/resource:principal=test",
-                "key": "raw-client-key",
+                "key": legacy_key,
                 "request_hash": "0" * 64,
                 "now": "2026-07-12 00:00:00",
             },
@@ -86,5 +89,4 @@ def test_idempotency_migration_hashes_existing_keys(tmp_path: Path) -> None:
     with verification_engine.connect() as connection:
         stored = connection.scalar(text("SELECT key FROM idempotency_records"))
     verification_engine.dispose()
-    assert stored != "raw-client-key"
-    assert len(stored) == 64
+    assert stored is None
