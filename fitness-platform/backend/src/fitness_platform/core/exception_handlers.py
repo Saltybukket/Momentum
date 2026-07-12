@@ -1,10 +1,13 @@
 from typing import Any
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from fitness_platform.core.errors import AppError
+
+logger = structlog.get_logger()
 
 
 def _request_id(request: Request) -> str:
@@ -25,6 +28,26 @@ def _payload(
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        request_id = _request_id(request)
+        await logger.aerror(
+            "unhandled_request_error",
+            request_id=request_id,
+            path=request.url.path,
+            error_type=type(exc).__name__,
+        )
+        return JSONResponse(
+            status_code=500,
+            content=_payload(
+                code="INTERNAL_ERROR",
+                message="An internal error occurred.",
+                details=[],
+                request_id=request_id,
+            ),
+            headers={"X-Request-ID": request_id},
+        )
+
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(
