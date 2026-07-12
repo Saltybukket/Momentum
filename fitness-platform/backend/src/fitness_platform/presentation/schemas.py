@@ -21,6 +21,8 @@ class ApiModel(BaseModel):
 
 class GuestSessionCreate(ApiModel):
     display_name: str = Field(default="Guest", max_length=80)
+    installation_id: UUID
+    recovery_secret: str = Field(min_length=32, max_length=256)
 
 
 class ProfileResponse(ApiModel):
@@ -55,6 +57,7 @@ class GuestSessionResponse(ApiModel):
     profile: ProfileResponse
     expires_in_seconds: int
     development_only: bool = True
+    recovered: bool = False
 
 
 class ProfileUpdate(ApiModel):
@@ -279,3 +282,13 @@ class CatalogExerciseResponse(ApiModel):
 class CatalogFacetResponse(ApiModel):
     slug: str
     name: str
+
+
+class CatalogSnapshotResponse(ApiModel):
+    schema_version: str
+    catalog_version: str
+    content_hash: str
+    published_at: datetime
+    muscles: list[CatalogFacetResponse]
+    equipment: list[CatalogFacetResponse]
+    exercises: list[CatalogExerciseResponse]

@@ -49,6 +49,8 @@ class GuestSession:
     expires_at: datetime
     created_at: datetime
     revoked_at: datetime | None = None
+    installation_id: UUID | None = None
+    recovery_secret_hash: str | None = None
 
 
 @dataclass(slots=True)

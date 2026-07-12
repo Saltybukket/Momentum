@@ -6,7 +6,6 @@ Revises: 4f3b20b5b92a
 
 import sqlalchemy as sa
 from alembic import op
-from fitness_platform.domain.enums import CatalogStatus, MuscleRole, TrackingType
 
 revision = "c1a4e6d91b0f"
 down_revision = "4f3b20b5b92a"
@@ -36,11 +35,27 @@ def upgrade() -> None:
         sa.Column("license_name", sa.String(160), nullable=False),
         sa.Column("license_url", sa.String(500), nullable=False),
         sa.Column("version", sa.String(40), nullable=False),
-        sa.Column("status", sa.Enum(CatalogStatus, native_enum=False), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum("DRAFT", "PUBLISHED", "DEPRECATED", name="catalogstatus", native_enum=False),
+            nullable=False,
+        ),
         sa.Column("reviewed", sa.Boolean(), nullable=False),
         sa.Column("name", sa.String(120), nullable=False),
         sa.Column("description", sa.Text(), nullable=False),
-        sa.Column("tracking_type", sa.Enum(TrackingType, native_enum=False), nullable=False),
+        sa.Column(
+            "tracking_type",
+            sa.Enum(
+                "REPS_WEIGHT",
+                "REPS",
+                "DURATION",
+                "DISTANCE_DURATION",
+                "MANUAL",
+                name="trackingtype",
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("source", "external_id", name="uq_catalog_exercise_source_external_id"),
@@ -65,7 +80,11 @@ def upgrade() -> None:
             sa.ForeignKey("muscles.id", ondelete="RESTRICT"),
             primary_key=True,
         ),
-        sa.Column("role", sa.Enum(MuscleRole, native_enum=False), nullable=False),
+        sa.Column(
+            "role",
+            sa.Enum("PRIMARY", "SECONDARY", name="musclerole", native_enum=False),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "role IN ('PRIMARY','SECONDARY')", name="ck_catalog_exercise_muscle_role"
         ),

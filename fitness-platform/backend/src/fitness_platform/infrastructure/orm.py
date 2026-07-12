@@ -55,6 +55,10 @@ class GuestSessionRow(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    installation_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True), unique=True, index=True
+    )
+    recovery_secret_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class ProfileRow(Base):
@@ -259,7 +263,10 @@ class IdempotencyRecordRow(Base):
     scope: Mapped[str] = mapped_column(String(120), nullable=False)
     key: Mapped[str] = mapped_column(String(160), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    response_status: Mapped[int] = mapped_column(Integer, nullable=False)
-    response_body: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    response_body: Mapped[dict[str, object] | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

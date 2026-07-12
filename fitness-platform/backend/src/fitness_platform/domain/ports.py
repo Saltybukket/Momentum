@@ -20,6 +20,10 @@ class GuestSessionRepository(Protocol):
         self, token_hash: str, now: datetime
     ) -> GuestSession | None: ...
 
+    async def find_by_installation(self, installation_id: UUID) -> GuestSession | None: ...
+
+    async def update_credentials(self, session: GuestSession) -> None: ...
+
 
 class ProfileRepository(Protocol):
     async def get(self, user_id: UUID) -> Profile | None: ...
@@ -28,6 +32,7 @@ class ProfileRepository(Protocol):
 
 
 class ExerciseRepository(Protocol):
+    async def is_id_taken(self, exercise_id: UUID) -> bool: ...
     async def list(self, user_id: UUID) -> Sequence[Exercise]: ...
 
     async def get(self, user_id: UUID, exercise_id: UUID) -> Exercise | None: ...
@@ -43,6 +48,7 @@ class ExerciseRepository(Protocol):
 
 
 class WorkoutRepository(Protocol):
+    async def is_id_taken(self, workout_id: UUID) -> bool: ...
     async def list(self, user_id: UUID) -> Sequence[Workout]: ...
 
     async def get(self, user_id: UUID, workout_id: UUID) -> Workout | None: ...
@@ -52,13 +58,20 @@ class WorkoutRepository(Protocol):
 
 class CatalogRepository(Protocol):
     async def list(
-        self, muscle: str | None, equipment: str | None
+        self,
+        muscle: str | None,
+        equipment: str | None,
+        query: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> Sequence[CatalogExercise]: ...
     async def get(self, exercise_id: UUID) -> CatalogExercise | None: ...
     async def find(self, source: str, external_id: str) -> CatalogExercise | None: ...
     async def list_muscles(self) -> Sequence[tuple[str, str]]: ...
     async def list_equipment(self) -> Sequence[tuple[str, str]]: ...
     async def upsert(self, exercise: CatalogExercise) -> CatalogExercise: ...
+    async def upsert_muscles(self, values: Sequence[tuple[str, str]]) -> None: ...
+    async def upsert_equipment(self, values: Sequence[tuple[str, str]]) -> None: ...
 
 
 class OutboxRepository(Protocol):
@@ -75,19 +88,22 @@ class OutboxRepository(Protocol):
 
 
 class IdempotencyRepository(Protocol):
-    async def get(self, scope: str, key: str) -> tuple[str, int, dict[str, object]] | None: ...
-
-    async def add(
+    async def reserve(
         self,
         *,
         scope: str,
         key: str,
         request_hash: str,
-        response_status: int,
-        response_body: dict[str, object],
-        created_at: datetime,
+        now: datetime,
         expires_at: datetime,
+        lease_expires_at: datetime,
+    ) -> tuple[str, str, int | None, dict[str, object] | None]: ...
+
+    async def complete(
+        self, scope: str, key: str, status: int, body: dict[str, object], now: datetime
     ) -> None: ...
+
+    async def fail(self, scope: str, key: str, now: datetime) -> None: ...
 
 
 class UnitOfWork(Protocol, AbstractAsyncContextManager["UnitOfWork"]):

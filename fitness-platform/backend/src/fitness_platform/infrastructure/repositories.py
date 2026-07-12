@@ -1,8 +1,9 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,7 +38,14 @@ class SqlAlchemyCatalogRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def list(self, muscle: str | None, equipment: str | None) -> Sequence[CatalogExercise]:
+    async def list(
+        self,
+        muscle: str | None,
+        equipment: str | None,
+        query: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Sequence[CatalogExercise]:
         statement = select(CatalogExerciseRow).where(
             CatalogExerciseRow.status == CatalogStatus.PUBLISHED,
             CatalogExerciseRow.reviewed.is_(True),
@@ -54,8 +62,44 @@ class SqlAlchemyCatalogRepository:
                 .join(EquipmentRow)
                 .where(EquipmentRow.slug == equipment)
             )
+        if query:
+            statement = statement.where(CatalogExerciseRow.name.ilike(f"%{query.strip()}%"))
+        statement = (
+            statement.order_by(CatalogExerciseRow.name, CatalogExerciseRow.id)
+            .limit(limit)
+            .offset(offset)
+        )
         rows = (await self._session.execute(statement.distinct())).scalars().all()
-        return [await self._to_model(row) for row in rows]
+        if not rows:
+            return []
+        ids = [row.id for row in rows]
+        muscle_rows = (
+            await self._session.execute(
+                select(
+                    CatalogExerciseMuscleRow.exercise_id,
+                    MuscleRow.slug,
+                    CatalogExerciseMuscleRow.role,
+                )
+                .join(MuscleRow)
+                .where(CatalogExerciseMuscleRow.exercise_id.in_(ids))
+            )
+        ).all()
+        equipment_rows = (
+            await self._session.execute(
+                select(CatalogExerciseEquipmentRow.exercise_id, EquipmentRow.slug)
+                .join(EquipmentRow)
+                .where(CatalogExerciseEquipmentRow.exercise_id.in_(ids))
+            )
+        ).all()
+        muscles_by_id: dict[UUID, list[tuple[str, MuscleRole]]] = {item: [] for item in ids}
+        equipment_by_id: dict[UUID, list[str]] = {item: [] for item in ids}
+        for exercise_id, slug, role in muscle_rows:
+            muscles_by_id[exercise_id].append((str(slug), MuscleRole(role)))
+        for exercise_id, slug in equipment_rows:
+            equipment_by_id[exercise_id].append(str(slug))
+        return [
+            self._row_to_model(row, muscles_by_id[row.id], equipment_by_id[row.id]) for row in rows
+        ]
 
     async def get(self, exercise_id: UUID) -> CatalogExercise | None:
         row = await self._session.get(CatalogExerciseRow, exercise_id)
@@ -180,6 +224,28 @@ class SqlAlchemyCatalogRepository:
         await self._session.flush()
         return await self._to_model(row)
 
+    async def upsert_muscles(self, values: Sequence[tuple[str, str]]) -> None:
+        for slug, name in values:
+            row = (
+                await self._session.execute(select(MuscleRow).where(MuscleRow.slug == slug))
+            ).scalar_one_or_none()
+            if row is None:
+                self._session.add(MuscleRow(id=uuid4(), slug=slug, name=name))
+            else:
+                row.name = name
+        await self._session.flush()
+
+    async def upsert_equipment(self, values: Sequence[tuple[str, str]]) -> None:
+        for slug, name in values:
+            row = (
+                await self._session.execute(select(EquipmentRow).where(EquipmentRow.slug == slug))
+            ).scalar_one_or_none()
+            if row is None:
+                self._session.add(EquipmentRow(id=uuid4(), slug=slug, name=name))
+            else:
+                row.name = name
+        await self._session.flush()
+
     async def _to_model(self, row: CatalogExerciseRow) -> CatalogExercise:
         muscles = (
             await self._session.execute(
@@ -199,6 +265,16 @@ class SqlAlchemyCatalogRepository:
             .scalars()
             .all()
         )
+        return self._row_to_model(
+            row, [(str(slug), MuscleRole(role)) for slug, role in muscles], list(equipment)
+        )
+
+    @staticmethod
+    def _row_to_model(
+        row: CatalogExerciseRow,
+        muscles: Sequence[tuple[str, MuscleRole]],
+        equipment: Sequence[str],
+    ) -> CatalogExercise:
         return CatalogExercise(
             row.id,
             row.external_id,
@@ -212,7 +288,7 @@ class SqlAlchemyCatalogRepository:
             row.name,
             row.description,
             row.tracking_type,
-            [(str(slug), MuscleRole(role)) for slug, role in muscles],
+            list(muscles),
             list(equipment),
             row.created_at,
             row.updated_at,
@@ -300,6 +376,8 @@ class SqlAlchemyGuestSessionRepository:
                 expires_at=session.expires_at,
                 created_at=session.created_at,
                 revoked_at=session.revoked_at,
+                installation_id=session.installation_id,
+                recovery_secret_hash=session.recovery_secret_hash,
             )
         )
         await self._session.flush()
@@ -322,6 +400,39 @@ class SqlAlchemyGuestSessionRepository:
             expires_at=row.expires_at,
             created_at=row.created_at,
             revoked_at=row.revoked_at,
+            installation_id=row.installation_id,
+            recovery_secret_hash=row.recovery_secret_hash,
+        )
+
+    async def find_by_installation(self, installation_id: UUID) -> GuestSession | None:
+        row = (
+            await self._session.execute(
+                select(GuestSessionRow).where(GuestSessionRow.installation_id == installation_id)
+            )
+        ).scalar_one_or_none()
+        return self._to_model(row) if row else None
+
+    async def update_credentials(self, session: GuestSession) -> None:
+        row = await self._session.get(GuestSessionRow, session.id)
+        if row is None:
+            raise RuntimeError("Guest session disappeared during credential rotation.")
+        row.token_hash = session.token_hash
+        row.expires_at = session.expires_at
+        row.revoked_at = session.revoked_at
+        row.recovery_secret_hash = session.recovery_secret_hash
+        await self._session.flush()
+
+    @staticmethod
+    def _to_model(row: GuestSessionRow) -> GuestSession:
+        return GuestSession(
+            id=row.id,
+            user_id=row.user_id,
+            token_hash=row.token_hash,
+            expires_at=row.expires_at,
+            created_at=row.created_at,
+            revoked_at=row.revoked_at,
+            installation_id=row.installation_id,
+            recovery_secret_hash=row.recovery_secret_hash,
         )
 
 
@@ -359,6 +470,9 @@ class SqlAlchemyProfileRepository:
 class SqlAlchemyExerciseRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def is_id_taken(self, exercise_id: UUID) -> bool:
+        return await self._session.get(ExerciseRow, exercise_id) is not None
 
     async def list(self, user_id: UUID) -> Sequence[Exercise]:
         rows = (
@@ -459,6 +573,9 @@ class SqlAlchemyExerciseRepository:
 class SqlAlchemyWorkoutRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def is_id_taken(self, workout_id: UUID) -> bool:
+        return await self._session.get(WorkoutRow, workout_id) is not None
 
     async def list(self, user_id: UUID) -> Sequence[Workout]:
         statement = (
@@ -564,37 +681,82 @@ class SqlAlchemyIdempotencyRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get(self, scope: str, key: str) -> tuple[str, int, dict[str, object]] | None:
-        statement = select(IdempotencyRecordRow).where(
-            IdempotencyRecordRow.scope == scope,
-            IdempotencyRecordRow.key == key,
-        )
-        row = (await self._session.execute(statement)).scalar_one_or_none()
-        if row is None:
-            return None
-        return row.request_hash, row.response_status, row.response_body
-
-    async def add(
+    async def reserve(
         self,
         *,
         scope: str,
         key: str,
         request_hash: str,
-        response_status: int,
-        response_body: dict[str, object],
-        created_at: datetime,
+        now: datetime,
         expires_at: datetime,
-    ) -> None:
-        self._session.add(
-            IdempotencyRecordRow(
+        lease_expires_at: datetime,
+    ) -> tuple[str, str, int | None, dict[str, object] | None]:
+        statement = (
+            select(IdempotencyRecordRow)
+            .where(IdempotencyRecordRow.scope == scope, IdempotencyRecordRow.key == key)
+            .with_for_update()
+        )
+        row = (await self._session.execute(statement)).scalar_one_or_none()
+
+        def aware(value: datetime) -> datetime:
+            return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+        if row is not None and aware(row.expires_at) <= now:
+            await self._session.delete(row)
+            await self._session.flush()
+            row = None
+        if row is None:
+            candidate = IdempotencyRecordRow(
                 id=uuid4(),
                 scope=scope,
                 key=key,
                 request_hash=request_hash,
-                response_status=response_status,
-                response_body=response_body,
-                created_at=created_at,
+                state="IN_PROGRESS",
+                response_status=None,
+                response_body=None,
+                created_at=now,
+                updated_at=now,
                 expires_at=expires_at,
+                lease_expires_at=lease_expires_at,
             )
-        )
+            try:
+                async with self._session.begin_nested():
+                    self._session.add(candidate)
+                    await self._session.flush()
+                return "RESERVED", request_hash, None, None
+            except IntegrityError:
+                row = (await self._session.execute(statement)).scalar_one()
+        if row.state == "IN_PROGRESS" and aware(row.lease_expires_at) <= now:
+            row.state = "FAILED"
+            row.updated_at = now
+            await self._session.flush()
+        return row.state, row.request_hash, row.response_status, row.response_body
+
+    async def complete(
+        self, scope: str, key: str, status: int, body: dict[str, object], now: datetime
+    ) -> None:
+        row = (
+            await self._session.execute(
+                select(IdempotencyRecordRow)
+                .where(IdempotencyRecordRow.scope == scope, IdempotencyRecordRow.key == key)
+                .with_for_update()
+            )
+        ).scalar_one()
+        row.state = "COMPLETED"
+        row.response_status = status
+        row.response_body = body
+        row.updated_at = now
         await self._session.flush()
+
+    async def fail(self, scope: str, key: str, now: datetime) -> None:
+        row = (
+            await self._session.execute(
+                select(IdempotencyRecordRow)
+                .where(IdempotencyRecordRow.scope == scope, IdempotencyRecordRow.key == key)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            row.state = "FAILED"
+            row.updated_at = now
+            await self._session.flush()

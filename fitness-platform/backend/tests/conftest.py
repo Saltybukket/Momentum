@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -37,8 +38,11 @@ async def create_guest(
 ) -> tuple[str, dict[str, object]]:
     response = await client.post(
         "/api/v1/guest-sessions",
-        headers={"Idempotency-Key": key},
-        json={"display_name": "Test Guest"},
+        json={
+            "display_name": "Test Guest",
+            "installation_id": str(uuid5(NAMESPACE_URL, f"test-installation:{key}")),
+            "recovery_secret": f"test-recovery-secret-{key}-0000000000000000",
+        },
     )
     assert response.status_code == 201, response.text
     body = response.json()

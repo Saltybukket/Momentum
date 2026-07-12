@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from fitness_platform.catalog_import import CatalogImportError, import_catalog
-from fitness_platform.infrastructure.orm import CatalogExerciseRow
+from fitness_platform.infrastructure.orm import CatalogExerciseRow, EquipmentRow
 
 
 def demo_document() -> dict[str, object]:
@@ -50,6 +50,11 @@ async def test_import_is_idempotent_and_reports_changed_updates(app_client, tmp_
     changed = await import_catalog(container, write_document(tmp_path, document))
     assert changed["updated"] == 1
     assert changed["licenses"] == ["CC0-1.0"]
+    document["equipment"][0]["name"] = "Nothing required"  # type: ignore[index]
+    await import_catalog(container, write_document(tmp_path, document))
+    async with container.database.session_factory() as session:
+        equipment = (await session.execute(select(EquipmentRow))).scalar_one()
+    assert equipment.name == "Nothing required"
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,8 @@
 {
+  "schema_version": "1",
+  "catalog_version": "2026.07.12-demo.1",
+  "content_hash": "sha256:momentum-self-authored-demo-v1",
+  "published_at": "2026-07-12T00:00:00Z",
   "batch_id": "momentum-self-authored-demo-v1",
   "muscles": [
     {"slug": "quadriceps", "name": "Quadriceps"},
@@ -13,6 +17,7 @@
   ],
   "exercises": [
     {
+      "id": "85e855ce-5a45-5af2-bf23-500030d34e11",
       "source": "momentum-self-authored-demo", "external_id": "bodyweight-squat", "version": "1",
       "name": "Bodyweight Squat", "description": "A technical demo movement record for testing catalog behavior.",
       "tracking_type": "REPS", "muscles": [{"slug": "quadriceps", "role": "PRIMARY"}, {"slug": "glutes", "role": "SECONDARY"}],
@@ -21,6 +26,7 @@
       "license_name": "CC0-1.0", "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
     },
     {
+      "id": "766f74ee-877f-5d6c-af72-783a8c79bb04",
       "source": "momentum-self-authored-demo", "external_id": "incline-push-up", "version": "1",
       "name": "Incline Push-up", "description": "A self-authored technical demo entry without medical or coaching claims.",
       "tracking_type": "REPS", "muscles": [{"slug": "chest", "role": "PRIMARY"}, {"slug": "triceps", "role": "SECONDARY"}],
@@ -29,6 +35,7 @@
       "license_name": "CC0-1.0", "license_url": "https://creativecommons.org/publicdomain/zero/1.0/"
     },
     {
+      "id": "396dc274-797d-5473-b3e3-2d3879701fde",
       "source": "momentum-self-authored-demo", "external_id": "front-plank", "version": "1",
       "name": "Front Plank", "description": "A self-authored technical demo entry for duration tracking.",
       "tracking_type": "DURATION", "muscles": [{"slug": "core", "role": "PRIMARY"}],

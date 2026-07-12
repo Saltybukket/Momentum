@@ -1,3 +1,6 @@
+import hashlib
+import json
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -12,6 +15,7 @@ from fitness_platform.presentation.dependencies import ContainerDep, CurrentUser
 from fitness_platform.presentation.schemas import (
     CatalogExerciseResponse,
     CatalogFacetResponse,
+    CatalogSnapshotResponse,
     ExerciseChange,
     ExercisePage,
     ExerciseResponse,
@@ -41,11 +45,44 @@ async def list_catalog_exercises(
     container: ContainerDep,
     muscle: str | None = None,
     equipment: str | None = None,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[CatalogExerciseResponse]:
     return [
         CatalogExerciseResponse.from_domain(item)
-        for item in await container.catalog.list(muscle, equipment)
+        for item in await container.catalog.list(muscle, equipment, q, limit, offset)
     ]
+
+
+@router.get("/api/v1/catalog/snapshot", response_model=CatalogSnapshotResponse, tags=["catalog"])
+async def get_catalog_snapshot(request: Request, container: ContainerDep) -> Response:
+    exercises = list(await container.catalog.list(None, None, None, 100, 0))
+    muscles = [
+        CatalogFacetResponse(slug=slug, name=name)
+        for slug, name in await container.catalog.muscles()
+    ]
+    equipment = [
+        CatalogFacetResponse(slug=slug, name=name)
+        for slug, name in await container.catalog.equipment()
+    ]
+    exercise_payload = [CatalogExerciseResponse.from_domain(item) for item in exercises]
+    hash_payload = {
+        "schema_version": "1",
+        "catalog_version": max((item.version for item in exercises), default="empty"),
+        "muscles": [item.model_dump(mode="json") for item in muscles],
+        "equipment": [item.model_dump(mode="json") for item in equipment],
+        "exercises": [item.model_dump(mode="json") for item in exercise_payload],
+    }
+    content_hash = hashlib.sha256(json.dumps(hash_payload, sort_keys=True).encode()).hexdigest()
+    etag = f'"{content_hash}"'
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+    published_at = max((item.updated_at for item in exercises), default=datetime.now(UTC))
+    body = CatalogSnapshotResponse(
+        **hash_payload, content_hash=f"sha256:{content_hash}", published_at=published_at
+    )
+    return JSONResponse(content=body.model_dump(mode="json"), headers={"ETag": etag})
 
 
 @router.get(
@@ -113,32 +150,24 @@ async def create_guest_session(
     request: Request,
     payload: GuestSessionCreate,
     container: ContainerDep,
-    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> Response:
     await container.rate_limiter.check(
         f"guest-session:{request.client.host if request.client else 'unknown'}",
         container.settings.rate_limit_guest_sessions_per_minute,
     )
 
-    async def operation() -> tuple[int, dict[str, object]]:
-        profile, token = await container.guests.create_guest(payload.display_name)
-        response = GuestSessionResponse(
-            guest_token=token,
-            profile=ProfileResponse.from_domain(profile),
-            expires_in_seconds=container.settings.guest_token_ttl_hours * 3600,
-        )
-        return status.HTTP_201_CREATED, response.model_dump(mode="json")
-
-    response_status, body, replayed = await container.idempotency.execute(
-        scope="create-guest-session",
-        key=idempotency_key,
-        request_hash=_hash_model(payload),
-        operation=operation,
+    profile, token, recovered = await container.guests.create_guest(
+        payload.display_name, payload.installation_id, payload.recovery_secret
+    )
+    response = GuestSessionResponse(
+        guest_token=token,
+        profile=ProfileResponse.from_domain(profile),
+        expires_in_seconds=container.settings.guest_token_ttl_hours * 3600,
+        recovered=recovered,
     )
     return JSONResponse(
-        status_code=response_status,
-        content=body,
-        headers={"Idempotency-Replayed": str(replayed).lower()},
+        status_code=status.HTTP_200_OK if recovered else status.HTTP_201_CREATED,
+        content=response.model_dump(mode="json"),
     )
 
 

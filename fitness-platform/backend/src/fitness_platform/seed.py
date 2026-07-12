@@ -1,5 +1,5 @@
 import asyncio
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fitness_platform.container import AppContainer
 from fitness_platform.core.config import get_settings
@@ -21,7 +21,11 @@ DEMO_EXERCISES = [
 
 async def seed() -> None:
     container = AppContainer.build(get_settings())
-    profile, _token = await container.guests.create_guest("Demo Guest")
+    profile, _token, _recovered = await container.guests.create_guest(
+        "Demo Guest",
+        uuid5(NAMESPACE_URL, "momentum-demo-installation"),
+        "momentum-demo-recovery-secret-000000000000",
+    )
     exercise_ids: list[UUID] = []
     for name, muscle, equipment, tracking_type in DEMO_EXERCISES:
         exercise = await container.exercises.create(

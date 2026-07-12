@@ -1,10 +1,16 @@
+import hmac
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, replace
 from datetime import timedelta
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fitness_platform.core.clock import Clock
-from fitness_platform.core.errors import ConflictError, NotFoundError, ValidationAppError
+from fitness_platform.core.errors import (
+    ConflictError,
+    NotFoundError,
+    UnauthorizedError,
+    ValidationAppError,
+)
 from fitness_platform.core.ids import UuidProvider
 from fitness_platform.core.security import create_opaque_token, hash_token
 from fitness_platform.domain.enums import (
@@ -53,11 +59,37 @@ class GuestService:
         self._token_pepper = token_pepper
         self._token_ttl_hours = token_ttl_hours
 
-    async def create_guest(self, display_name: str) -> tuple[Profile, str]:
+    async def create_guest(
+        self, display_name: str, installation_id: UUID, recovery_secret: str
+    ) -> tuple[Profile, str, bool]:
         normalized_name = display_name.strip()
         if not normalized_name:
             raise ValidationAppError("Display name must not be empty.")
+        if len(recovery_secret) < 32:
+            raise ValidationAppError("Recovery secret must contain at least 32 characters.")
         now = self._clock.now()
+        recovery_hash = hash_token(recovery_secret, self._token_pepper)
+        async with self._uow_factory() as uow:
+            existing_session = await uow.guest_sessions.find_by_installation(installation_id)
+            if existing_session is not None:
+                if not existing_session.recovery_secret_hash or not hmac.compare_digest(
+                    existing_session.recovery_secret_hash, recovery_hash
+                ):
+                    raise UnauthorizedError("Guest recovery proof is invalid.")
+                profile = await uow.profiles.get(existing_session.user_id)
+                if profile is None:
+                    raise UnauthorizedError("Guest recovery is unavailable.")
+                token = create_opaque_token()
+                await uow.guest_sessions.update_credentials(
+                    replace(
+                        existing_session,
+                        token_hash=hash_token(token, self._token_pepper),
+                        expires_at=now + timedelta(hours=self._token_ttl_hours),
+                        revoked_at=None,
+                    )
+                )
+                await uow.commit()
+                return profile, token, True
         user_id = self._ids.new()
         token = create_opaque_token()
         session = GuestSession(
@@ -66,6 +98,8 @@ class GuestService:
             token_hash=hash_token(token, self._token_pepper),
             expires_at=now + timedelta(hours=self._token_ttl_hours),
             created_at=now,
+            installation_id=installation_id,
+            recovery_secret_hash=recovery_hash,
         )
         profile = Profile(
             user_id=user_id,
@@ -91,7 +125,7 @@ class GuestService:
             )
             await uow.commit()
         await self._events.dispatch(event)
-        return profile, token
+        return profile, token, False
 
 
 class ProfileService:
@@ -191,6 +225,8 @@ class ExerciseService:
         )
         event = ExerciseCreated(exercise_id=exercise.id, user_id=user_id)
         async with self._uow_factory() as uow:
+            if await uow.exercises.is_id_taken(exercise.id):
+                raise ConflictError("Exercise identifier is unavailable.")
             existing = await uow.exercises.get(user_id, exercise.id)
             if existing is not None:
                 raise ConflictError("Exercise already exists.")
@@ -317,6 +353,8 @@ class WorkoutService:
         )
         event = WorkoutCreated(workout_id=new_id, user_id=user_id)
         async with self._uow_factory() as uow:
+            if await uow.workouts.is_id_taken(new_id):
+                raise ConflictError("Workout identifier is unavailable.")
             existing = await uow.workouts.get(user_id, new_id)
             if existing is not None:
                 raise ConflictError("Workout already exists.")
@@ -447,9 +485,16 @@ class CatalogService:
     def __init__(self, *, uow_factory: UowFactory) -> None:
         self._uow_factory = uow_factory
 
-    async def list(self, muscle: str | None, equipment: str | None) -> Sequence[CatalogExercise]:
+    async def list(
+        self,
+        muscle: str | None,
+        equipment: str | None,
+        query: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Sequence[CatalogExercise]:
         async with self._uow_factory() as uow:
-            return await uow.catalog.list(muscle, equipment)
+            return await uow.catalog.list(muscle, equipment, query, limit, offset)
 
     async def get(self, exercise_id: UUID) -> CatalogExercise:
         async with self._uow_factory() as uow:

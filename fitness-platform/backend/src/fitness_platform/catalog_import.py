@@ -38,8 +38,18 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
     exercises = document.get("exercises")
     if not isinstance(exercises, list):
         raise CatalogImportError("exercises must be a list.")
-    muscle_slugs = {str(item["slug"]) for item in document.get("muscles", [])}
-    equipment_slugs = {str(item["slug"]) for item in document.get("equipment", [])}
+    raw_muscles = document.get("muscles", [])
+    raw_equipment = document.get("equipment", [])
+    if not isinstance(raw_muscles, list) or not isinstance(raw_equipment, list):
+        raise CatalogImportError("muscles and equipment must be lists.")
+    muscles_catalog = [(str(item["slug"]), str(item["name"])) for item in raw_muscles]
+    equipment_catalog = [(str(item["slug"]), str(item["name"])) for item in raw_equipment]
+    if len({slug for slug, _ in muscles_catalog}) != len(muscles_catalog):
+        raise CatalogImportError("Duplicate muscle slug in batch.")
+    if len({slug for slug, _ in equipment_catalog}) != len(equipment_catalog):
+        raise CatalogImportError("Duplicate equipment slug in batch.")
+    muscle_slugs = {slug for slug, _ in muscles_catalog}
+    equipment_slugs = {slug for slug, _ in equipment_catalog}
     seen: set[tuple[str, str]] = set()
     parsed: list[CatalogExercise] = []
     for raw in exercises:
@@ -116,6 +126,8 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
         )
 
     async with SqlAlchemyUnitOfWork(container.database.session_factory) as uow:
+        await uow.catalog.upsert_muscles(muscles_catalog)
+        await uow.catalog.upsert_equipment(equipment_catalog)
         for exercise in parsed:
             existing = await uow.catalog.find(exercise.source, exercise.external_id)
             if existing is None:

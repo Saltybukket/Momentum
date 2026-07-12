@@ -79,3 +79,29 @@ async def test_public_api_hides_draft_deprecated_and_unreviewed_entries(app_clie
     )
     assert (await client.get("/api/v1/catalog/exercises")).json() == []
     assert (await client.get(f"/api/v1/catalog/exercises/{hidden.id}")).status_code == 404
+
+
+async def test_catalog_search_pagination_snapshot_and_etag(app_client) -> None:
+    client, container = app_client
+    await persist_catalog_exercise(container, catalog_exercise("zeta-row", muscle="back"))
+    alpha = catalog_exercise("alpha-squat", muscle="legs")
+    alpha.name = "Alpha Squat"
+    await persist_catalog_exercise(container, alpha)
+
+    search = await client.get("/api/v1/catalog/exercises?q=alpha&limit=1&offset=0")
+    assert search.status_code == 200
+    assert [item["name"] for item in search.json()] == ["Alpha Squat"]
+    page = await client.get("/api/v1/catalog/exercises?limit=1&offset=1")
+    assert len(page.json()) == 1
+
+    snapshot = await client.get("/api/v1/catalog/snapshot")
+    assert snapshot.status_code == 200
+    assert snapshot.json()["schema_version"] == "1"
+    assert snapshot.json()["content_hash"].startswith("sha256:")
+    assert [item["name"] for item in snapshot.json()["exercises"]] == sorted(
+        item["name"] for item in snapshot.json()["exercises"]
+    )
+    unchanged = await client.get(
+        "/api/v1/catalog/snapshot", headers={"If-None-Match": snapshot.headers["ETag"]}
+    )
+    assert unchanged.status_code == 304

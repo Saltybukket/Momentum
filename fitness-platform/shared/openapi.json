@@ -124,6 +124,60 @@
         "title": "CatalogMuscleResponse",
         "type": "object"
       },
+      "CatalogSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_version": {
+            "title": "Catalog Version",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "equipment": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogFacetResponse"
+            },
+            "title": "Equipment",
+            "type": "array"
+          },
+          "exercises": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogExerciseResponse"
+            },
+            "title": "Exercises",
+            "type": "array"
+          },
+          "muscles": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogFacetResponse"
+            },
+            "title": "Muscles",
+            "type": "array"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "catalog_version",
+          "content_hash",
+          "published_at",
+          "muscles",
+          "equipment",
+          "exercises"
+        ],
+        "title": "CatalogSnapshotResponse",
+        "type": "object"
+      },
       "ExerciseChange": {
         "additionalProperties": false,
         "properties": {
@@ -328,8 +382,23 @@
             "maxLength": 80,
             "title": "Display Name",
             "type": "string"
+          },
+          "installation_id": {
+            "format": "uuid",
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "recovery_secret": {
+            "maxLength": 256,
+            "minLength": 32,
+            "title": "Recovery Secret",
+            "type": "string"
           }
         },
+        "required": [
+          "installation_id",
+          "recovery_secret"
+        ],
         "title": "GuestSessionCreate",
         "type": "object"
       },
@@ -351,6 +420,11 @@
           },
           "profile": {
             "$ref": "#/components/schemas/ProfileResponse"
+          },
+          "recovered": {
+            "default": false,
+            "title": "Recovered",
+            "type": "boolean"
           },
           "token_type": {
             "default": "Bearer",
@@ -1022,6 +1096,46 @@
               ],
               "title": "Equipment"
             }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -1119,6 +1233,27 @@
           }
         },
         "summary": "List Catalog Muscles",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/v1/catalog/snapshot": {
+      "get": {
+        "operationId": "get_catalog_snapshot_api_v1_catalog_snapshot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Catalog Snapshot",
         "tags": [
           "catalog"
         ]
@@ -1347,24 +1482,6 @@
     "/api/v1/guest-sessions": {
       "post": {
         "operationId": "create_guest_session_api_v1_guest_sessions_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Idempotency-Key"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
