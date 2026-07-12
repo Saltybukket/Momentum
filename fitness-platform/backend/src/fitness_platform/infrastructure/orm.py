@@ -269,6 +269,7 @@ class OutboxEventRow(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="PENDING", index=True)
     claim_owner: Mapped[str | None] = mapped_column(String(120), index=True)
+    claim_token: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)

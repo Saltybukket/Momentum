@@ -82,6 +82,6 @@ class AppContainer:
                 uow_factory=uow_factory, clock=clock, ids=ids, workouts=workout_service
             ),
             idempotency=IdempotencyService(uow_factory, clock, events),
-            outbox_processor=OutboxProcessor(uow_factory, clock, events),
+            outbox_processor=OutboxProcessor(uow_factory, clock, ids, events),
         )
         return container

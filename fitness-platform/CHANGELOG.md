@@ -9,6 +9,11 @@
 - Bounded request IDs and standardized redacted unexpected-error responses.
 - Advanced the Alembic head to `e15b7c9d420f`.
 
+## Unreleased - Gate D.1/E Android security
+
+- Hardened outbox ownership with unique claim tokens, just-in-time claims, async lease heartbeats and explicit lost-claim reporting.
+- Advanced the Alembic head to `f26c8d0e531a`.
+
 ## Unreleased
 
 - Added persisted private-exercise conflict records with local and remote snapshots, explicit

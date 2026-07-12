@@ -786,7 +786,13 @@ class SqlAlchemyOutboxRepository:
         return True
 
     async def claim_due(
-        self, *, worker_id: str, now: datetime, lease_expires_at: datetime, limit: int
+        self,
+        *,
+        worker_id: str,
+        claim_token: UUID,
+        now: datetime,
+        lease_expires_at: datetime,
+        limit: int,
     ) -> Sequence[OutboxRecord]:
         due = (
             (OutboxEventRow.status.in_(["PENDING", "FAILED"]))
@@ -806,29 +812,71 @@ class SqlAlchemyOutboxRepository:
         for row in rows:
             row.status = "PROCESSING"
             row.claim_owner = worker_id
+            row.claim_token = claim_token
             row.lease_expires_at = lease_expires_at
         await self._session.flush()
         return [self._to_record(row) for row in rows]
 
-    async def mark_processed(self, event_id: UUID, worker_id: str, now: datetime) -> bool:
+    async def extend_lease(
+        self,
+        event_id: UUID,
+        worker_id: str,
+        claim_token: UUID,
+        lease_expires_at: datetime,
+    ) -> bool:
+        result = await self._session.execute(
+            update(OutboxEventRow)
+            .where(
+                OutboxEventRow.event_id == event_id,
+                OutboxEventRow.status == "PROCESSING",
+                OutboxEventRow.claim_owner == worker_id,
+                OutboxEventRow.claim_token == claim_token,
+            )
+            .values(lease_expires_at=lease_expires_at)
+            .returning(OutboxEventRow.event_id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def mark_processed(
+        self, event_id: UUID, worker_id: str, claim_token: UUID, now: datetime
+    ) -> bool:
         row = await self._session.get(OutboxEventRow, event_id)
-        if row is None or row.status != "PROCESSING" or row.claim_owner != worker_id:
+        if (
+            row is None
+            or row.status != "PROCESSING"
+            or row.claim_owner != worker_id
+            or row.claim_token != claim_token
+        ):
             return False
         row.status = "PROCESSED"
         row.processed_at = now
         row.claim_owner = None
+        row.claim_token = None
         row.lease_expires_at = None
         row.last_error = None
         await self._session.flush()
         return True
 
-    async def mark_failed(self, event_id: UUID, worker_id: str, now: datetime, error: str) -> str:
+    async def mark_failed(
+        self,
+        event_id: UUID,
+        worker_id: str,
+        claim_token: UUID,
+        now: datetime,
+        error: str,
+    ) -> str:
         row = await self._session.get(OutboxEventRow, event_id)
-        if row is None or row.status != "PROCESSING" or row.claim_owner != worker_id:
+        if (
+            row is None
+            or row.status != "PROCESSING"
+            or row.claim_owner != worker_id
+            or row.claim_token != claim_token
+        ):
             return "LOST_CLAIM"
         row.attempts += 1
         row.last_error = error[:1000]
         row.claim_owner = None
+        row.claim_token = None
         row.lease_expires_at = None
         if row.attempts >= row.max_attempts:
             row.status = "DEAD_LETTER"
@@ -852,6 +900,7 @@ class SqlAlchemyOutboxRepository:
             last_error=row.last_error,
             status=row.status,
             claim_owner=row.claim_owner,
+            claim_token=row.claim_token,
             lease_expires_at=row.lease_expires_at,
             next_attempt_at=row.next_attempt_at,
             max_attempts=row.max_attempts,

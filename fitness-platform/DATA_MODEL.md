@@ -33,7 +33,7 @@ Minimal workout lifecycle and ordered links to exercises. Future sets/results be
 
 ### `outbox_events`
 
-Durable backend event records with unique event IDs, type, aggregate ID and JSON payload. Delivery state is `PENDING`, `PROCESSING`, `FAILED`, `PROCESSED` or `DEAD_LETTER`; `claim_owner`, `lease_expires_at`, `next_attempt_at`, `attempts`, `max_attempts`, `processed_at` and bounded `last_error` support competing workers and crash recovery. Alembic head `e15b7c9d420f` adds this state machine.
+Durable backend event records with unique event IDs, type, aggregate ID and JSON payload. Delivery state is `PENDING`, `PROCESSING`, `FAILED`, `PROCESSED` or `DEAD_LETTER`; `claim_owner`, unique `claim_token`, `lease_expires_at`, `next_attempt_at`, `attempts`, `max_attempts`, `processed_at` and bounded `last_error` support competing workers and crash recovery. Alembic head `f26c8d0e531a` adds token-bound lease ownership.
 
 ### `idempotency_records`
 
@@ -153,4 +153,4 @@ The following are intentionally not added as generic placeholder tables: nutriti
 
 ## Exercise catalog
 
-The catalog foundation originated in `c1a4e6d91b0f`; the current Alembic head is `e15b7c9d420f`. `(source, external_id)` is unique; controlled status/role values are constrained and lookup/publication paths indexed. Android Room schema 4 mirrors the normalized catalog and remains disjoint from owner-bound `custom_exercises`. Schemas 1–4 are exported under `android/core/database/schemas/`.
+The catalog foundation originated in `c1a4e6d91b0f`; the current Alembic head is `f26c8d0e531a`. `(source, external_id)` is unique; controlled status/role values are constrained and lookup/publication paths indexed. Android Room schema 4 mirrors the normalized catalog and remains disjoint from owner-bound `custom_exercises`. Schemas 1–4 are exported under `android/core/database/schemas/`.

@@ -101,13 +101,34 @@ class OutboxRepository(Protocol):
     ) -> bool: ...
 
     async def claim_due(
-        self, *, worker_id: str, now: datetime, lease_expires_at: datetime, limit: int
+        self,
+        *,
+        worker_id: str,
+        claim_token: UUID,
+        now: datetime,
+        lease_expires_at: datetime,
+        limit: int,
     ) -> Sequence[OutboxRecord]: ...
 
-    async def mark_processed(self, event_id: UUID, worker_id: str, now: datetime) -> bool: ...
+    async def extend_lease(
+        self,
+        event_id: UUID,
+        worker_id: str,
+        claim_token: UUID,
+        lease_expires_at: datetime,
+    ) -> bool: ...
+
+    async def mark_processed(
+        self, event_id: UUID, worker_id: str, claim_token: UUID, now: datetime
+    ) -> bool: ...
 
     async def mark_failed(
-        self, event_id: UUID, worker_id: str, now: datetime, error: str
+        self,
+        event_id: UUID,
+        worker_id: str,
+        claim_token: UUID,
+        now: datetime,
+        error: str,
     ) -> str: ...
 
 

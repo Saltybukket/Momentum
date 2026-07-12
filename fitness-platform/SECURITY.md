@@ -33,7 +33,7 @@ The Android client, local Room database, imported provider payloads and all requ
 - Safe error envelope without stack traces/SQL details.
 - Request IDs use a 64-character ASCII allowlist; invalid values are replaced rather than reflected or logged.
 - Unexpected errors return a generic envelope and log only bounded structured context/error type.
-- Durable outbox delivery uses leases, bounded retries and dead letters; handler failures cannot rewrite committed HTTP success.
+- Durable outbox delivery uses token-bound renewable leases, bounded retries and dead letters; stale workers cannot mutate a newer claim and handler failures cannot rewrite committed HTTP success.
 - Dependency/secret scans in CI.
 - Android release architecture expects R8/ProGuard and no embedded provider secrets.
 

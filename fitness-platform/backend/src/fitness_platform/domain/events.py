@@ -64,6 +64,8 @@ class EventDispatcher(Protocol):
 
     async def dispatch(self, event: DomainEvent) -> bool: ...
 
+    def has_handlers(self, event_type: type[DomainEvent]) -> bool: ...
+
 
 class InProcessEventDispatcher:
     """Typed in-process dispatcher with event-ID idempotency for one process lifetime."""
@@ -86,3 +88,6 @@ class InProcessEventDispatcher:
             await handler(event)
         self._processed.add(event.event_id)
         return True
+
+    def has_handlers(self, event_type: type[DomainEvent]) -> bool:
+        return bool(self._handlers[event_type])

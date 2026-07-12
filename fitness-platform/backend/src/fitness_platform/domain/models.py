@@ -132,6 +132,7 @@ class OutboxRecord:
     last_error: str | None = None
     status: str = "PENDING"
     claim_owner: str | None = None
+    claim_token: UUID | None = None
     lease_expires_at: datetime | None = None
     next_attempt_at: datetime | None = None
     max_attempts: int = 5
