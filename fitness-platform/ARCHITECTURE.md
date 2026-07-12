@@ -264,6 +264,8 @@ The modular monolith remains preferred until evidence justifies separation. A mo
 
 ## 11. Public catalog boundary
 
-The reviewed public exercise catalog is not an extension of private `custom_exercises`. Backend records require provenance, license, stable source/external IDs and normalized relations; only reviewed `PUBLISHED` records are exposed. Android mirrors the catalog in Room 3 and renders Room flows; a Retrofit refresh replaces it atomically. Private exercise changes continue through the owner-scoped outbox and can never enter catalog queries.
+The reviewed public exercise catalog is not an extension of private `custom_exercises`. Backend records require provenance, license, stable source/external IDs and normalized relations; only reviewed `PUBLISHED` records are exposed. Android mirrors the catalog in Room and renders Room flows; a Retrofit refresh replaces it atomically. Private exercise changes continue through the owner-scoped outbox and can never enter catalog queries.
 
-Guest data is local by default. `GuestSessionStore.syncEnabled` defaults to `false`; upload starts only after explicit opt-in. Catalog refresh contains no private payload.
+Guest data is local by default. `GuestSessionStore.syncEnabled` defaults to `false`; confirmed opt-in persists consent before scheduling unique private sync work, and opt-out persists first and cancels that work. The worker rechecks consent before authentication, push and every pull page. Catalog refresh contains no private payload and never changes consent.
+
+Room schema 5 owns the private-exercise pull cursor in singleton `sync_state`. A page and its next cursor commit in one transaction. Upgrade from schema 4 initializes cursor 0 because the former DataStore cursor could be ahead of committed Room data; that legacy key is removed only after a successful Room checkpoint. Guest bearer and recovery credentials use random-IV AES/GCM under a non-exportable Android Keystore key. Installation ID and consent remain non-secret preferences.

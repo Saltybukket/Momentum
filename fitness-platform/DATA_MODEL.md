@@ -11,6 +11,10 @@
 
 ## Current entities
 
+### Android `sync_state`
+
+Room schema 5 adds the singleton `sync_state(singletonId, exerciseCursor, updatedAtEpochMs)` row. A pulled page and its cursor commit in one transaction. Migration 4→5 deliberately initializes cursor 0 for an idempotent full replay and does not trust the legacy Preferences DataStore cursor.
+
 ### `users`
 
 Internal identity root. `kind` distinguishes `GUEST` from future registered accounts. A future identity table can attach Google/email providers without changing content ownership.

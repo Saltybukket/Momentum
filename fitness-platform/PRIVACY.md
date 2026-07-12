@@ -18,6 +18,8 @@ This is a technical privacy foundation, not legal advice. The scaffold currently
 
 ## Current data flow
 
+Private synchronization is disabled by default. Opt-in commits consent before enqueuing unique work; opt-out commits consent before cancelling it. A running HTTP request is cancellable only best-effort, so the worker also checks consent before authentication, push and every pull page and starts no new private request after observing opt-out. Public catalog seed and refresh require no guest credential, upload no private data and never change consent.
+
 ```mermaid
 flowchart LR
   User -->|profile, exercise, workout| Room[(Android Room)]
@@ -36,7 +38,7 @@ flowchart LR
 | Guest display name | Room, optional backend profile | private | local identity and sync ownership |
 | Custom exercises/notes | Room, optional backend | private | user-defined training content |
 | Workout title/status/notes | Room, optional backend | private | workout lifecycle |
-| Guest token | Android DataStore; hash in backend | secret/private | development authentication |
+| Guest token and recovery secret | Android Keystore-backed AES/GCM ciphertext; hashes/derived recovery state in backend | secret/private | development authentication and recovery |
 | Request/idempotency metadata | backend | internal | reliability/security |
 | Health/nutrition/body/social/purchase/AI data | not implemented | n/a | future separate consent |
 

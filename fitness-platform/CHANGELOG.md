@@ -13,6 +13,10 @@
 
 - Hardened outbox ownership with unique claim tokens, just-in-time claims, async lease heartbeats and explicit lost-claim reporting.
 - Advanced the Alembic head to `f26c8d0e531a`.
+- Added Room schema 5 with an atomic private-exercise pull cursor and safe full replay after schema-4 upgrades.
+- Protected guest bearer/recovery credentials with Android Keystore AES/GCM and repeatable plaintext migration.
+- Made private-sync consent enqueue or cancel unique work and added worker consent checks at private network boundaries.
+- Added recoverable Catalog seed/refresh/detail and Privacy consent states with visible strings in resources.
 
 ## Unreleased
 

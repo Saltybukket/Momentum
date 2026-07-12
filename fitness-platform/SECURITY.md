@@ -36,6 +36,8 @@ The Android client, local Room database, imported provider payloads and all requ
 - Durable outbox delivery uses token-bound renewable leases, bounded retries and dead letters; stale workers cannot mutate a newer claim and handler failures cannot rewrite committed HTTP success.
 - Dependency/secret scans in CI.
 - Android release architecture expects R8/ProGuard and no embedded provider secrets.
+- Android guest tokens and recovery secrets are random-IV AES/GCM ciphertext under a non-exportable Android Keystore key. Migration verifies encrypted reads before removing legacy plaintext preferences. Invalidated credentials are discarded, the non-secret installation identity rotates and local Room data remains intact.
+- Private-sync failures persisted in the outbox are bounded codes, never raw exception text that could contain credentials.
 
 ## Threat table
 
