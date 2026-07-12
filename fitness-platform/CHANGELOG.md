@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Gate R/D reliability hardening
+
+- Bound sync replay identity to contract version, entity, action and canonical typed payload; expired operation IDs are atomically reusable.
+- Made `CANCELLED` workouts terminal and unified CRUD/sync text-control validation.
+- Execute PostgreSQL regression tests in CI against a database separate from Alembic.
+- Made HTTP success depend only on durable commit and added a leased database-outbox processor with retry, backoff and dead letters.
+- Bounded request IDs and standardized redacted unexpected-error responses.
+- Advanced the Alembic head to `e15b7c9d420f`.
+
 ## Unreleased
 
 - Added persisted private-exercise conflict records with local and remote snapshots, explicit

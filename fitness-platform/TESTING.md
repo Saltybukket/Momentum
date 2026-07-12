@@ -32,6 +32,8 @@ Current suite covers:
 - `WorkoutCompleted` persisted exactly once;
 - sync push;
 - internal event dispatcher;
+- post-commit HTTP semantics and durable outbox claim/lease/retry/dead-letter behavior;
+- bounded request IDs and generic redacted `500` envelopes;
 - module dependency graph;
 - provider contracts and deterministic mocks;
 - Alembic migration on an empty database.

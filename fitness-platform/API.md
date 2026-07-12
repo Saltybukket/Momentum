@@ -18,7 +18,7 @@ Authorization: Bearer <development-guest-token>
 
 ## Request IDs
 
-Clients may send `X-Request-ID`. The server validates or creates one and returns it in the response. Logs use the request ID, but never bearer tokens or sensitive payloads.
+Clients may send `X-Request-ID` using the ASCII allowlist `[A-Za-z0-9._:-]` with at most 64 characters. Invalid or oversized values are replaced by a server UUID and are neither reflected nor logged. Every response, including unexpected `500`, returns the normalized request ID.
 
 ## Idempotency
 
@@ -44,6 +44,8 @@ The key is scoped to principal, method and path. A repeated request returns the 
 ```
 
 Expected codes include `VALIDATION_ERROR`, `NOT_FOUND`, `UNAUTHORIZED`, `CONFLICT`, `RATE_LIMITED`, `IDEMPOTENCY_CONFLICT` and `INTERNAL_ERROR`. Internal exception text and SQL details are not returned.
+
+Unexpected errors always use code `INTERNAL_ERROR`, message `An internal error occurred.`, an empty details list and the normalized request ID. Logs record the exception type and context without reflecting exception messages that may contain secrets.
 
 ## Pagination
 
