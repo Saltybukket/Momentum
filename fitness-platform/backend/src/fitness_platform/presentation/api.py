@@ -144,13 +144,23 @@ async def health(container: ContainerDep) -> HealthResponse:
     "/api/v1/guest-sessions",
     response_model=GuestSessionResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_200_OK: {
+            "model": GuestSessionResponse,
+            "description": "Existing installation recovered and its bearer token rotated.",
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": "Another create or recovery operation owns the installation lease.",
+        },
+    },
     tags=["identity"],
 )
 async def create_guest_session(
     request: Request,
+    response: Response,
     payload: GuestSessionCreate,
     container: ContainerDep,
-) -> Response:
+) -> GuestSessionResponse:
     await container.rate_limiter.check(
         f"guest-session:{request.client.host if request.client else 'unknown'}",
         container.settings.rate_limit_guest_sessions_per_minute,
@@ -159,15 +169,12 @@ async def create_guest_session(
     profile, token, recovered = await container.guests.create_guest(
         payload.display_name, payload.installation_id, payload.recovery_secret
     )
-    response = GuestSessionResponse(
+    response.status_code = status.HTTP_200_OK if recovered else status.HTTP_201_CREATED
+    return GuestSessionResponse(
         guest_token=token,
         profile=ProfileResponse.from_domain(profile),
         expires_in_seconds=container.settings.guest_token_ttl_hours * 3600,
         recovered=recovered,
-    )
-    return JSONResponse(
-        status_code=status.HTTP_200_OK if recovered else status.HTTP_201_CREATED,
-        content=response.model_dump(mode="json"),
     )
 
 

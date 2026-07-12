@@ -14,6 +14,8 @@ class UserRepository(Protocol):
 
 
 class GuestSessionRepository(Protocol):
+    async def try_lock_installation(self, installation_id: UUID) -> bool: ...
+
     async def add(self, session: GuestSession) -> None: ...
 
     async def find_active_by_token_hash(
@@ -22,7 +24,7 @@ class GuestSessionRepository(Protocol):
 
     async def find_by_installation(self, installation_id: UUID) -> GuestSession | None: ...
 
-    async def update_credentials(self, session: GuestSession) -> None: ...
+    async def update_credentials(self, session: GuestSession, expected_token_hash: str) -> bool: ...
 
 
 class ProfileRepository(Protocol):

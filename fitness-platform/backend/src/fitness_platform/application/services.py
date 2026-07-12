@@ -1,8 +1,11 @@
+import asyncio
 import hmac
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, replace
 from datetime import timedelta
 from uuid import NAMESPACE_URL, UUID, uuid5
+
+from sqlalchemy.exc import IntegrityError
 
 from fitness_platform.core.clock import Clock
 from fitness_platform.core.errors import (
@@ -58,6 +61,7 @@ class GuestService:
         self._events = event_dispatcher
         self._token_pepper = token_pepper
         self._token_ttl_hours = token_ttl_hours
+        self._installation_locks: dict[UUID, asyncio.Lock] = {}
 
     async def create_guest(
         self, display_name: str, installation_id: UUID, recovery_secret: str
@@ -67,63 +71,78 @@ class GuestService:
             raise ValidationAppError("Display name must not be empty.")
         if len(recovery_secret) < 32:
             raise ValidationAppError("Recovery secret must contain at least 32 characters.")
-        now = self._clock.now()
-        recovery_hash = hash_token(recovery_secret, self._token_pepper)
-        async with self._uow_factory() as uow:
-            existing_session = await uow.guest_sessions.find_by_installation(installation_id)
-            if existing_session is not None:
-                if not existing_session.recovery_secret_hash or not hmac.compare_digest(
-                    existing_session.recovery_secret_hash, recovery_hash
-                ):
-                    raise UnauthorizedError("Guest recovery proof is invalid.")
-                profile = await uow.profiles.get(existing_session.user_id)
-                if profile is None:
-                    raise UnauthorizedError("Guest recovery is unavailable.")
-                token = create_opaque_token()
-                await uow.guest_sessions.update_credentials(
-                    replace(
-                        existing_session,
-                        token_hash=hash_token(token, self._token_pepper),
-                        expires_at=now + timedelta(hours=self._token_ttl_hours),
-                        revoked_at=None,
+        process_lock = self._installation_locks.setdefault(installation_id, asyncio.Lock())
+        if process_lock.locked():
+            raise ConflictError("Guest creation or recovery is already in progress.")
+        await process_lock.acquire()
+        try:
+            now = self._clock.now()
+            recovery_hash = hash_token(recovery_secret, self._token_pepper)
+            async with self._uow_factory() as uow:
+                if not await uow.guest_sessions.try_lock_installation(installation_id):
+                    raise ConflictError("Guest creation or recovery is already in progress.")
+                existing_session = await uow.guest_sessions.find_by_installation(installation_id)
+                if existing_session is not None:
+                    if not existing_session.recovery_secret_hash or not hmac.compare_digest(
+                        existing_session.recovery_secret_hash, recovery_hash
+                    ):
+                        raise UnauthorizedError("Guest recovery proof is invalid.")
+                    profile = await uow.profiles.get(existing_session.user_id)
+                    if profile is None:
+                        raise UnauthorizedError("Guest recovery is unavailable.")
+                    token = create_opaque_token()
+                    updated = await uow.guest_sessions.update_credentials(
+                        replace(
+                            existing_session,
+                            token_hash=hash_token(token, self._token_pepper),
+                            expires_at=now + timedelta(hours=self._token_ttl_hours),
+                            revoked_at=None,
+                        ),
+                        expected_token_hash=existing_session.token_hash,
                     )
+                    if not updated:
+                        raise ConflictError("Guest recovery is already in progress.")
+                    await uow.commit()
+                    return profile, token, True
+                user_id = self._ids.new()
+                token = create_opaque_token()
+                session = GuestSession(
+                    id=self._ids.new(),
+                    user_id=user_id,
+                    token_hash=hash_token(token, self._token_pepper),
+                    expires_at=now + timedelta(hours=self._token_ttl_hours),
+                    created_at=now,
+                    installation_id=installation_id,
+                    recovery_secret_hash=recovery_hash,
+                )
+                profile = Profile(
+                    user_id=user_id,
+                    display_name=normalized_name,
+                    unit_system=UnitSystem.METRIC,
+                    onboarding_status=OnboardingStatus.NOT_STARTED,
+                    sync_status=SyncStatus.SYNCED,
+                    created_at=now,
+                    updated_at=now,
+                )
+                event = GuestProfileCreated(user_id=user_id)
+                await uow.users.create_guest(user_id, now)
+                await uow.guest_sessions.add(session)
+                await uow.profiles.upsert(profile)
+                await uow.outbox.add_event(
+                    event_id=event.event_id,
+                    aggregate_type="profile",
+                    aggregate_id=user_id,
+                    event_type=type(event).__name__,
+                    payload={"user_id": str(user_id)},
+                    occurred_at=event.occurred_at,
                 )
                 await uow.commit()
-                return profile, token, True
-        user_id = self._ids.new()
-        token = create_opaque_token()
-        session = GuestSession(
-            id=self._ids.new(),
-            user_id=user_id,
-            token_hash=hash_token(token, self._token_pepper),
-            expires_at=now + timedelta(hours=self._token_ttl_hours),
-            created_at=now,
-            installation_id=installation_id,
-            recovery_secret_hash=recovery_hash,
-        )
-        profile = Profile(
-            user_id=user_id,
-            display_name=normalized_name,
-            unit_system=UnitSystem.METRIC,
-            onboarding_status=OnboardingStatus.NOT_STARTED,
-            sync_status=SyncStatus.SYNCED,
-            created_at=now,
-            updated_at=now,
-        )
-        event = GuestProfileCreated(user_id=user_id)
-        async with self._uow_factory() as uow:
-            await uow.users.create_guest(user_id, now)
-            await uow.guest_sessions.add(session)
-            await uow.profiles.upsert(profile)
-            await uow.outbox.add_event(
-                event_id=event.event_id,
-                aggregate_type="profile",
-                aggregate_id=user_id,
-                event_type=type(event).__name__,
-                payload={"user_id": str(user_id)},
-                occurred_at=event.occurred_at,
-            )
-            await uow.commit()
+        except IntegrityError as exc:
+            raise ConflictError("Guest creation is already in progress.") from exc
+        finally:
+            process_lock.release()
+            if not process_lock.locked():
+                self._installation_locks.pop(installation_id, None)
         await self._events.dispatch(event)
         return profile, token, False
 

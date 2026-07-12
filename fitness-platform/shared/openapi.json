@@ -1493,6 +1493,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestSessionResponse"
+                }
+              }
+            },
+            "description": "Existing installation recovered and its bearer token rotated."
+          },
           "201": {
             "content": {
               "application/json": {
@@ -1502,6 +1512,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "description": "Another create or recovery operation owns the installation lease."
           },
           "422": {
             "content": {

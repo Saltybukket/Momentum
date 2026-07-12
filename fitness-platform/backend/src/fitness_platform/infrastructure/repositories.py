@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -367,6 +367,16 @@ class SqlAlchemyGuestSessionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def try_lock_installation(self, installation_id: UUID) -> bool:
+        bind = self._session.get_bind()
+        if bind.dialect.name != "postgresql":
+            return True
+        lock_key = installation_id.int & ((1 << 63) - 1)
+        acquired = await self._session.scalar(
+            text("SELECT pg_try_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key}
+        )
+        return bool(acquired)
+
     async def add(self, session: GuestSession) -> None:
         self._session.add(
             GuestSessionRow(
@@ -412,15 +422,22 @@ class SqlAlchemyGuestSessionRepository:
         ).scalar_one_or_none()
         return self._to_model(row) if row else None
 
-    async def update_credentials(self, session: GuestSession) -> None:
-        row = await self._session.get(GuestSessionRow, session.id)
-        if row is None:
-            raise RuntimeError("Guest session disappeared during credential rotation.")
-        row.token_hash = session.token_hash
-        row.expires_at = session.expires_at
-        row.revoked_at = session.revoked_at
-        row.recovery_secret_hash = session.recovery_secret_hash
-        await self._session.flush()
+    async def update_credentials(self, session: GuestSession, expected_token_hash: str) -> bool:
+        result = await self._session.execute(
+            update(GuestSessionRow)
+            .where(
+                GuestSessionRow.id == session.id,
+                GuestSessionRow.token_hash == expected_token_hash,
+            )
+            .values(
+                token_hash=session.token_hash,
+                expires_at=session.expires_at,
+                revoked_at=session.revoked_at,
+                recovery_secret_hash=session.recovery_secret_hash,
+            )
+            .returning(GuestSessionRow.id)
+        )
+        return result.scalar_one_or_none() is not None
 
     @staticmethod
     def _to_model(row: GuestSessionRow) -> GuestSession:
