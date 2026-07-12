@@ -29,15 +29,35 @@ jobs:
         run: uv sync --extra dev --frozen
       - name: Ruff, mypy and tests
         working-directory: fitness-platform/backend
+        env:
+          FITNESS_TEST_POSTGRES_URL: postgresql+asyncpg://fitness:fitness@localhost:5432/fitness_test
         run: |
           uv run ruff format --check . ../scripts
           uv run ruff check . ../scripts
           uv run mypy src
           uv run pytest
+      - name: Create isolated migration database
+        working-directory: fitness-platform/backend
+        run: |
+          uv run python - <<'PY'
+          import asyncio
+          import asyncpg
+
+          async def main():
+              connection = await asyncpg.connect(
+                  "postgresql://fitness:fitness@localhost:5432/postgres"
+              )
+              try:
+                  await connection.execute("CREATE DATABASE fitness_migrations")
+              finally:
+                  await connection.close()
+
+          asyncio.run(main())
+          PY
       - name: PostgreSQL migrations
         working-directory: fitness-platform/backend
         env:
-          FITNESS_DATABASE_URL: postgresql+asyncpg://fitness:fitness@localhost:5432/fitness_test
+          FITNESS_DATABASE_URL: postgresql+asyncpg://fitness:fitness@localhost:5432/fitness_migrations
           FITNESS_REDIS_URL: redis://localhost:6379/0
         run: |
           uv run alembic upgrade head
