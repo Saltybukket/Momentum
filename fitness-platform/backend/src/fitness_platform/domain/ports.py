@@ -120,6 +120,23 @@ class IdempotencyRepository(Protocol):
     async def delete_expired(self, now: datetime, limit: int) -> int: ...
 
 
+class ProcessedSyncOperationRepository(Protocol):
+    async def reserve(
+        self,
+        owner_user_id: UUID,
+        operation_id: UUID,
+        request_hash: str,
+        now: datetime,
+        expires_at: datetime,
+    ) -> tuple[bool, str, dict[str, object] | None]: ...
+
+    async def complete(
+        self, owner_user_id: UUID, operation_id: UUID, result: dict[str, object]
+    ) -> None: ...
+
+    async def delete_expired(self, now: datetime, limit: int) -> int: ...
+
+
 class UnitOfWork(Protocol, AbstractAsyncContextManager["UnitOfWork"]):
     users: UserRepository
     guest_sessions: GuestSessionRepository
@@ -129,6 +146,7 @@ class UnitOfWork(Protocol, AbstractAsyncContextManager["UnitOfWork"]):
     catalog: CatalogRepository
     outbox: OutboxRepository
     idempotency: IdempotencyRepository
+    processed_sync_operations: ProcessedSyncOperationRepository
 
     async def commit(self) -> None: ...
 

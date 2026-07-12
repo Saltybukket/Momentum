@@ -30,6 +30,7 @@ from fitness_platform.infrastructure.orm import (
     IdempotencyRecordRow,
     MuscleRow,
     OutboxEventRow,
+    ProcessedSyncOperationRow,
     ProfileRow,
     UserRow,
     WorkoutExerciseRow,
@@ -874,4 +875,77 @@ class SqlAlchemyIdempotencyRepository:
         await self._session.execute(
             delete(IdempotencyRecordRow).where(IdempotencyRecordRow.id.in_(ids))
         )
+        return len(ids)
+
+
+class SqlAlchemyProcessedSyncOperationRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def reserve(
+        self,
+        owner_user_id: UUID,
+        operation_id: UUID,
+        request_hash: str,
+        now: datetime,
+        expires_at: datetime,
+    ) -> tuple[bool, str, dict[str, object] | None]:
+        values = {
+            "owner_user_id": owner_user_id,
+            "operation_id": operation_id,
+            "request_hash": request_hash,
+            "result": None,
+            "created_at": now,
+            "expires_at": expires_at,
+        }
+        dialect = self._session.get_bind().dialect.name
+        insert = postgresql_insert if dialect == "postgresql" else sqlite_insert
+        inserted = await self._session.scalar(
+            insert(ProcessedSyncOperationRow)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=["owner_user_id", "operation_id"])
+            .returning(ProcessedSyncOperationRow.operation_id)
+        )
+        if inserted is not None:
+            return True, request_hash, None
+        row = (
+            await self._session.execute(
+                select(ProcessedSyncOperationRow)
+                .where(
+                    ProcessedSyncOperationRow.owner_user_id == owner_user_id,
+                    ProcessedSyncOperationRow.operation_id == operation_id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one()
+        return False, row.request_hash, row.result
+
+    async def complete(
+        self, owner_user_id: UUID, operation_id: UUID, result: dict[str, object]
+    ) -> None:
+        row = await self._session.get(ProcessedSyncOperationRow, (owner_user_id, operation_id))
+        if row is None:
+            raise RuntimeError("Processed sync operation reservation disappeared.")
+        row.result = result
+        await self._session.flush()
+
+    async def delete_expired(self, now: datetime, limit: int) -> int:
+        ids = (
+            await self._session.execute(
+                select(
+                    ProcessedSyncOperationRow.owner_user_id,
+                    ProcessedSyncOperationRow.operation_id,
+                )
+                .where(ProcessedSyncOperationRow.expires_at <= now)
+                .order_by(ProcessedSyncOperationRow.expires_at)
+                .limit(limit)
+            )
+        ).all()
+        for owner_user_id, operation_id in ids:
+            await self._session.execute(
+                delete(ProcessedSyncOperationRow).where(
+                    ProcessedSyncOperationRow.owner_user_id == owner_user_id,
+                    ProcessedSyncOperationRow.operation_id == operation_id,
+                )
+            )
         return len(ids)

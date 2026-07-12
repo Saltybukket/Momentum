@@ -8,6 +8,7 @@ from fitness_platform.infrastructure.repositories import (
     SqlAlchemyGuestSessionRepository,
     SqlAlchemyIdempotencyRepository,
     SqlAlchemyOutboxRepository,
+    SqlAlchemyProcessedSyncOperationRepository,
     SqlAlchemyProfileRepository,
     SqlAlchemyUserRepository,
     SqlAlchemyWorkoutRepository,
@@ -30,6 +31,7 @@ class SqlAlchemyUnitOfWork:
         self.workouts = SqlAlchemyWorkoutRepository(self._session)
         self.outbox = SqlAlchemyOutboxRepository(self._session)
         self.idempotency = SqlAlchemyIdempotencyRepository(self._session)
+        self.processed_sync_operations = SqlAlchemyProcessedSyncOperationRepository(self._session)
         return self
 
     async def __aexit__(

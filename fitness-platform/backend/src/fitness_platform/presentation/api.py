@@ -11,6 +11,16 @@ from fitness_platform.core.security import request_fingerprint
 from fitness_platform.domain.events import DomainEvent
 from fitness_platform.domain.models import Exercise
 from fitness_platform.domain.ports import UnitOfWork
+from fitness_platform.domain.sync import (
+    ExerciseDeletePayload,
+    ExerciseUpsertPayload,
+    SyncCommand,
+    SyncPayload,
+    WorkoutUpsertPayload,
+)
+from fitness_platform.domain.sync import (
+    ProfileSyncPayload as DomainProfileSyncPayload,
+)
 from fitness_platform.presentation.dependencies import ContainerDep, CurrentUserId
 from fitness_platform.presentation.schemas import (
     CatalogExercisePage,
@@ -18,14 +28,17 @@ from fitness_platform.presentation.schemas import (
     CatalogFacetResponse,
     CatalogSnapshotResponse,
     ExerciseChange,
+    ExerciseDeleteSyncPayload,
     ExercisePage,
     ExerciseResponse,
+    ExerciseUpsertSyncPayload,
     ExerciseWrite,
     GuestSessionCreate,
     GuestSessionResponse,
     HealthResponse,
     PageMeta,
     ProfileResponse,
+    ProfileSyncPayload,
     ProfileUpdate,
     SyncPullResponse,
     SyncPushRequest,
@@ -33,6 +46,7 @@ from fitness_platform.presentation.schemas import (
     SyncResult,
     WorkoutPage,
     WorkoutResponse,
+    WorkoutUpsertSyncPayload,
     WorkoutWrite,
 )
 
@@ -429,12 +443,39 @@ async def sync_push(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> Response:
     async def operation(uow: UnitOfWork | None) -> tuple[int, dict[str, object], None]:
-        raw_operations = [operation.model_dump(mode="json") for operation in payload.operations]
+        commands: list[SyncCommand] = []
+        for item in payload.operations:
+            raw = item.payload
+            domain_payload: SyncPayload
+            if isinstance(raw, ProfileSyncPayload):
+                domain_payload = DomainProfileSyncPayload(
+                    raw.display_name, raw.unit_system, raw.onboarding_status
+                )
+            elif isinstance(raw, ExerciseUpsertSyncPayload):
+                domain_payload = ExerciseUpsertPayload(
+                    raw.id,
+                    raw.name,
+                    raw.description,
+                    raw.primary_muscle_group,
+                    raw.equipment,
+                    raw.tracking_type,
+                    raw.notes,
+                    raw.base_revision,
+                )
+            elif isinstance(raw, ExerciseDeleteSyncPayload):
+                domain_payload = ExerciseDeletePayload(raw.id, raw.base_revision)
+            elif isinstance(raw, WorkoutUpsertSyncPayload):
+                domain_payload = WorkoutUpsertPayload(
+                    raw.id, raw.title, raw.notes, tuple(raw.exercise_ids)
+                )
+            else:  # pragma: no cover - closed Pydantic union
+                raise AssertionError("Unsupported validated sync payload")
+            commands.append(SyncCommand(item.operation_id, domain_payload))
         if uow is None:
-            raw_results = await container.sync.push(user_id=user_id, operations=raw_operations)
+            raw_results = await container.sync.push(user_id=user_id, operations=commands)
         else:
             raw_results = await container.sync.push_in_uow(
-                uow=uow, user_id=user_id, operations=raw_operations
+                uow=uow, user_id=user_id, operations=commands
             )
         response = SyncPushResponse(
             results=[SyncResult.model_validate(item) for item in raw_results]

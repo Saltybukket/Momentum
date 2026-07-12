@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -206,11 +206,105 @@ class SyncAction(StrEnum):
     DELETE = "DELETE"
 
 
-class SyncOperation(ApiModel):
+def _safe_text(value: str) -> str:
+    normalized = value.strip()
+    forbidden_bidi = {
+        "\u202a",
+        "\u202b",
+        "\u202c",
+        "\u202d",
+        "\u202e",
+        "\u2066",
+        "\u2067",
+        "\u2068",
+        "\u2069",
+    }
+    if any(
+        (ord(character) < 32 and character not in "\n\t") or character in forbidden_bidi
+        for character in normalized
+    ):
+        raise ValueError("control and bidirectional override characters are not allowed")
+    return normalized
+
+
+class ProfileSyncPayload(ApiModel):
+    display_name: str = Field(min_length=1, max_length=80)
+    unit_system: UnitSystem
+    onboarding_status: OnboardingStatus
+
+    _normalize = field_validator("display_name")(_safe_text)
+
+
+class ExerciseUpsertSyncPayload(ApiModel):
+    id: UUID
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(max_length=4000)
+    primary_muscle_group: str = Field(min_length=1, max_length=80)
+    equipment: str = Field(min_length=1, max_length=80)
+    tracking_type: TrackingType
+    notes: str = Field(max_length=4000)
+    base_revision: int | None = Field(ge=0)
+
+    _normalize = field_validator(
+        "name", "description", "primary_muscle_group", "equipment", "notes"
+    )(_safe_text)
+
+
+class ExerciseDeleteSyncPayload(ApiModel):
+    id: UUID
+    base_revision: int = Field(ge=1)
+
+
+class WorkoutUpsertSyncPayload(ApiModel):
+    id: UUID
+    title: str = Field(min_length=1, max_length=120)
+    notes: str = Field(max_length=4000)
+    exercise_ids: list[UUID] = Field(max_length=50)
+
+    _normalize = field_validator("title", "notes")(_safe_text)
+
+    @field_validator("exercise_ids")
+    @classmethod
+    def exercise_ids_are_unique(cls, value: list[UUID]) -> list[UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("exercise_ids must be unique")
+        return value
+
+
+class ProfileSyncOperation(ApiModel):
     operation_id: UUID
-    entity_type: SyncEntityType
-    action: SyncAction
-    payload: dict[str, Any]
+    entity_type: Literal[SyncEntityType.PROFILE]
+    action: Literal[SyncAction.UPSERT]
+    payload: ProfileSyncPayload
+
+
+class ExerciseUpsertSyncOperation(ApiModel):
+    operation_id: UUID
+    entity_type: Literal[SyncEntityType.EXERCISE]
+    action: Literal[SyncAction.UPSERT]
+    payload: ExerciseUpsertSyncPayload
+
+
+class ExerciseDeleteSyncOperation(ApiModel):
+    operation_id: UUID
+    entity_type: Literal[SyncEntityType.EXERCISE]
+    action: Literal[SyncAction.DELETE]
+    payload: ExerciseDeleteSyncPayload
+
+
+class WorkoutUpsertSyncOperation(ApiModel):
+    operation_id: UUID
+    entity_type: Literal[SyncEntityType.WORKOUT]
+    action: Literal[SyncAction.UPSERT]
+    payload: WorkoutUpsertSyncPayload
+
+
+SyncOperation = (
+    ProfileSyncOperation
+    | ExerciseUpsertSyncOperation
+    | ExerciseDeleteSyncOperation
+    | WorkoutUpsertSyncOperation
+)
 
 
 class SyncPushRequest(ApiModel):

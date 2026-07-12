@@ -1,5 +1,7 @@
 import asyncio
+import hashlib
 import hmac
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, replace
 from datetime import timedelta
@@ -41,6 +43,13 @@ from fitness_platform.domain.models import (
     WorkoutExercise,
 )
 from fitness_platform.domain.ports import UnitOfWork
+from fitness_platform.domain.sync import (
+    ExerciseDeletePayload,
+    ExerciseUpsertPayload,
+    ProfileSyncPayload,
+    SyncCommand,
+    WorkoutUpsertPayload,
+)
 
 UowFactory = Callable[[], UnitOfWork]
 
@@ -594,8 +603,18 @@ class SyncService:
         self._clock = clock
         self._ids = ids
 
+    async def cleanup_processed_operations(self, batch_limit: int = 500) -> int:
+        if not 1 <= batch_limit <= 10_000:
+            raise ValueError("batch_limit must be between 1 and 10000")
+        async with self._uow_factory() as uow:
+            deleted = await uow.processed_sync_operations.delete_expired(
+                self._clock.now(), batch_limit
+            )
+            await uow.commit()
+        return deleted
+
     async def push(
-        self, *, user_id: UUID, operations: list[dict[str, object]]
+        self, *, user_id: UUID, operations: list[SyncCommand]
     ) -> list[dict[str, object]]:
         async with self._uow_factory() as uow:
             results = await self.push_in_uow(uow=uow, user_id=user_id, operations=operations)
@@ -607,54 +626,70 @@ class SyncService:
         *,
         uow: UnitOfWork,
         user_id: UUID,
-        operations: list[dict[str, object]],
+        operations: list[SyncCommand],
     ) -> list[dict[str, object]]:
         results: list[dict[str, object]] = []
         now = self._clock.now()
         for operation in operations:
-            operation_id = UUID(str(operation["operation_id"]))
-            entity_type = str(operation["entity_type"])
-            action = str(operation["action"])
-            payload_value = operation.get("payload")
-            if not isinstance(payload_value, dict):
-                raise ValidationAppError("Sync operation payload must be an object.")
-            payload: dict[str, object] = {str(key): value for key, value in payload_value.items()}
-            if entity_type == "profile" and action == "UPSERT":
+            operation_id = operation.operation_id
+            payload = operation.payload
+            request_hash = hashlib.sha256(
+                json.dumps(asdict(payload), default=str, sort_keys=True).encode()
+            ).hexdigest()
+            reserved, existing_hash, replay = await uow.processed_sync_operations.reserve(
+                user_id,
+                operation_id,
+                request_hash,
+                now,
+                now + timedelta(days=7),
+            )
+            if existing_hash != request_hash:
+                raise ConflictError("Sync operation ID was reused with a different payload.")
+            if not reserved:
+                if replay is None:
+                    raise ConflictError("Sync operation is already in progress.")
+                results.append(replay)
+                continue
+            exercise: Exercise | None = None
+            if isinstance(payload, ProfileSyncPayload):
                 existing_profile = await uow.profiles.get(user_id)
                 created_at = existing_profile.created_at if existing_profile else now
                 profile = Profile(
                     user_id=user_id,
-                    display_name=str(payload.get("display_name", "Guest")).strip() or "Guest",
-                    unit_system=UnitSystem(str(payload.get("unit_system", UnitSystem.METRIC))),
-                    onboarding_status=OnboardingStatus(
-                        str(payload.get("onboarding_status", OnboardingStatus.NOT_STARTED))
-                    ),
+                    display_name=payload.display_name,
+                    unit_system=payload.unit_system,
+                    onboarding_status=payload.onboarding_status,
                     sync_status=SyncStatus.SYNCED,
                     created_at=created_at,
                     updated_at=now,
                 )
                 await uow.profiles.upsert(profile)
                 aggregate_id = user_id
-            elif entity_type == "exercise":
-                exercise_id = UUID(str(payload["id"]))
+            elif isinstance(payload, (ExerciseUpsertPayload, ExerciseDeletePayload)):
+                exercise_id = payload.id
                 aggregate_id = exercise_id
                 existing_exercise = await uow.exercises.get_including_deleted(user_id, exercise_id)
-                base_revision = payload.get("base_revision")
+                if existing_exercise is None and await uow.exercises.is_id_taken(exercise_id):
+                    raise ConflictError("Exercise identifier is unavailable.")
+                base_revision = payload.base_revision
                 if existing_exercise is not None and base_revision != existing_exercise.revision:
-                    results.append(
-                        {
-                            "operation_id": str(operation_id),
-                            "aggregate_id": str(exercise_id),
-                            "status": "CONFLICT",
-                            "server_updated_at": (
-                                existing_exercise.server_updated_at or existing_exercise.updated_at
-                            ).isoformat(),
-                            "revision": existing_exercise.revision,
-                            "remote_exercise": asdict(existing_exercise),
-                        }
+                    conflict_result = {
+                        "operation_id": str(operation_id),
+                        "aggregate_id": str(exercise_id),
+                        "status": "CONFLICT",
+                        "server_updated_at": (
+                            existing_exercise.server_updated_at or existing_exercise.updated_at
+                        ).isoformat(),
+                        "revision": existing_exercise.revision,
+                        "remote_exercise": asdict(existing_exercise),
+                    }
+                    serialized_conflict = json.loads(json.dumps(conflict_result, default=str))
+                    await uow.processed_sync_operations.complete(
+                        user_id, operation_id, serialized_conflict
                     )
+                    results.append(serialized_conflict)
                     continue
-                if action == "DELETE":
+                if isinstance(payload, ExerciseDeletePayload):
                     if existing_exercise is None:
                         raise ValidationAppError("Cannot delete a missing exercise.")
                     exercise = Exercise(
@@ -678,20 +713,16 @@ class SyncService:
                         }
                     )
                     exercise = await uow.exercises.upsert(exercise)
-                elif action == "UPSERT":
+                else:
                     exercise = Exercise(
                         id=exercise_id,
                         owner_user_id=user_id,
-                        name=ExerciseService._validate_name(str(payload.get("name", ""))),
-                        description=str(payload.get("description", "")),
-                        primary_muscle_group=str(
-                            payload.get("primary_muscle_group", "Unspecified")
-                        ),
-                        equipment=str(payload.get("equipment", "None")),
-                        tracking_type=TrackingType(
-                            str(payload.get("tracking_type", TrackingType.REPS_WEIGHT))
-                        ),
-                        notes=str(payload.get("notes", "")),
+                        name=ExerciseService._validate_name(payload.name),
+                        description=payload.description,
+                        primary_muscle_group=payload.primary_muscle_group,
+                        equipment=payload.equipment,
+                        tracking_type=payload.tracking_type,
+                        notes=payload.notes,
                         sync_status=SyncStatus.SYNCED,
                         created_at=existing_exercise.created_at if existing_exercise else now,
                         updated_at=now,
@@ -700,17 +731,16 @@ class SyncService:
                         revision=(existing_exercise.revision + 1) if existing_exercise else 1,
                     )
                     exercise = await uow.exercises.upsert(exercise)
-                else:
-                    raise ValidationAppError(f"Unsupported exercise action: {action}")
                 await uow.exercises.record_change(exercise, now)
-            elif entity_type == "workout" and action == "UPSERT":
-                workout_id = UUID(str(payload["id"]))
+            elif isinstance(payload, WorkoutUpsertPayload):
+                workout_id = payload.id
                 aggregate_id = workout_id
                 existing_workout = await uow.workouts.get(user_id, workout_id)
-                exercise_ids_value = payload.get("exercise_ids", [])
-                if not isinstance(exercise_ids_value, list):
-                    raise ValidationAppError("workout.exercise_ids must be a list")
-                synced_exercise_ids = [UUID(str(value)) for value in exercise_ids_value]
+                if existing_workout is None and await uow.workouts.is_id_taken(workout_id):
+                    raise ConflictError("Workout identifier is unavailable.")
+                for exercise_id in payload.exercise_ids:
+                    if await uow.exercises.get(user_id, exercise_id) is None:
+                        raise ValidationAppError("A referenced private exercise is unavailable.")
                 links = [
                     WorkoutExercise(
                         id=self._ids.new(),
@@ -718,16 +748,16 @@ class SyncService:
                         exercise_id=exercise_id,
                         position=position,
                     )
-                    for position, exercise_id in enumerate(synced_exercise_ids)
+                    for position, exercise_id in enumerate(payload.exercise_ids)
                 ]
                 workout = Workout(
                     id=workout_id,
                     owner_user_id=user_id,
-                    title=str(payload.get("title", "Workout")).strip() or "Workout",
-                    status=WorkoutStatus(str(payload.get("status", WorkoutStatus.PLANNED))),
+                    title=payload.title,
+                    status=existing_workout.status if existing_workout else WorkoutStatus.PLANNED,
                     start_time=None,
                     end_time=None,
-                    notes=str(payload.get("notes", "")),
+                    notes=payload.notes,
                     sync_status=SyncStatus.SYNCED,
                     created_at=existing_workout.created_at if existing_workout else now,
                     updated_at=now,
@@ -735,17 +765,15 @@ class SyncService:
                     server_updated_at=now,
                 )
                 await uow.workouts.upsert(workout)
-            else:
-                raise ValidationAppError(f"Unsupported sync operation: {entity_type}/{action}")
-            results.append(
-                {
-                    "operation_id": str(operation_id),
-                    "aggregate_id": str(aggregate_id),
-                    "status": "SYNCED",
-                    "server_updated_at": now.isoformat(),
-                    "revision": exercise.revision if entity_type == "exercise" else None,
-                }
-            )
+            result: dict[str, object] = {
+                "operation_id": str(operation_id),
+                "aggregate_id": str(aggregate_id),
+                "status": "SYNCED",
+                "server_updated_at": now.isoformat(),
+                "revision": exercise.revision if exercise is not None else None,
+            }
+            await uow.processed_sync_operations.complete(user_id, operation_id, result)
+            results.append(result)
         return results
 
     async def pull(
