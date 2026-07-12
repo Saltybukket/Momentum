@@ -10,7 +10,9 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from fitness_platform.core.security import request_fingerprint
+from fitness_platform.domain.events import DomainEvent
 from fitness_platform.domain.models import Exercise
+from fitness_platform.domain.ports import UnitOfWork
 from fitness_platform.presentation.dependencies import ContainerDep, CurrentUserId
 from fitness_platform.presentation.schemas import (
     CatalogExerciseResponse,
@@ -225,22 +227,38 @@ async def create_exercise(
     container: ContainerDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> Response:
-    async def operation() -> tuple[int, dict[str, object]]:
-        exercise = await container.exercises.create(
-            user_id=user_id,
-            exercise_id=payload.id,
-            name=payload.name,
-            description=payload.description,
-            primary_muscle_group=payload.primary_muscle_group,
-            equipment=payload.equipment,
-            tracking_type=payload.tracking_type,
-            notes=payload.notes,
-        )
+    async def operation(
+        uow: UnitOfWork | None,
+    ) -> tuple[int, dict[str, object], DomainEvent | None]:
+        if uow is None:
+            exercise = await container.exercises.create(
+                user_id=user_id,
+                exercise_id=payload.id,
+                name=payload.name,
+                description=payload.description,
+                primary_muscle_group=payload.primary_muscle_group,
+                equipment=payload.equipment,
+                tracking_type=payload.tracking_type,
+                notes=payload.notes,
+            )
+            event = None
+        else:
+            exercise, event = await container.exercises.create_in_uow(
+                uow=uow,
+                user_id=user_id,
+                exercise_id=payload.id,
+                name=payload.name,
+                description=payload.description,
+                primary_muscle_group=payload.primary_muscle_group,
+                equipment=payload.equipment,
+                tracking_type=payload.tracking_type,
+                notes=payload.notes,
+            )
         response = ExerciseResponse.from_domain(exercise)
-        return status.HTTP_201_CREATED, response.model_dump(mode="json")
+        return status.HTTP_201_CREATED, response.model_dump(mode="json"), event
 
     response_status, body, replayed = await container.idempotency.execute(
-        scope=f"create-exercise:{user_id}",
+        scope=f"POST:/api/v1/exercises:principal={user_id}",
         key=idempotency_key,
         request_hash=_hash_model(payload),
         operation=operation,
@@ -313,19 +331,32 @@ async def create_workout(
     container: ContainerDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> Response:
-    async def operation() -> tuple[int, dict[str, object]]:
-        workout = await container.workouts.create(
-            user_id=user_id,
-            workout_id=payload.id,
-            title=payload.title,
-            notes=payload.notes,
-            exercise_ids=payload.exercise_ids,
-        )
+    async def operation(
+        uow: UnitOfWork | None,
+    ) -> tuple[int, dict[str, object], DomainEvent | None]:
+        if uow is None:
+            workout = await container.workouts.create(
+                user_id=user_id,
+                workout_id=payload.id,
+                title=payload.title,
+                notes=payload.notes,
+                exercise_ids=payload.exercise_ids,
+            )
+            event = None
+        else:
+            workout, event = await container.workouts.create_in_uow(
+                uow=uow,
+                user_id=user_id,
+                workout_id=payload.id,
+                title=payload.title,
+                notes=payload.notes,
+                exercise_ids=payload.exercise_ids,
+            )
         response = WorkoutResponse.from_domain(workout)
-        return status.HTTP_201_CREATED, response.model_dump(mode="json")
+        return status.HTTP_201_CREATED, response.model_dump(mode="json"), event
 
     response_status, body, replayed = await container.idempotency.execute(
-        scope=f"create-workout:{user_id}",
+        scope=f"POST:/api/v1/workouts:principal={user_id}",
         key=idempotency_key,
         request_hash=_hash_model(payload),
         operation=operation,
@@ -394,16 +425,21 @@ async def sync_push(
     container: ContainerDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> Response:
-    async def operation() -> tuple[int, dict[str, object]]:
+    async def operation(uow: UnitOfWork | None) -> tuple[int, dict[str, object], None]:
         raw_operations = [operation.model_dump(mode="json") for operation in payload.operations]
-        raw_results = await container.sync.push(user_id=user_id, operations=raw_operations)
+        if uow is None:
+            raw_results = await container.sync.push(user_id=user_id, operations=raw_operations)
+        else:
+            raw_results = await container.sync.push_in_uow(
+                uow=uow, user_id=user_id, operations=raw_operations
+            )
         response = SyncPushResponse(
             results=[SyncResult.model_validate(item) for item in raw_results]
         )
-        return status.HTTP_200_OK, response.model_dump(mode="json")
+        return status.HTTP_200_OK, response.model_dump(mode="json"), None
 
     response_status, body, replayed = await container.idempotency.execute(
-        scope=f"sync-push:{user_id}",
+        scope=f"POST:/api/v1/sync/push:principal={user_id}",
         key=idempotency_key,
         request_hash=_hash_model(payload),
         operation=operation,

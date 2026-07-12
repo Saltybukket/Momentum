@@ -76,5 +76,5 @@ class AppContainer:
                 event_dispatcher=events,
             ),
             sync=SyncService(uow_factory=uow_factory, clock=clock, ids=ids),
-            idempotency=IdempotencyService(uow_factory, clock),
+            idempotency=IdempotencyService(uow_factory, clock, events),
         )

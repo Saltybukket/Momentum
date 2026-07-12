@@ -21,6 +21,7 @@ class SqlAlchemyUnitOfWork:
 
     async def __aenter__(self) -> "SqlAlchemyUnitOfWork":
         self._session = self._session_factory()
+        await self._session.begin()
         self.users = SqlAlchemyUserRepository(self._session)
         self.guest_sessions = SqlAlchemyGuestSessionRepository(self._session)
         self.profiles = SqlAlchemyProfileRepository(self._session)

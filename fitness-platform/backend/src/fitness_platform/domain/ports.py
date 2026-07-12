@@ -107,6 +107,8 @@ class IdempotencyRepository(Protocol):
 
     async def fail(self, scope: str, key: str, now: datetime) -> None: ...
 
+    async def delete_expired(self, now: datetime, limit: int) -> int: ...
+
 
 class UnitOfWork(Protocol, AbstractAsyncContextManager["UnitOfWork"]):
     users: UserRepository

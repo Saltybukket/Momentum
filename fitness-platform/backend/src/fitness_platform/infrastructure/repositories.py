@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -723,7 +724,7 @@ class SqlAlchemyIdempotencyRepository:
             await self._session.flush()
             row = None
         if row is None:
-            candidate = IdempotencyRecordRow(
+            values = dict(
                 id=uuid4(),
                 scope=scope,
                 key=key,
@@ -736,13 +737,23 @@ class SqlAlchemyIdempotencyRepository:
                 expires_at=expires_at,
                 lease_expires_at=lease_expires_at,
             )
-            try:
-                async with self._session.begin_nested():
-                    self._session.add(candidate)
-                    await self._session.flush()
-                return "RESERVED", request_hash, None, None
-            except IntegrityError:
+            dialect = self._session.get_bind().dialect.name
+            if dialect in {"postgresql", "sqlite"}:
+                insert = postgresql_insert if dialect == "postgresql" else sqlite_insert
+                inserted_id = await self._session.scalar(
+                    insert(IdempotencyRecordRow)
+                    .values(**values)
+                    .on_conflict_do_nothing(index_elements=["scope", "key"])
+                    .returning(IdempotencyRecordRow.id)
+                )
+                if inserted_id is not None:
+                    return "RESERVED", request_hash, None, None
                 row = (await self._session.execute(statement)).scalar_one()
+            else:
+                candidate = IdempotencyRecordRow(**values)
+                self._session.add(candidate)
+                await self._session.flush()
+                return "RESERVED", request_hash, None, None
         if row.state == "IN_PROGRESS" and aware(row.lease_expires_at) <= now:
             row.state = "FAILED"
             row.updated_at = now
@@ -777,3 +788,23 @@ class SqlAlchemyIdempotencyRepository:
             row.state = "FAILED"
             row.updated_at = now
             await self._session.flush()
+
+    async def delete_expired(self, now: datetime, limit: int) -> int:
+        ids = (
+            (
+                await self._session.execute(
+                    select(IdempotencyRecordRow.id)
+                    .where(IdempotencyRecordRow.expires_at <= now)
+                    .order_by(IdempotencyRecordRow.expires_at, IdempotencyRecordRow.id)
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not ids:
+            return 0
+        await self._session.execute(
+            delete(IdempotencyRecordRow).where(IdempotencyRecordRow.id.in_(ids))
+        )
+        return len(ids)

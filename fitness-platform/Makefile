@@ -7,9 +7,9 @@ ANDROID_SDK_ROOT ?= $(ANDROID_HOME)
 export ANDROID_HOME ANDROID_SDK_ROOT
 endif
 
-.PHONY: help doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import clean openapi smoke
+.PHONY: help doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup clean openapi smoke
 help:
-	@printf '%s\n' "doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import clean openapi smoke"
+	@printf '%s\n' "doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup clean openapi smoke"
 
 doctor:
 	./scripts/doctor.sh
@@ -55,6 +55,9 @@ seed:
 
 catalog-import:
 	cd backend && uv run python -m fitness_platform.catalog_import ../data/exercises/catalog-demo.json --report ../data/licenses/catalog-import-report.json
+
+idempotency-cleanup:
+	cd backend && uv run python -m fitness_platform.maintenance idempotency-cleanup
 
 openapi:
 	cd backend && uv run python ../scripts/export_openapi.py

@@ -20,7 +20,7 @@ async def test_exercise_crud_and_validation(app_client: tuple[AsyncClient, objec
     exercise_id = str(uuid4())
     created = await client.post(
         "/api/v1/exercises",
-        headers={**auth, "Idempotency-Key": "exercise-create"},
+        headers=auth,
         json={
             "id": exercise_id,
             "name": "Band Row",
