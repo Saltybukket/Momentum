@@ -17,8 +17,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("outbox_events", sa.Column("claim_token", sa.Uuid(), nullable=True))
-    op.create_index("ix_outbox_events_claim_token", "outbox_events", ["claim_token"])
+    inspector = sa.inspect(op.get_bind())
+    columns = {column["name"] for column in inspector.get_columns("outbox_events")}
+    if "claim_token" not in columns:
+        op.add_column("outbox_events", sa.Column("claim_token", sa.Uuid(), nullable=True))
+    indexes = {index["name"] for index in inspector.get_indexes("outbox_events")}
+    if "ix_outbox_events_claim_token" not in indexes:
+        op.create_index("ix_outbox_events_claim_token", "outbox_events", ["claim_token"])
 
 
 def downgrade() -> None:
