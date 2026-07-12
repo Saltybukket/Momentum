@@ -333,6 +333,8 @@ Introduce reviewed catalog entities, muscle/equipment relationships, source/lice
 
 ## Offline exercise catalog foundation
 
-Implemented a self-authored CC0 three-record dataset through a validated atomic backend importer and reviewed-only API into an offline-first Android Room 3 cache. Android provides public list/detail, combined filters, loading/empty/error/offline states and provenance, structurally separated from private exercises. Guest upload now requires opt-in.
+Implemented a self-authored CC0 three-record dataset through a validated atomic backend importer and reviewed-only API into an offline-first Android Room 4 cache. The current stabilization pass adds recoverable installation-bound guest credentials without storing bearer tokens in idempotency records, expiring idempotency reservations with global UUID-conflict checks, and leased outbox claims that can be recovered after a worker dies. Android provides public list/detail and combined filters, structurally separated from private exercises; catalog snapshots are cached by content hash.
 
-Backend head is `c1a4e6d91b0f`; Android schema is 3. The backend suite collects 24 tests and reports 76.98% coverage. Connected execution alone remains externally blocked by the absent stable Windows API-36 system image/AVD; instrumentation code compiles independently.
+Backend head is `d8f2a1c7e904`; Android schema is 4. The backend suite collects 29 tests and reports 74.72% coverage. Ruff, mypy, Android Spotless, Detekt, JVM tests, changed-module Android-test compilation and debug assembly pass. Connected execution alone remains externally blocked by the absent stable Windows API-36 system image/AVD; instrumentation code compiles independently.
+
+The interrupted Phase-B expansion remains deliberately open: the broader pre-plan model, alias and structured-instruction catalog fields, PostgreSQL-specific contention measurements, and connected UI acceptance execution were not started or completed in this stabilization pass. They must be handled as a separate task rather than inferred from the snapshot/cache groundwork above.

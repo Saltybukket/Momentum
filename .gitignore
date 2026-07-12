@@ -1,0 +1,22 @@
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+*.log
+*.zip
+*.tar.gz
+**/.env
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.gradle/
+**/build/
+**/local.properties
+
+# Keep reproducibility inputs and generated contracts under version control.
+!fitness-platform/android/gradle/wrapper/gradle-wrapper.jar
+!fitness-platform/android/core/database/schemas/**
+!fitness-platform/data/**
+!fitness-platform/shared/openapi.json
