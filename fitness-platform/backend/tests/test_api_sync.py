@@ -1,10 +1,16 @@
 import asyncio
-from uuid import uuid4
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
-from fitness_platform.infrastructure.orm import WorkoutExerciseRow, WorkoutRow
+from fitness_platform.domain.sync import SyncCommand, WorkoutStartPayload, canonical_request_hash
+from fitness_platform.infrastructure.orm import (
+    ProcessedSyncOperationRow,
+    WorkoutExerciseRow,
+    WorkoutRow,
+)
 from tests.conftest import create_guest
 
 
@@ -343,3 +349,128 @@ async def test_workout_sync_uses_lifecycle_commands(app_client) -> None:
     assert persisted["status"] == "COMPLETED"
     assert persisted["start_time"] is not None
     assert persisted["end_time"] is not None
+
+
+async def _assert_action_is_bound_to_operation_id(app_client) -> None:
+    client, _ = app_client
+    token, _ = await create_guest(client)
+    workout_id = str(uuid4())
+    operation_id = str(uuid4())
+    auth = {"Authorization": f"Bearer {token}"}
+
+    async def push(operation: str, action: str, key: str):
+        return await client.post(
+            "/api/v1/sync/push",
+            headers={**auth, "Idempotency-Key": key},
+            json={
+                "operations": [
+                    {
+                        "operation_id": operation,
+                        "entity_type": "workout",
+                        "action": action,
+                        "payload": {"id": workout_id},
+                    }
+                ]
+            },
+        )
+
+    created = await client.post(
+        "/api/v1/workouts", headers=auth, json={"id": workout_id, "title": "Lifecycle"}
+    )
+    started = await push(operation_id, "START", "start-action")
+    replay = await push(operation_id, "START", "start-replay")
+    collision = await push(operation_id, "COMPLETE", "complete-collision")
+    completed = await push(str(uuid4()), "COMPLETE", "complete-valid")
+    assert created.status_code == 201
+    assert started.status_code == replay.status_code == 200
+    assert started.json() == replay.json()
+    assert collision.status_code == 409
+    assert completed.status_code == 200
+
+
+async def test_sync_operation_hash_binds_action_on_sqlite(app_client) -> None:
+    await _assert_action_is_bound_to_operation_id(app_client)
+
+
+async def test_sync_operation_hash_binds_action_on_postgresql(postgres_app_client) -> None:
+    await _assert_action_is_bound_to_operation_id(postgres_app_client)
+
+
+def test_sync_operation_hash_binds_entity_and_contract_semantics() -> None:
+    operation_id = uuid4()
+    payload = WorkoutStartPayload(uuid4())
+    workout = SyncCommand(operation_id, "workout", "START", payload)
+    same = SyncCommand(operation_id, "workout", "START", payload)
+    other_entity = SyncCommand(operation_id, "exercise", "START", payload)
+    other_action = SyncCommand(operation_id, "workout", "COMPLETE", payload)
+    assert canonical_request_hash(workout) == canonical_request_hash(same)
+    assert canonical_request_hash(workout) != canonical_request_hash(other_entity)
+    assert canonical_request_hash(workout) != canonical_request_hash(other_action)
+
+
+async def _assert_expired_operation_can_be_reused(app_client, *, parallel: bool = False) -> None:
+    client, container = app_client
+    token, _ = await create_guest(client)
+    operation_id = str(uuid4())
+    auth = {"Authorization": f"Bearer {token}"}
+
+    def payload(name: str) -> dict[str, object]:
+        return {
+            "operations": [
+                {
+                    "operation_id": operation_id,
+                    "entity_type": "profile",
+                    "action": "UPSERT",
+                    "payload": {
+                        "display_name": name,
+                        "unit_system": "METRIC",
+                        "onboarding_status": "NOT_STARTED",
+                    },
+                }
+            ]
+        }
+
+    first = await client.post(
+        "/api/v1/sync/push",
+        headers={**auth, "Idempotency-Key": "expiry-first"},
+        json=payload("Before expiry"),
+    )
+    assert first.status_code == 200
+    async with container.database.session_factory() as session:
+        await session.execute(
+            update(ProcessedSyncOperationRow)
+            .where(ProcessedSyncOperationRow.operation_id == UUID(operation_id))
+            .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
+        )
+        await session.commit()
+
+    if parallel:
+        responses = await asyncio.gather(
+            *(
+                client.post(
+                    "/api/v1/sync/push",
+                    headers={**auth, "Idempotency-Key": f"expiry-reuse-{index}"},
+                    json=payload("After expiry"),
+                )
+                for index in range(10)
+            )
+        )
+        assert all(response.status_code == 200 for response in responses)
+        assert len({response.text for response in responses}) == 1
+    else:
+        response = await client.post(
+            "/api/v1/sync/push",
+            headers={**auth, "Idempotency-Key": "expiry-reuse"},
+            json=payload("After expiry"),
+        )
+        assert response.status_code == 200, response.text
+    current = await client.get("/api/v1/profile", headers=auth)
+    assert current.json()["display_name"] == "After expiry"
+
+
+async def test_expired_operation_can_be_reused_on_sqlite(app_client) -> None:
+    await _assert_expired_operation_can_be_reused(app_client)
+
+
+async def test_expired_operation_parallel_reuse_on_postgresql(postgres_app_client) -> None:
+    await _assert_expired_operation_can_be_reused(postgres_app_client, parallel=True)

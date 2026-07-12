@@ -937,6 +937,18 @@ class SqlAlchemyProcessedSyncOperationRepository:
                 .with_for_update()
             )
         ).scalar_one()
+        expires_at_value = (
+            row.expires_at
+            if row.expires_at.tzinfo is not None
+            else row.expires_at.replace(tzinfo=UTC)
+        )
+        if expires_at_value <= now:
+            row.request_hash = request_hash
+            row.result = None
+            row.created_at = now
+            row.expires_at = expires_at
+            await self._session.flush()
+            return True, request_hash, None
         return False, row.request_hash, row.result
 
     async def complete(

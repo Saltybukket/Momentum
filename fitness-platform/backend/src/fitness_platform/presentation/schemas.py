@@ -13,6 +13,7 @@ from fitness_platform.domain.enums import (
     WorkoutStatus,
 )
 from fitness_platform.domain.models import Exercise, Profile, Workout
+from fitness_platform.domain.text import normalize_multiline, normalize_single_line
 
 
 class ApiModel(BaseModel):
@@ -23,6 +24,10 @@ class GuestSessionCreate(ApiModel):
     display_name: str = Field(default="Guest", max_length=80)
     installation_id: UUID
     recovery_secret: str = Field(min_length=32, max_length=256)
+
+    _normalize_name = field_validator("display_name")(
+        lambda value: normalize_single_line(value, field="display_name")
+    )
 
 
 class ProfileResponse(ApiModel):
@@ -65,6 +70,10 @@ class ProfileUpdate(ApiModel):
     unit_system: UnitSystem
     onboarding_status: OnboardingStatus
 
+    _normalize_name = field_validator("display_name")(
+        lambda value: normalize_single_line(value, field="display_name")
+    )
+
 
 class ExerciseWrite(ApiModel):
     id: UUID | None = None
@@ -75,12 +84,10 @@ class ExerciseWrite(ApiModel):
     tracking_type: TrackingType = TrackingType.REPS_WEIGHT
     notes: str = Field(default="", max_length=4000)
 
-    @field_validator("name")
-    @classmethod
-    def name_must_not_be_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("name must not be blank")
-        return value
+    _normalize_names = field_validator("name", "primary_muscle_group", "equipment")(
+        lambda value: normalize_single_line(value, field="exercise text")
+    )
+    _normalize_multiline = field_validator("description", "notes")(normalize_multiline)
 
 
 class ExerciseResponse(ApiModel):
@@ -125,12 +132,10 @@ class WorkoutWrite(ApiModel):
     notes: str = Field(default="", max_length=4000)
     exercise_ids: list[UUID] = Field(default_factory=list, max_length=50)
 
-    @field_validator("title")
-    @classmethod
-    def title_must_not_be_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("title must not be blank")
-        return value
+    _normalize_title = field_validator("title")(
+        lambda value: normalize_single_line(value, field="title")
+    )
+    _normalize_notes = field_validator("notes")(normalize_multiline)
 
     @field_validator("exercise_ids")
     @classmethod
@@ -214,33 +219,14 @@ class SyncAction(StrEnum):
     COMPLETE = "COMPLETE"
 
 
-def _safe_text(value: str) -> str:
-    normalized = value.strip()
-    forbidden_bidi = {
-        "\u202a",
-        "\u202b",
-        "\u202c",
-        "\u202d",
-        "\u202e",
-        "\u2066",
-        "\u2067",
-        "\u2068",
-        "\u2069",
-    }
-    if any(
-        (ord(character) < 32 and character not in "\n\t") or character in forbidden_bidi
-        for character in normalized
-    ):
-        raise ValueError("control and bidirectional override characters are not allowed")
-    return normalized
-
-
 class ProfileSyncPayload(ApiModel):
     display_name: str = Field(min_length=1, max_length=80)
     unit_system: UnitSystem
     onboarding_status: OnboardingStatus
 
-    _normalize = field_validator("display_name")(_safe_text)
+    _normalize = field_validator("display_name")(
+        lambda value: normalize_single_line(value, field="display_name")
+    )
 
 
 class ExerciseUpsertSyncPayload(ApiModel):
@@ -253,9 +239,10 @@ class ExerciseUpsertSyncPayload(ApiModel):
     notes: str = Field(max_length=4000)
     base_revision: int | None = Field(ge=0)
 
-    _normalize = field_validator(
-        "name", "description", "primary_muscle_group", "equipment", "notes"
-    )(_safe_text)
+    _normalize_names = field_validator("name", "primary_muscle_group", "equipment")(
+        lambda value: normalize_single_line(value, field="exercise text")
+    )
+    _normalize_multiline = field_validator("description", "notes")(normalize_multiline)
 
 
 class ExerciseDeleteSyncPayload(ApiModel):
@@ -269,7 +256,10 @@ class WorkoutUpsertSyncPayload(ApiModel):
     notes: str = Field(max_length=4000)
     exercise_ids: list[UUID] = Field(max_length=50)
 
-    _normalize = field_validator("title", "notes")(_safe_text)
+    _normalize_title = field_validator("title")(
+        lambda value: normalize_single_line(value, field="title")
+    )
+    _normalize_notes = field_validator("notes")(normalize_multiline)
 
     @field_validator("exercise_ids")
     @classmethod

@@ -13,7 +13,7 @@ The transport contract is a closed union of Profile UPSERT, Exercise UPSERT, Exe
 
 Private exercise and workout identifiers are owner-scoped. A foreign, deleted, public-catalog or missing exercise is reported only as an unavailable reference; sync does not reveal its owner. Global UUID collisions are controlled conflicts.
 
-Every operation is deduplicated by `(owner_user_id, operation_id)` in the same transaction as its domain mutation. A canonical payload hash permits deterministic replay of the stored result and rejects reuse with changed content. Records expire after seven days and `make sync-operation-cleanup` removes them in bounded batches.
+Every operation is deduplicated by `(owner_user_id, operation_id)` in the same transaction as its domain mutation. The versioned canonical request hash covers `contract_version`, `entity_type`, `action` and the typed payload using sorted compact UTF-8 JSON. It permits deterministic replay only for the same semantic command and rejects reuse with changed content, entity or action. Records expire after seven days. An expired reservation is atomically replaced while locked during `reserve()`; `make sync-operation-cleanup` remains bounded operational maintenance rather than a correctness prerequisite.
 
 ## Consequences
 

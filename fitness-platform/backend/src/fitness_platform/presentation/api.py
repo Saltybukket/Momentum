@@ -477,7 +477,14 @@ async def sync_push(
                     domain_payload = WorkoutCompletePayload(raw.id)
             else:  # pragma: no cover - closed Pydantic union
                 raise AssertionError("Unsupported validated sync payload")
-            commands.append(SyncCommand(item.operation_id, domain_payload))
+            commands.append(
+                SyncCommand(
+                    item.operation_id,
+                    item.entity_type.value,
+                    item.action.value,
+                    domain_payload,
+                )
+            )
         if uow is None:
             raw_results = await container.sync.push(user_id=user_id, operations=commands)
         else:

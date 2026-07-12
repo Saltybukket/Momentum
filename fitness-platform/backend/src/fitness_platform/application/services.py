@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import hmac
 import json
 from collections.abc import Callable, Sequence
@@ -51,7 +50,9 @@ from fitness_platform.domain.sync import (
     WorkoutCompletePayload,
     WorkoutStartPayload,
     WorkoutUpsertPayload,
+    canonical_request_hash,
 )
+from fitness_platform.domain.text import normalize_multiline, normalize_single_line
 
 UowFactory = Callable[[], UnitOfWork]
 
@@ -78,9 +79,10 @@ class GuestService:
     async def create_guest(
         self, display_name: str, installation_id: UUID, recovery_secret: str
     ) -> tuple[Profile, str, bool]:
-        normalized_name = display_name.strip()
-        if not normalized_name:
-            raise ValidationAppError("Display name must not be empty.")
+        try:
+            normalized_name = normalize_single_line(display_name, field="Display name")
+        except ValueError as exc:
+            raise ValidationAppError(str(exc)) from exc
         if len(recovery_secret) < 32:
             raise ValidationAppError("Recovery secret must contain at least 32 characters.")
         process_lock = self._installation_locks.setdefault(installation_id, asyncio.Lock())
@@ -179,9 +181,10 @@ class ProfileService:
         unit_system: UnitSystem,
         onboarding_status: OnboardingStatus,
     ) -> Profile:
-        normalized_name = display_name.strip()
-        if not normalized_name:
-            raise ValidationAppError("Display name must not be empty.")
+        try:
+            normalized_name = normalize_single_line(display_name, field="Display name")
+        except ValueError as exc:
+            raise ValidationAppError(str(exc)) from exc
         async with self._uow_factory() as uow:
             existing = await uow.profiles.get(user_id)
             if existing is None:
@@ -215,9 +218,10 @@ class ExerciseService:
 
     @staticmethod
     def _validate_name(name: str) -> str:
-        normalized = name.strip()
-        if not normalized:
-            raise ValidationAppError("Exercise name must not be empty.")
+        try:
+            normalized = normalize_single_line(name, field="Exercise name")
+        except ValueError as exc:
+            raise ValidationAppError(str(exc)) from exc
         if len(normalized) > 120:
             raise ValidationAppError("Exercise name must contain at most 120 characters.")
         return normalized
@@ -272,11 +276,13 @@ class ExerciseService:
             id=exercise_id or self._ids.new(),
             owner_user_id=user_id,
             name=self._validate_name(name),
-            description=description.strip(),
-            primary_muscle_group=primary_muscle_group.strip() or "Unspecified",
-            equipment=equipment.strip() or "None",
+            description=normalize_multiline(description),
+            primary_muscle_group=normalize_single_line(
+                primary_muscle_group or "Unspecified", field="Primary muscle group"
+            ),
+            equipment=normalize_single_line(equipment or "None", field="Equipment"),
             tracking_type=tracking_type,
-            notes=notes.strip(),
+            notes=normalize_multiline(notes),
             sync_status=SyncStatus.SYNCED,
             created_at=now,
             updated_at=now,
@@ -321,11 +327,13 @@ class ExerciseService:
             updated = replace(
                 existing,
                 name=self._validate_name(name),
-                description=description.strip(),
-                primary_muscle_group=primary_muscle_group.strip() or "Unspecified",
-                equipment=equipment.strip() or "None",
+                description=normalize_multiline(description),
+                primary_muscle_group=normalize_single_line(
+                    primary_muscle_group or "Unspecified", field="Primary muscle group"
+                ),
+                equipment=normalize_single_line(equipment or "None", field="Equipment"),
                 tracking_type=tracking_type,
-                notes=notes.strip(),
+                notes=normalize_multiline(notes),
                 sync_status=SyncStatus.SYNCED,
                 updated_at=now,
                 server_updated_at=now,
@@ -416,9 +424,11 @@ class WorkoutService:
         notes: str,
         exercise_ids: Sequence[UUID],
     ) -> tuple[Workout, WorkoutCreated]:
-        normalized_title = title.strip()
-        if not normalized_title:
-            raise ValidationAppError("Workout title must not be empty.")
+        try:
+            normalized_title = normalize_single_line(title, field="Workout title")
+            normalized_notes = normalize_multiline(notes)
+        except ValueError as exc:
+            raise ValidationAppError(str(exc)) from exc
         now = self._clock.now()
         new_id = workout_id or self._ids.new()
         links = [
@@ -435,7 +445,7 @@ class WorkoutService:
             owner_user_id=user_id,
             title=normalized_title,
             status=WorkoutStatus.PLANNED,
-            notes=notes.strip(),
+            notes=normalized_notes,
             exercises=links,
             sync_status=SyncStatus.SYNCED,
             created_at=now,
@@ -491,14 +501,16 @@ class WorkoutService:
         notes: str,
         exercise_ids: Sequence[UUID],
     ) -> Workout:
-        normalized_title = title.strip()
-        if not normalized_title:
-            raise ValidationAppError("Workout title must not be empty.")
+        try:
+            normalized_title = normalize_single_line(title, field="Workout title")
+            normalized_notes = normalize_multiline(notes)
+        except ValueError as exc:
+            raise ValidationAppError(str(exc)) from exc
         existing = await uow.workouts.get(user_id, workout_id)
         if existing is None:
             raise NotFoundError("Workout not found.")
-        if existing.status == WorkoutStatus.COMPLETED:
-            raise ConflictError("Completed workouts cannot be edited.")
+        if existing.status in {WorkoutStatus.COMPLETED, WorkoutStatus.CANCELLED}:
+            raise ConflictError("Terminal workouts cannot be edited.")
         await self._validate_exercise_ids(uow, user_id, exercise_ids)
         links = [
             WorkoutExercise(
@@ -513,7 +525,7 @@ class WorkoutService:
         updated = replace(
             existing,
             title=normalized_title,
-            notes=notes.strip(),
+            notes=normalized_notes,
             exercises=links,
             sync_status=SyncStatus.SYNCED,
             updated_at=now,
@@ -535,10 +547,10 @@ class WorkoutService:
         existing = await uow.workouts.get(user_id, workout_id)
         if existing is None:
             raise NotFoundError("Workout not found.")
-        if existing.status == WorkoutStatus.COMPLETED:
-            raise ConflictError("Completed workout cannot be started again.")
         if existing.status == WorkoutStatus.IN_PROGRESS:
             return existing, None
+        if existing.status != WorkoutStatus.PLANNED:
+            raise ConflictError("Only a planned workout can be started.")
         now = self._clock.now()
         result = await uow.workouts.upsert(
             replace(
@@ -689,9 +701,7 @@ class SyncService:
         for operation in operations:
             operation_id = operation.operation_id
             payload = operation.payload
-            request_hash = hashlib.sha256(
-                json.dumps(asdict(payload), default=str, sort_keys=True).encode()
-            ).hexdigest()
+            request_hash = canonical_request_hash(operation)
             reserved, existing_hash, replay = await uow.processed_sync_operations.reserve(
                 user_id,
                 operation_id,

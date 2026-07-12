@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import asdict, dataclass
 from uuid import UUID
 
 from fitness_platform.domain.enums import OnboardingStatus, TrackingType, UnitSystem
@@ -60,4 +62,23 @@ SyncPayload = (
 @dataclass(frozen=True, slots=True)
 class SyncCommand:
     operation_id: UUID
+    entity_type: str
+    action: str
     payload: SyncPayload
+
+
+def canonical_request_hash(command: SyncCommand) -> str:
+    contract = {
+        "contract_version": "1",
+        "entity_type": command.entity_type,
+        "action": command.action,
+        "payload": asdict(command.payload),
+    }
+    serialized = json.dumps(
+        contract,
+        default=str,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

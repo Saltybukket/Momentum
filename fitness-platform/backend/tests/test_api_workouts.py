@@ -1,7 +1,9 @@
-from httpx import AsyncClient
-from sqlalchemy import func, select
+from uuid import UUID
 
-from fitness_platform.infrastructure.orm import OutboxEventRow
+from httpx import AsyncClient
+from sqlalchemy import func, select, update
+
+from fitness_platform.infrastructure.orm import OutboxEventRow, WorkoutRow
 from tests.conftest import create_guest
 
 
@@ -126,3 +128,34 @@ async def test_workout_completion_requires_start_and_is_terminal(app_client) -> 
     )
     restart = await client.post(f"/api/v1/workouts/{workout_id}/start", headers=auth)
     assert edit.status_code == restart.status_code == 409
+
+
+async def _assert_cancelled_workout_is_terminal(app_client) -> None:
+    client, container = app_client
+    token, _ = await create_guest(client)
+    auth = {"Authorization": f"Bearer {token}"}
+    created = await client.post(
+        "/api/v1/workouts", headers=auth, json={"title": "Cancelled fixture"}
+    )
+    workout_id = created.json()["id"]
+    async with container.database.session_factory() as session:
+        await session.execute(
+            update(WorkoutRow).where(WorkoutRow.id == UUID(workout_id)).values(status="CANCELLED")
+        )
+        await session.commit()
+
+    started = await client.post(f"/api/v1/workouts/{workout_id}/start", headers=auth)
+    edited = await client.put(
+        f"/api/v1/workouts/{workout_id}",
+        headers=auth,
+        json={"title": "Must remain terminal"},
+    )
+    assert started.status_code == edited.status_code == 409
+
+
+async def test_cancelled_workout_is_terminal_on_sqlite(app_client) -> None:
+    await _assert_cancelled_workout_is_terminal(app_client)
+
+
+async def test_cancelled_workout_is_terminal_on_postgresql(postgres_app_client) -> None:
+    await _assert_cancelled_workout_is_terminal(postgres_app_client)

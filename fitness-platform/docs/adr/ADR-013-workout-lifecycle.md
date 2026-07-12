@@ -9,7 +9,7 @@ General workout updates and free-form sync previously allowed arbitrary status a
 
 ## Decision
 
-The supported lifecycle is `PLANNED -> IN_PROGRESS -> COMPLETED`. `start` and `complete` are explicit commands shared by HTTP CRUD and sync. Completion requires a started workout, records `end_time`, persists exactly one deterministic `WorkoutCompleted` outbox event, and is idempotent. `COMPLETED` is terminal and its workout cannot be generally edited or restarted. Cancellation is outside the current narrow slice and is not exposed.
+The supported lifecycle is `PLANNED -> IN_PROGRESS -> COMPLETED`. `start` and `complete` are explicit commands shared by HTTP CRUD and sync. Start is accepted only from `PLANNED`, while repeating it in `IN_PROGRESS` is idempotent. Completion requires a started workout, records `end_time`, persists exactly one deterministic `WorkoutCompleted` outbox event, and is idempotent. `COMPLETED` and the retained `CANCELLED` state are terminal: neither can be generally edited or restarted. A public cancel command remains outside this narrow slice.
 
 General create/update commands contain title, notes and at most 50 unique owner-scoped active private exercise IDs; they never accept status. Public catalog IDs, foreign IDs, deleted IDs and missing IDs share the same unavailable-reference response. Validation loads the owned ID set in one query.
 
