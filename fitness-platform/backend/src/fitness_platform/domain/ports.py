@@ -9,6 +9,7 @@ from fitness_platform.domain.models import (
     CatalogRelease,
     Exercise,
     GuestSession,
+    OutboxRecord,
     Profile,
     Workout,
 )
@@ -98,6 +99,16 @@ class OutboxRepository(Protocol):
         payload: dict[str, object],
         occurred_at: datetime,
     ) -> bool: ...
+
+    async def claim_due(
+        self, *, worker_id: str, now: datetime, lease_expires_at: datetime, limit: int
+    ) -> Sequence[OutboxRecord]: ...
+
+    async def mark_processed(self, event_id: UUID, worker_id: str, now: datetime) -> bool: ...
+
+    async def mark_failed(
+        self, event_id: UUID, worker_id: str, now: datetime, error: str
+    ) -> str: ...
 
 
 class IdempotencyRepository(Protocol):

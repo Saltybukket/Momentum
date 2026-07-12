@@ -33,6 +33,36 @@ async def test_idempotency_cleanup_prints_machine_readable_report(monkeypatch, c
     assert capsys.readouterr().out.strip() == ('{"operation": "idempotency-cleanup", "deleted": 7}')
 
 
+async def test_outbox_process_prints_machine_readable_report(monkeypatch, capsys) -> None:
+    calls: list[object] = []
+
+    class FakeProcessor:
+        async def process(self, worker_id: str, limit: int) -> dict[str, int]:
+            calls.extend([worker_id, limit])
+            return {"claimed": 2, "processed": 1, "failed": 1, "dead_letter": 0}
+
+    class FakeCloseable:
+        async def close(self) -> None:
+            calls.append("redis-closed")
+
+        async def dispose(self) -> None:
+            calls.append("database-disposed")
+
+    container = SimpleNamespace(
+        outbox_processor=FakeProcessor(),
+        redis=FakeCloseable(),
+        database=FakeCloseable(),
+    )
+    monkeypatch.setattr(maintenance.AppContainer, "build", lambda settings: container)
+    monkeypatch.setattr(maintenance, "get_settings", lambda: object())
+    await maintenance._process_outbox(25, "test-worker")
+    assert calls == ["test-worker", 25, "redis-closed", "database-disposed"]
+    assert capsys.readouterr().out.strip() == (
+        '{"claimed": 2, "dead_letter": 0, "failed": 1, '
+        '"operation": "outbox-process", "processed": 1}'
+    )
+
+
 def test_main_parses_cleanup_limit(monkeypatch) -> None:
     captured: list[object] = []
 

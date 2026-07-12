@@ -51,7 +51,6 @@ class IdempotencyService:
         if not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", key):
             raise ConflictError("Idempotency key must contain 1-128 safe ASCII characters.")
         stored_key = self.storage_key(scope, key)
-        event: DomainEvent | None = None
         async with self._uow_factory() as uow:
             state, existing_hash, response_status, response_body = await uow.idempotency.reserve(
                 scope=scope,
@@ -71,12 +70,10 @@ class IdempotencyService:
                     "Idempotent operation is already running or failed; retry with a new key."
                 )
             try:
-                status, body, event = await operation(uow)
+                status, body, _event = await operation(uow)
                 await uow.idempotency.complete(scope, stored_key, status, body, self._clock.now())
                 await uow.commit()
             except Exception:
                 await uow.rollback()
                 raise
-        if event is not None:
-            await self._events.dispatch(event)
         return status, body, False

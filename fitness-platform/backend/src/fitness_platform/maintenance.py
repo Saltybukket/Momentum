@@ -26,15 +26,30 @@ async def _cleanup_sync_operations(limit: int) -> None:
         await container.database.dispose()
 
 
+async def _process_outbox(limit: int, worker_id: str) -> None:
+    container = AppContainer.build(get_settings())
+    try:
+        report = await container.outbox_processor.process(worker_id, limit)
+        print(json.dumps({"operation": "outbox-process", **report}, sort_keys=True))
+    finally:
+        await container.redis.close()
+        await container.database.dispose()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Momentum maintenance commands")
-    parser.add_argument("command", choices=["idempotency-cleanup", "sync-operation-cleanup"])
+    parser.add_argument(
+        "command", choices=["idempotency-cleanup", "sync-operation-cleanup", "outbox-process"]
+    )
     parser.add_argument("--limit", type=int, default=500)
+    parser.add_argument("--worker-id", default="maintenance-worker")
     args = parser.parse_args()
     if args.command == "idempotency-cleanup":
         asyncio.run(_cleanup_idempotency(args.limit))
-    else:
+    elif args.command == "sync-operation-cleanup":
         asyncio.run(_cleanup_sync_operations(args.limit))
+    else:
+        asyncio.run(_process_outbox(args.limit, args.worker_id))
 
 
 if __name__ == "__main__":

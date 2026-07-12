@@ -46,7 +46,11 @@ def main() -> None:
     session = request(
         "POST",
         "/api/v1/guest-sessions",
-        {"display_name": "Smoke Guest"},
+        {
+            "display_name": "Smoke Guest",
+            "installation_id": str(uuid4()),
+            "recovery_secret": f"smoke-recovery-{uuid4()}-{uuid4()}",
+        },
         idempotency_key=str(uuid4()),
     )
     token = str(session["guest_token"])

@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select, text, update
@@ -14,6 +14,7 @@ from fitness_platform.domain.models import (
     CatalogRelease,
     Exercise,
     GuestSession,
+    OutboxRecord,
     Profile,
     Workout,
     WorkoutExercise,
@@ -776,10 +777,85 @@ class SqlAlchemyOutboxRepository:
                 payload=payload,
                 occurred_at=occurred_at,
                 attempts=0,
+                status="PENDING",
+                next_attempt_at=occurred_at,
+                max_attempts=5,
             )
         )
         await self._session.flush()
         return True
+
+    async def claim_due(
+        self, *, worker_id: str, now: datetime, lease_expires_at: datetime, limit: int
+    ) -> Sequence[OutboxRecord]:
+        due = (
+            (OutboxEventRow.status.in_(["PENDING", "FAILED"]))
+            & (OutboxEventRow.next_attempt_at <= now)
+        ) | ((OutboxEventRow.status == "PROCESSING") & (OutboxEventRow.lease_expires_at <= now))
+        statement = (
+            select(OutboxEventRow)
+            .where(due)
+            .order_by(
+                OutboxEventRow.next_attempt_at, OutboxEventRow.occurred_at, OutboxEventRow.event_id
+            )
+            .limit(limit)
+        )
+        if self._session.get_bind().dialect.name == "postgresql":
+            statement = statement.with_for_update(skip_locked=True)
+        rows = (await self._session.execute(statement)).scalars().all()
+        for row in rows:
+            row.status = "PROCESSING"
+            row.claim_owner = worker_id
+            row.lease_expires_at = lease_expires_at
+        await self._session.flush()
+        return [self._to_record(row) for row in rows]
+
+    async def mark_processed(self, event_id: UUID, worker_id: str, now: datetime) -> bool:
+        row = await self._session.get(OutboxEventRow, event_id)
+        if row is None or row.status != "PROCESSING" or row.claim_owner != worker_id:
+            return False
+        row.status = "PROCESSED"
+        row.processed_at = now
+        row.claim_owner = None
+        row.lease_expires_at = None
+        row.last_error = None
+        await self._session.flush()
+        return True
+
+    async def mark_failed(self, event_id: UUID, worker_id: str, now: datetime, error: str) -> str:
+        row = await self._session.get(OutboxEventRow, event_id)
+        if row is None or row.status != "PROCESSING" or row.claim_owner != worker_id:
+            return "LOST_CLAIM"
+        row.attempts += 1
+        row.last_error = error[:1000]
+        row.claim_owner = None
+        row.lease_expires_at = None
+        if row.attempts >= row.max_attempts:
+            row.status = "DEAD_LETTER"
+        else:
+            row.status = "FAILED"
+            row.next_attempt_at = now + timedelta(seconds=min(3600, 2**row.attempts))
+        await self._session.flush()
+        return row.status
+
+    @staticmethod
+    def _to_record(row: OutboxEventRow) -> OutboxRecord:
+        return OutboxRecord(
+            event_id=row.event_id,
+            aggregate_type=row.aggregate_type,
+            aggregate_id=row.aggregate_id,
+            event_type=row.event_type,
+            payload=row.payload,
+            occurred_at=row.occurred_at,
+            processed_at=row.processed_at,
+            attempts=row.attempts,
+            last_error=row.last_error,
+            status=row.status,
+            claim_owner=row.claim_owner,
+            lease_expires_at=row.lease_expires_at,
+            next_attempt_at=row.next_attempt_at,
+            max_attempts=row.max_attempts,
+        )
 
 
 class SqlAlchemyIdempotencyRepository:

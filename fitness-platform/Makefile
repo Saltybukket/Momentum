@@ -7,9 +7,9 @@ ANDROID_SDK_ROOT ?= $(ANDROID_HOME)
 export ANDROID_HOME ANDROID_SDK_ROOT
 endif
 
-.PHONY: help doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup clean openapi smoke
+.PHONY: help doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup outbox-process clean openapi smoke
 help:
-	@printf '%s\n' "doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup clean openapi smoke"
+	@printf '%s\n' "doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup outbox-process clean openapi smoke"
 
 doctor:
 	./scripts/doctor.sh
@@ -61,6 +61,9 @@ idempotency-cleanup:
 
 sync-operation-cleanup:
 	cd backend && uv run python -m fitness_platform.maintenance sync-operation-cleanup
+
+outbox-process:
+	cd backend && uv run python -m fitness_platform.maintenance outbox-process
 
 openapi:
 	cd backend && uv run python ../scripts/export_openapi.py

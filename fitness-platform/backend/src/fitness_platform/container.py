@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from fitness_platform.application.idempotency import IdempotencyService
+from fitness_platform.application.outbox import OutboxProcessor
 from fitness_platform.application.services import (
     CatalogService,
     ExerciseService,
@@ -35,6 +36,7 @@ class AppContainer:
     workouts: WorkoutService
     sync: SyncService
     idempotency: IdempotencyService
+    outbox_processor: OutboxProcessor
 
     @classmethod
     def build(cls, settings: Settings, database: Database | None = None) -> "AppContainer":
@@ -53,7 +55,7 @@ class AppContainer:
             ids=ids,
             event_dispatcher=events,
         )
-        return cls(
+        container = cls(
             settings=settings,
             database=db,
             redis=redis,
@@ -80,4 +82,6 @@ class AppContainer:
                 uow_factory=uow_factory, clock=clock, ids=ids, workouts=workout_service
             ),
             idempotency=IdempotencyService(uow_factory, clock, events),
+            outbox_processor=OutboxProcessor(uow_factory, clock, events),
         )
+        return container

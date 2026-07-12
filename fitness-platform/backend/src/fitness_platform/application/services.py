@@ -157,7 +157,6 @@ class GuestService:
             process_lock.release()
             if not process_lock.locked():
                 self._installation_locks.pop(installation_id, None)
-        await self._events.dispatch(event)
         return profile, token, False
 
 
@@ -243,7 +242,7 @@ class ExerciseService:
         notes: str,
     ) -> Exercise:
         async with self._uow_factory() as uow:
-            result, event = await self.create_in_uow(
+            result, _event = await self.create_in_uow(
                 uow=uow,
                 user_id=user_id,
                 exercise_id=exercise_id,
@@ -255,7 +254,6 @@ class ExerciseService:
                 notes=notes,
             )
             await uow.commit()
-        await self._events.dispatch(event)
         return result
 
     async def create_in_uow(
@@ -402,7 +400,7 @@ class WorkoutService:
         exercise_ids: Sequence[UUID],
     ) -> Workout:
         async with self._uow_factory() as uow:
-            result, event = await self.create_in_uow(
+            result, _event = await self.create_in_uow(
                 uow=uow,
                 user_id=user_id,
                 workout_id=workout_id,
@@ -411,7 +409,6 @@ class WorkoutService:
                 exercise_ids=exercise_ids,
             )
             await uow.commit()
-        await self._events.dispatch(event)
         return result
 
     async def create_in_uow(
@@ -535,10 +532,10 @@ class WorkoutService:
 
     async def start(self, *, user_id: UUID, workout_id: UUID) -> Workout:
         async with self._uow_factory() as uow:
-            result, event = await self.start_in_uow(uow=uow, user_id=user_id, workout_id=workout_id)
+            result, _event = await self.start_in_uow(
+                uow=uow, user_id=user_id, workout_id=workout_id
+            )
             await uow.commit()
-        if event is not None:
-            await self._events.dispatch(event)
         return result
 
     async def start_in_uow(
@@ -574,12 +571,10 @@ class WorkoutService:
 
     async def complete(self, *, user_id: UUID, workout_id: UUID) -> tuple[Workout, bool]:
         async with self._uow_factory() as uow:
-            result, inserted, event = await self.complete_in_uow(
+            result, inserted, _event = await self.complete_in_uow(
                 uow=uow, user_id=user_id, workout_id=workout_id
             )
             await uow.commit()
-        if inserted and event is not None:
-            await self._events.dispatch(event)
         return result, inserted
 
     async def complete_in_uow(
