@@ -123,14 +123,20 @@ class WorkoutWrite(ApiModel):
     id: UUID | None = None
     title: str = Field(min_length=1, max_length=120)
     notes: str = Field(default="", max_length=4000)
-    exercise_ids: list[UUID] = Field(default_factory=list)
-    status: WorkoutStatus | None = None
+    exercise_ids: list[UUID] = Field(default_factory=list, max_length=50)
 
     @field_validator("title")
     @classmethod
     def title_must_not_be_blank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("title must not be blank")
+        return value
+
+    @field_validator("exercise_ids")
+    @classmethod
+    def workout_exercise_ids_are_unique(cls, value: list[UUID]) -> list[UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("exercise_ids must be unique")
         return value
 
 
@@ -204,6 +210,8 @@ class SyncEntityType(StrEnum):
 class SyncAction(StrEnum):
     UPSERT = "UPSERT"
     DELETE = "DELETE"
+    START = "START"
+    COMPLETE = "COMPLETE"
 
 
 def _safe_text(value: str) -> str:
@@ -271,6 +279,10 @@ class WorkoutUpsertSyncPayload(ApiModel):
         return value
 
 
+class WorkoutCommandSyncPayload(ApiModel):
+    id: UUID
+
+
 class ProfileSyncOperation(ApiModel):
     operation_id: UUID
     entity_type: Literal[SyncEntityType.PROFILE]
@@ -299,11 +311,27 @@ class WorkoutUpsertSyncOperation(ApiModel):
     payload: WorkoutUpsertSyncPayload
 
 
+class WorkoutStartSyncOperation(ApiModel):
+    operation_id: UUID
+    entity_type: Literal[SyncEntityType.WORKOUT]
+    action: Literal[SyncAction.START]
+    payload: WorkoutCommandSyncPayload
+
+
+class WorkoutCompleteSyncOperation(ApiModel):
+    operation_id: UUID
+    entity_type: Literal[SyncEntityType.WORKOUT]
+    action: Literal[SyncAction.COMPLETE]
+    payload: WorkoutCommandSyncPayload
+
+
 SyncOperation = (
     ProfileSyncOperation
     | ExerciseUpsertSyncOperation
     | ExerciseDeleteSyncOperation
     | WorkoutUpsertSyncOperation
+    | WorkoutStartSyncOperation
+    | WorkoutCompleteSyncOperation
 )
 
 

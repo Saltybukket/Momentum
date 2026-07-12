@@ -51,3 +51,78 @@ async def test_workout_create_start_complete_emits_event_once(app_client) -> Non
             .where(OutboxEventRow.event_type == "WorkoutCompleted")
         )
     assert count == 1
+
+
+async def _assert_workout_links_update_safely(app_client) -> None:
+    client, _ = app_client
+    token, _ = await create_guest(client)
+    first_id = await _create_exercise(client, token)
+    second_id = await _create_exercise(client, token)
+    auth = {"Authorization": f"Bearer {token}"}
+    created = await client.post(
+        "/api/v1/workouts",
+        headers=auth,
+        json={"title": "Links", "exercise_ids": [first_id]},
+    )
+    workout_id = created.json()["id"]
+    for exercise_ids in (
+        [first_id],
+        [first_id, second_id],
+        [second_id, first_id],
+        [second_id],
+        [],
+    ):
+        updated = await client.put(
+            f"/api/v1/workouts/{workout_id}",
+            headers=auth,
+            json={"title": "Links", "exercise_ids": exercise_ids},
+        )
+        assert updated.status_code == 200, updated.text
+        assert [item["exercise_id"] for item in updated.json()["exercises"]] == exercise_ids
+
+    duplicate = await client.put(
+        f"/api/v1/workouts/{workout_id}",
+        headers=auth,
+        json={"title": "Links", "exercise_ids": [first_id, first_id]},
+    )
+    too_many = await client.put(
+        f"/api/v1/workouts/{workout_id}",
+        headers=auth,
+        json={"title": "Links", "exercise_ids": [first_id] * 51},
+    )
+    status_bypass = await client.put(
+        f"/api/v1/workouts/{workout_id}",
+        headers=auth,
+        json={"title": "Links", "exercise_ids": [], "status": "COMPLETED"},
+    )
+    assert duplicate.status_code == too_many.status_code == status_bypass.status_code == 422
+
+
+async def test_workout_links_update_safely_on_sqlite(app_client) -> None:
+    await _assert_workout_links_update_safely(app_client)
+
+
+async def test_workout_links_update_safely_on_postgresql(postgres_app_client) -> None:
+    await _assert_workout_links_update_safely(postgres_app_client)
+
+
+async def test_workout_completion_requires_start_and_is_terminal(app_client) -> None:
+    client, _ = app_client
+    token, _ = await create_guest(client)
+    auth = {"Authorization": f"Bearer {token}"}
+    created = await client.post("/api/v1/workouts", headers=auth, json={"title": "Lifecycle"})
+    workout_id = created.json()["id"]
+    premature = await client.post(f"/api/v1/workouts/{workout_id}/complete", headers=auth)
+    assert premature.status_code == 409
+    await client.post(f"/api/v1/workouts/{workout_id}/start", headers=auth)
+    completed = await client.post(f"/api/v1/workouts/{workout_id}/complete", headers=auth)
+    assert completed.status_code == 200
+    assert completed.json()["start_time"] is not None
+    assert completed.json()["end_time"] is not None
+    edit = await client.put(
+        f"/api/v1/workouts/{workout_id}",
+        headers=auth,
+        json={"title": "Cannot edit", "exercise_ids": []},
+    )
+    restart = await client.post(f"/api/v1/workouts/{workout_id}/start", headers=auth)
+    assert edit.status_code == restart.status_code == 409

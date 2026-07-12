@@ -302,3 +302,44 @@ async def test_parallel_operation_id_replays_on_postgresql(postgres_app_client) 
     )
     assert all(response.status_code == 200 for response in responses)
     assert len({response.text for response in responses}) == 1
+
+
+async def test_workout_sync_uses_lifecycle_commands(app_client) -> None:
+    client, _ = app_client
+    token, _ = await create_guest(client)
+    workout_id = str(uuid4())
+    auth = {"Authorization": f"Bearer {token}"}
+
+    async def push(action: str, payload: dict[str, object]):
+        return await client.post(
+            "/api/v1/sync/push",
+            headers=auth,
+            json={
+                "operations": [
+                    {
+                        "operation_id": str(uuid4()),
+                        "entity_type": "workout",
+                        "action": action,
+                        "payload": payload,
+                    }
+                ]
+            },
+        )
+
+    created = await push(
+        "UPSERT",
+        {"id": workout_id, "title": "Synced", "notes": "", "exercise_ids": []},
+    )
+    started = await push("START", {"id": workout_id})
+    completed = await push("COMPLETE", {"id": workout_id})
+    unsafe_update = await push(
+        "UPSERT",
+        {"id": workout_id, "title": "Rewrite", "notes": "", "exercise_ids": []},
+    )
+    assert created.status_code == started.status_code == completed.status_code == 200
+    assert unsafe_update.status_code == 409
+    workout = await client.get("/api/v1/workouts", headers=auth)
+    persisted = workout.json()["items"][0]
+    assert persisted["status"] == "COMPLETED"
+    assert persisted["start_time"] is not None
+    assert persisted["end_time"] is not None

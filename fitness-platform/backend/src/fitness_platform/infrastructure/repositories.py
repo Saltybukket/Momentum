@@ -582,6 +582,24 @@ class SqlAlchemyExerciseRepository:
             return None
         return exercise_from_row(row)
 
+    async def owned_active_ids(self, user_id: UUID, exercise_ids: Sequence[UUID]) -> set[UUID]:
+        if not exercise_ids:
+            return set()
+        rows = (
+            (
+                await self._session.execute(
+                    select(ExerciseRow.id).where(
+                        ExerciseRow.owner_user_id == user_id,
+                        ExerciseRow.id.in_(exercise_ids),
+                        ExerciseRow.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return set(rows)
+
     async def upsert(self, exercise: Exercise) -> Exercise:
         row = await self._session.get(ExerciseRow, exercise.id)
         if row is None:
@@ -718,6 +736,7 @@ class SqlAlchemyWorkoutRepository:
             row.updated_at = workout.updated_at
             row.server_updated_at = workout.server_updated_at
             row.exercise_links.clear()
+            await self._session.flush()
 
         row.exercise_links = [
             WorkoutExerciseRow(

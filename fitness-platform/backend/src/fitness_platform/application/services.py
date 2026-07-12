@@ -48,6 +48,8 @@ from fitness_platform.domain.sync import (
     ExerciseUpsertPayload,
     ProfileSyncPayload,
     SyncCommand,
+    WorkoutCompletePayload,
+    WorkoutStartPayload,
     WorkoutUpsertPayload,
 )
 
@@ -367,6 +369,17 @@ class WorkoutService:
         self._ids = ids
         self._events = event_dispatcher
 
+    @staticmethod
+    async def _validate_exercise_ids(
+        uow: UnitOfWork, user_id: UUID, exercise_ids: Sequence[UUID]
+    ) -> None:
+        if len(exercise_ids) > 50:
+            raise ValidationAppError("A workout may contain at most 50 exercises.")
+        if len(set(exercise_ids)) != len(exercise_ids):
+            raise ValidationAppError("Workout exercise identifiers must be unique.")
+        if await uow.exercises.owned_active_ids(user_id, exercise_ids) != set(exercise_ids):
+            raise ValidationAppError("A referenced private exercise is unavailable.")
+
     async def list(self, user_id: UUID) -> Sequence[Workout]:
         async with self._uow_factory() as uow:
             return await uow.workouts.list(user_id)
@@ -435,9 +448,7 @@ class WorkoutService:
         existing = await uow.workouts.get(user_id, new_id)
         if existing is not None:
             raise ConflictError("Workout already exists.")
-        for exercise_id in exercise_ids:
-            if await uow.exercises.get(user_id, exercise_id) is None:
-                raise ValidationAppError(f"Exercise {exercise_id} does not exist.")
+        await self._validate_exercise_ids(uow, user_id, exercise_ids)
         result = await uow.workouts.upsert(workout)
         await uow.outbox.add_event(
             event_id=event.event_id,
@@ -457,103 +468,140 @@ class WorkoutService:
         title: str,
         notes: str,
         exercise_ids: Sequence[UUID],
-        status: WorkoutStatus | None = None,
+    ) -> Workout:
+        async with self._uow_factory() as uow:
+            result = await self.update_in_uow(
+                uow=uow,
+                user_id=user_id,
+                workout_id=workout_id,
+                title=title,
+                notes=notes,
+                exercise_ids=exercise_ids,
+            )
+            await uow.commit()
+            return result
+
+    async def update_in_uow(
+        self,
+        *,
+        uow: UnitOfWork,
+        user_id: UUID,
+        workout_id: UUID,
+        title: str,
+        notes: str,
+        exercise_ids: Sequence[UUID],
     ) -> Workout:
         normalized_title = title.strip()
         if not normalized_title:
             raise ValidationAppError("Workout title must not be empty.")
-        async with self._uow_factory() as uow:
-            existing = await uow.workouts.get(user_id, workout_id)
-            if existing is None:
-                raise NotFoundError("Workout not found.")
-            for exercise_id in exercise_ids:
-                if await uow.exercises.get(user_id, exercise_id) is None:
-                    raise ValidationAppError(f"Exercise {exercise_id} does not exist.")
-            links = [
-                WorkoutExercise(
-                    id=self._ids.new(),
-                    workout_id=workout_id,
-                    exercise_id=exercise_id,
-                    position=position,
-                )
-                for position, exercise_id in enumerate(exercise_ids)
-            ]
-            updated = replace(
-                existing,
-                title=normalized_title,
-                notes=notes.strip(),
-                status=status or existing.status,
-                exercises=links,
-                sync_status=SyncStatus.SYNCED,
-                updated_at=self._clock.now(),
-                server_updated_at=self._clock.now(),
+        existing = await uow.workouts.get(user_id, workout_id)
+        if existing is None:
+            raise NotFoundError("Workout not found.")
+        if existing.status == WorkoutStatus.COMPLETED:
+            raise ConflictError("Completed workouts cannot be edited.")
+        await self._validate_exercise_ids(uow, user_id, exercise_ids)
+        links = [
+            WorkoutExercise(
+                id=self._ids.new(),
+                workout_id=workout_id,
+                exercise_id=exercise_id,
+                position=position,
             )
-            result = await uow.workouts.upsert(updated)
-            await uow.commit()
-            return result
+            for position, exercise_id in enumerate(exercise_ids)
+        ]
+        now = self._clock.now()
+        updated = replace(
+            existing,
+            title=normalized_title,
+            notes=notes.strip(),
+            exercises=links,
+            sync_status=SyncStatus.SYNCED,
+            updated_at=now,
+            server_updated_at=now,
+        )
+        return await uow.workouts.upsert(updated)
 
     async def start(self, *, user_id: UUID, workout_id: UUID) -> Workout:
         async with self._uow_factory() as uow:
-            existing = await uow.workouts.get(user_id, workout_id)
-            if existing is None:
-                raise NotFoundError("Workout not found.")
-            if existing.status == WorkoutStatus.COMPLETED:
-                raise ConflictError("Completed workout cannot be started again.")
-            if existing.status == WorkoutStatus.IN_PROGRESS:
-                return existing
-            now = self._clock.now()
-            updated = replace(
+            result, event = await self.start_in_uow(uow=uow, user_id=user_id, workout_id=workout_id)
+            await uow.commit()
+        if event is not None:
+            await self._events.dispatch(event)
+        return result
+
+    async def start_in_uow(
+        self, *, uow: UnitOfWork, user_id: UUID, workout_id: UUID
+    ) -> tuple[Workout, WorkoutStarted | None]:
+        existing = await uow.workouts.get(user_id, workout_id)
+        if existing is None:
+            raise NotFoundError("Workout not found.")
+        if existing.status == WorkoutStatus.COMPLETED:
+            raise ConflictError("Completed workout cannot be started again.")
+        if existing.status == WorkoutStatus.IN_PROGRESS:
+            return existing, None
+        now = self._clock.now()
+        result = await uow.workouts.upsert(
+            replace(
                 existing,
                 status=WorkoutStatus.IN_PROGRESS,
                 start_time=existing.start_time or now,
                 updated_at=now,
                 server_updated_at=now,
             )
-            result = await uow.workouts.upsert(updated)
-            event = WorkoutStarted(workout_id=workout_id, user_id=user_id)
-            await uow.outbox.add_event(
-                event_id=event.event_id,
-                aggregate_type="workout",
-                aggregate_id=workout_id,
-                event_type=type(event).__name__,
-                payload={"workout_id": str(workout_id), "user_id": str(user_id)},
-                occurred_at=event.occurred_at,
-            )
-            await uow.commit()
-        await self._events.dispatch(event)
-        return result
+        )
+        event = WorkoutStarted(workout_id=workout_id, user_id=user_id)
+        await uow.outbox.add_event(
+            event_id=event.event_id,
+            aggregate_type="workout",
+            aggregate_id=workout_id,
+            event_type=type(event).__name__,
+            payload={"workout_id": str(workout_id), "user_id": str(user_id)},
+            occurred_at=event.occurred_at,
+        )
+        return result, event
 
     async def complete(self, *, user_id: UUID, workout_id: UUID) -> tuple[Workout, bool]:
         async with self._uow_factory() as uow:
-            existing = await uow.workouts.get(user_id, workout_id)
-            if existing is None:
-                raise NotFoundError("Workout not found.")
-            if existing.status == WorkoutStatus.COMPLETED:
-                return existing, False
-            now = self._clock.now()
-            updated = replace(
+            result, inserted, event = await self.complete_in_uow(
+                uow=uow, user_id=user_id, workout_id=workout_id
+            )
+            await uow.commit()
+        if inserted and event is not None:
+            await self._events.dispatch(event)
+        return result, inserted
+
+    async def complete_in_uow(
+        self, *, uow: UnitOfWork, user_id: UUID, workout_id: UUID
+    ) -> tuple[Workout, bool, WorkoutCompleted | None]:
+        existing = await uow.workouts.get(user_id, workout_id)
+        if existing is None:
+            raise NotFoundError("Workout not found.")
+        if existing.status == WorkoutStatus.COMPLETED:
+            return existing, False, None
+        if existing.status != WorkoutStatus.IN_PROGRESS:
+            raise ConflictError("Only an in-progress workout can be completed.")
+        now = self._clock.now()
+        result = await uow.workouts.upsert(
+            replace(
                 existing,
                 status=WorkoutStatus.COMPLETED,
-                start_time=existing.start_time or now,
+                start_time=existing.start_time,
                 end_time=now,
                 updated_at=now,
                 server_updated_at=now,
             )
-            result = await uow.workouts.upsert(updated)
-            event_id = uuid5(NAMESPACE_URL, f"workout-completed:{user_id}:{workout_id}")
-            event = WorkoutCompleted(event_id=event_id, workout_id=workout_id, user_id=user_id)
-            inserted = await uow.outbox.add_event(
-                event_id=event.event_id,
-                aggregate_type="workout",
-                aggregate_id=workout_id,
-                event_type=type(event).__name__,
-                payload={"workout_id": str(workout_id), "user_id": str(user_id)},
-                occurred_at=event.occurred_at,
-            )
-            await uow.commit()
-        if inserted:
-            await self._events.dispatch(event)
-        return result, inserted
+        )
+        event_id = uuid5(NAMESPACE_URL, f"workout-completed:{user_id}:{workout_id}")
+        event = WorkoutCompleted(event_id=event_id, workout_id=workout_id, user_id=user_id)
+        inserted = await uow.outbox.add_event(
+            event_id=event.event_id,
+            aggregate_type="workout",
+            aggregate_id=workout_id,
+            event_type=type(event).__name__,
+            payload={"workout_id": str(workout_id), "user_id": str(user_id)},
+            occurred_at=event.occurred_at,
+        )
+        return result, inserted, event
 
 
 class CatalogService:
@@ -598,10 +646,18 @@ class CatalogService:
 class SyncService:
     """Cursor-based private-exercise synchronization with optimistic revisions."""
 
-    def __init__(self, *, uow_factory: UowFactory, clock: Clock, ids: UuidProvider) -> None:
+    def __init__(
+        self,
+        *,
+        uow_factory: UowFactory,
+        clock: Clock,
+        ids: UuidProvider,
+        workouts: WorkoutService,
+    ) -> None:
         self._uow_factory = uow_factory
         self._clock = clock
         self._ids = ids
+        self._workouts = workouts
 
     async def cleanup_processed_operations(self, batch_limit: int = 500) -> int:
         if not 1 <= batch_limit <= 10_000:
@@ -736,35 +792,32 @@ class SyncService:
                 workout_id = payload.id
                 aggregate_id = workout_id
                 existing_workout = await uow.workouts.get(user_id, workout_id)
-                if existing_workout is None and await uow.workouts.is_id_taken(workout_id):
-                    raise ConflictError("Workout identifier is unavailable.")
-                for exercise_id in payload.exercise_ids:
-                    if await uow.exercises.get(user_id, exercise_id) is None:
-                        raise ValidationAppError("A referenced private exercise is unavailable.")
-                links = [
-                    WorkoutExercise(
-                        id=self._ids.new(),
+                if existing_workout is None:
+                    await self._workouts.create_in_uow(
+                        uow=uow,
+                        user_id=user_id,
                         workout_id=workout_id,
-                        exercise_id=exercise_id,
-                        position=position,
+                        title=payload.title,
+                        notes=payload.notes,
+                        exercise_ids=payload.exercise_ids,
                     )
-                    for position, exercise_id in enumerate(payload.exercise_ids)
-                ]
-                workout = Workout(
-                    id=workout_id,
-                    owner_user_id=user_id,
-                    title=payload.title,
-                    status=existing_workout.status if existing_workout else WorkoutStatus.PLANNED,
-                    start_time=None,
-                    end_time=None,
-                    notes=payload.notes,
-                    sync_status=SyncStatus.SYNCED,
-                    created_at=existing_workout.created_at if existing_workout else now,
-                    updated_at=now,
-                    exercises=links,
-                    server_updated_at=now,
+                else:
+                    await self._workouts.update_in_uow(
+                        uow=uow,
+                        user_id=user_id,
+                        workout_id=workout_id,
+                        title=payload.title,
+                        notes=payload.notes,
+                        exercise_ids=payload.exercise_ids,
+                    )
+            elif isinstance(payload, WorkoutStartPayload):
+                aggregate_id = payload.id
+                await self._workouts.start_in_uow(uow=uow, user_id=user_id, workout_id=payload.id)
+            elif isinstance(payload, WorkoutCompletePayload):
+                aggregate_id = payload.id
+                await self._workouts.complete_in_uow(
+                    uow=uow, user_id=user_id, workout_id=payload.id
                 )
-                await uow.workouts.upsert(workout)
             result: dict[str, object] = {
                 "operation_id": str(operation_id),
                 "aggregate_id": str(aggregate_id),

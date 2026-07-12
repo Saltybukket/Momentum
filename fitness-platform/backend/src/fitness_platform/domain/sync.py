@@ -37,8 +37,23 @@ class WorkoutUpsertPayload:
     exercise_ids: tuple[UUID, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class WorkoutStartPayload:
+    id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class WorkoutCompletePayload:
+    id: UUID
+
+
 SyncPayload = (
-    ProfileSyncPayload | ExerciseUpsertPayload | ExerciseDeletePayload | WorkoutUpsertPayload
+    ProfileSyncPayload
+    | ExerciseUpsertPayload
+    | ExerciseDeletePayload
+    | WorkoutUpsertPayload
+    | WorkoutStartPayload
+    | WorkoutCompletePayload
 )
 
 

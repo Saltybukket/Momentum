@@ -301,7 +301,7 @@ class RoomWorkoutRepository @Inject constructor(
         database.withTransaction {
             workoutDao.insertWorkout(workout.toEntity())
             workoutDao.insertExercises(workout.exercises.map { it.toEntity() })
-            outboxDao.insert(workoutOutbox(workout))
+            outboxDao.insert(workoutOutbox(workout, OutboxOperationType.UPSERT_WORKOUT))
         }
         events.publish(WorkoutCreated(ids.newUuid(), now, workout.id))
         syncEnqueuer.enqueue()
@@ -315,7 +315,7 @@ class RoomWorkoutRepository @Inject constructor(
         val updated = current.copy(status = WorkoutStatus.IN_PROGRESS, startTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
         database.withTransaction {
             workoutDao.updateWorkout(updated.toEntity())
-            outboxDao.insert(workoutOutbox(updated))
+            outboxDao.insert(workoutOutbox(updated, OutboxOperationType.START_WORKOUT))
         }
         events.publish(WorkoutStarted(ids.newUuid(), now, id))
         syncEnqueuer.enqueue()
@@ -330,7 +330,7 @@ class RoomWorkoutRepository @Inject constructor(
         val updated = current.copy(status = WorkoutStatus.COMPLETED, endTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
         database.withTransaction {
             workoutDao.updateWorkout(updated.toEntity())
-            outboxDao.insert(workoutOutbox(updated))
+            outboxDao.insert(workoutOutbox(updated, OutboxOperationType.COMPLETE_WORKOUT))
         }
         val deterministicEventId = UUID.nameUUIDFromBytes("WorkoutCompleted:$id".toByteArray(StandardCharsets.UTF_8)).toString()
         events.publish(WorkoutCompleted(deterministicEventId, now, id))
@@ -338,14 +338,15 @@ class RoomWorkoutRepository @Inject constructor(
         return updated
     }
 
-    private fun workoutOutbox(workout: Workout): OutboxEntity {
+    private fun workoutOutbox(workout: Workout, type: OutboxOperationType): OutboxEntity {
         val payload = buildJsonObject {
             put("id", workout.id)
-            put("title", workout.title)
-            put("status", workout.status.name)
-            put("notes", workout.notes)
-            putJsonArray("exercise_ids") { workout.exercises.sortedBy { it.position }.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.exerciseId)) } }
+            if (type == OutboxOperationType.UPSERT_WORKOUT) {
+                put("title", workout.title)
+                put("notes", workout.notes)
+                putJsonArray("exercise_ids") { workout.exercises.sortedBy { it.position }.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.exerciseId)) } }
+            }
         }.toString()
-        return outboxEntity(ids, clock, workout.id, OutboxOperationType.UPSERT_WORKOUT, payload)
+        return outboxEntity(ids, clock, workout.id, type, payload)
     }
 }

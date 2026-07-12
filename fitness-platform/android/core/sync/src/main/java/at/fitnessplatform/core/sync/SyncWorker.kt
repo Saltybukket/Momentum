@@ -153,6 +153,8 @@ class SyncWorker @AssistedInject constructor(
             OutboxOperationType.UPSERT_EXERCISE -> "exercise" to "UPSERT"
             OutboxOperationType.DELETE_EXERCISE -> "exercise" to "DELETE"
             OutboxOperationType.UPSERT_WORKOUT -> "workout" to "UPSERT"
+            OutboxOperationType.START_WORKOUT -> "workout" to "START"
+            OutboxOperationType.COMPLETE_WORKOUT -> "workout" to "COMPLETE"
         }
         return SyncOperationDto(
             operationId = row.id,
@@ -174,7 +176,11 @@ class SyncWorker @AssistedInject constructor(
                     it.operationType == OutboxOperationType.DELETE_EXERCISE.name
             }.map { it.aggregateId }
             val workouts = successfulRows
-                .filter { it.operationType == OutboxOperationType.UPSERT_WORKOUT.name }
+                .filter {
+                    it.operationType == OutboxOperationType.UPSERT_WORKOUT.name ||
+                        it.operationType == OutboxOperationType.START_WORKOUT.name ||
+                        it.operationType == OutboxOperationType.COMPLETE_WORKOUT.name
+                }
                 .map { it.aggregateId }
             profiles.forEach { profileDao.markSynced(it) }
             if (exercises.isNotEmpty()) exerciseDao.markSynced(exercises)

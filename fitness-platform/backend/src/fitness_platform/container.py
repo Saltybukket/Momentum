@@ -47,6 +47,12 @@ class AppContainer:
         def uow_factory() -> UnitOfWork:
             return cast(UnitOfWork, SqlAlchemyUnitOfWork(db.session_factory))
 
+        workout_service = WorkoutService(
+            uow_factory=uow_factory,
+            clock=clock,
+            ids=ids,
+            event_dispatcher=events,
+        )
         return cls(
             settings=settings,
             database=db,
@@ -69,12 +75,9 @@ class AppContainer:
                 event_dispatcher=events,
             ),
             catalog=CatalogService(uow_factory=uow_factory),
-            workouts=WorkoutService(
-                uow_factory=uow_factory,
-                clock=clock,
-                ids=ids,
-                event_dispatcher=events,
+            workouts=workout_service,
+            sync=SyncService(
+                uow_factory=uow_factory, clock=clock, ids=ids, workouts=workout_service
             ),
-            sync=SyncService(uow_factory=uow_factory, clock=clock, ids=ids),
             idempotency=IdempotencyService(uow_factory, clock, events),
         )

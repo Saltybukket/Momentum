@@ -118,7 +118,9 @@ data class Workout(
     val conflictVersion: Long? = null,
 )
 
-enum class OutboxOperationType { UPSERT_PROFILE, UPSERT_EXERCISE, DELETE_EXERCISE, UPSERT_WORKOUT }
+enum class OutboxOperationType {
+    UPSERT_PROFILE, UPSERT_EXERCISE, DELETE_EXERCISE, UPSERT_WORKOUT, START_WORKOUT, COMPLETE_WORKOUT,
+}
 
 data class OutboxOperation(
     val id: String,

@@ -883,6 +883,12 @@
                 },
                 {
                   "$ref": "#/components/schemas/WorkoutUpsertSyncOperation"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkoutStartSyncOperation"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkoutCompleteSyncOperation"
                 }
               ]
             },
@@ -1037,6 +1043,52 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WorkoutCommandSyncPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "WorkoutCommandSyncPayload",
+        "type": "object"
+      },
+      "WorkoutCompleteSyncOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "COMPLETE",
+            "title": "Action",
+            "type": "string"
+          },
+          "entity_type": {
+            "const": "workout",
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkoutCommandSyncPayload"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_type",
+          "action",
+          "payload"
+        ],
+        "title": "WorkoutCompleteSyncOperation",
+        "type": "object"
+      },
       "WorkoutExerciseResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1182,6 +1234,37 @@
         "title": "WorkoutResponse",
         "type": "object"
       },
+      "WorkoutStartSyncOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "START",
+            "title": "Action",
+            "type": "string"
+          },
+          "entity_type": {
+            "const": "workout",
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkoutCommandSyncPayload"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_type",
+          "action",
+          "payload"
+        ],
+        "title": "WorkoutStartSyncOperation",
+        "type": "object"
+      },
       "WorkoutStatus": {
         "enum": [
           "PLANNED",
@@ -1269,6 +1352,7 @@
               "format": "uuid",
               "type": "string"
             },
+            "maxItems": 50,
             "title": "Exercise Ids",
             "type": "array"
           },
@@ -1289,16 +1373,6 @@
             "maxLength": 4000,
             "title": "Notes",
             "type": "string"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WorkoutStatus"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "title": {
             "maxLength": 120,

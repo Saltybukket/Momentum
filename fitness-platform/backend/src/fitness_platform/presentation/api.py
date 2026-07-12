@@ -16,6 +16,8 @@ from fitness_platform.domain.sync import (
     ExerciseUpsertPayload,
     SyncCommand,
     SyncPayload,
+    WorkoutCompletePayload,
+    WorkoutStartPayload,
     WorkoutUpsertPayload,
 )
 from fitness_platform.domain.sync import (
@@ -44,6 +46,7 @@ from fitness_platform.presentation.schemas import (
     SyncPushRequest,
     SyncPushResponse,
     SyncResult,
+    WorkoutCommandSyncPayload,
     WorkoutPage,
     WorkoutResponse,
     WorkoutUpsertSyncPayload,
@@ -398,7 +401,6 @@ async def update_workout(
         title=payload.title,
         notes=payload.notes,
         exercise_ids=payload.exercise_ids,
-        status=payload.status,
     )
     return WorkoutResponse.from_domain(workout)
 
@@ -468,6 +470,11 @@ async def sync_push(
                 domain_payload = WorkoutUpsertPayload(
                     raw.id, raw.title, raw.notes, tuple(raw.exercise_ids)
                 )
+            elif isinstance(raw, WorkoutCommandSyncPayload):
+                if item.action.value == "START":
+                    domain_payload = WorkoutStartPayload(raw.id)
+                else:
+                    domain_payload = WorkoutCompletePayload(raw.id)
             else:  # pragma: no cover - closed Pydantic union
                 raise AssertionError("Unsupported validated sync payload")
             commands.append(SyncCommand(item.operation_id, domain_payload))
