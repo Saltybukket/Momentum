@@ -136,4 +136,7 @@ private class FakeDomainEventDispatcher : DomainEventDispatcher {
     override suspend fun publish(event: DomainEvent) = Unit
     override fun <T : DomainEvent> register(type: Class<T>, handler: DomainEventHandler<T>) = Unit
 }
-private class FakeSyncEnqueuer : SyncEnqueuer { override fun enqueue() = Unit }
+private class FakeSyncEnqueuer : SyncEnqueuer {
+    override fun enqueue() = Unit
+    override fun cancel() = Unit
+}

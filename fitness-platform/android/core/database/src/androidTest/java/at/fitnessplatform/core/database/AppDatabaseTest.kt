@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -113,6 +114,23 @@ class AppDatabaseTest {
         context.deleteDatabase(migrationName)
     }
 
+    @Test fun migrationFourToFiveResetsRoomSyncCursor() = runTest {
+        val migrationName = "sync-state-migration.db"
+        migrationHelper.createDatabase(migrationName, 4).close()
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            migrationName,
+            5,
+            true,
+            MIGRATION_4_5,
+        )
+        migrated.query("SELECT exerciseCursor FROM sync_state WHERE singletonId = 1").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals(0L, cursor.getLong(0))
+        }
+        migrated.close()
+        context.deleteDatabase(migrationName)
+    }
+
     @Test fun outboxClaimsAreExclusiveAndStaleClaimsAreReclaimed() = runTest {
         val row = OutboxEntity("lease-1", "aggregate", "UPSERT_PROFILE", "{}", 1, "PENDING", 0, null)
         database.outboxDao().insert(row)
@@ -123,5 +141,53 @@ class AppDatabaseTest {
         assertEquals(0, activeSecond.size)
         assertEquals(listOf("lease-1"), reclaimed.map { it.id })
         assertEquals("worker-b", reclaimed.single().claimOwner)
+    }
+
+    @Test fun syncCursorCommitsWithPageAndRollsBackWithPage() = runTest {
+        database.guestProfileDao().insert(GuestProfile("p1", "Guest", 1).toEntity())
+        runCatching {
+            database.withTransaction {
+                database.exerciseDao().insert(
+                    CustomExercise(
+                        "rolled-back",
+                        "p1",
+                        "Remote",
+                        "",
+                        "Legs",
+                        "None",
+                        TrackingType.REPS,
+                        "",
+                        1,
+                        1,
+                        syncStatus = SyncStatus.SYNCED,
+                    ).toEntity(),
+                )
+                database.syncStateDao().put(SyncStateEntity(exerciseCursor = 9, updatedAtEpochMs = 2))
+                error("simulated process boundary")
+            }
+        }
+        assertNull(database.exerciseDao().get("rolled-back"))
+        assertEquals(0L, database.syncStateDao().exerciseCursor())
+
+        database.withTransaction {
+            database.exerciseDao().insert(
+                CustomExercise(
+                    "committed",
+                    "p1",
+                    "Remote",
+                    "",
+                    "Legs",
+                    "None",
+                    TrackingType.REPS,
+                    "",
+                    1,
+                    1,
+                    syncStatus = SyncStatus.SYNCED,
+                ).toEntity(),
+            )
+            database.syncStateDao().put(SyncStateEntity(exerciseCursor = 9, updatedAtEpochMs = 2))
+        }
+        assertNotNull(database.exerciseDao().get("committed"))
+        assertEquals(9L, database.syncStateDao().exerciseCursor())
     }
 }

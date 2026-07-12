@@ -42,11 +42,13 @@ private fun outboxEntity(
 class RoomSyncPreferencesRepository @Inject constructor(
     private val sessionStore: GuestSessionStore,
     private val outboxDao: OutboxDao,
+    private val syncEnqueuer: SyncEnqueuer,
 ) : SyncPreferencesRepository {
     override fun observeEnabled() = sessionStore.syncEnabled
     override fun observePendingCount() = outboxDao.observePendingCount()
     override suspend fun setEnabled(enabled: Boolean) {
         sessionStore.setSyncEnabled(enabled)
+        if (enabled) syncEnqueuer.enqueue() else syncEnqueuer.cancel()
     }
 }
 

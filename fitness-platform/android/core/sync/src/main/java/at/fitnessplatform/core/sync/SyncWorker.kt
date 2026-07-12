@@ -14,6 +14,8 @@ import at.fitnessplatform.core.database.GuestProfileDao
 import at.fitnessplatform.core.database.GuestProfileEntity
 import at.fitnessplatform.core.database.OutboxDao
 import at.fitnessplatform.core.database.OutboxEntity
+import at.fitnessplatform.core.database.SyncStateDao
+import at.fitnessplatform.core.database.SyncStateEntity
 import at.fitnessplatform.core.database.WorkoutDao
 import at.fitnessplatform.core.database.toConflictSnapshot
 import at.fitnessplatform.core.datastore.GuestSessionStore
@@ -47,6 +49,7 @@ class SyncWorker @AssistedInject constructor(
     private val exerciseDao: ExerciseDao,
     private val conflictDao: ExerciseConflictDao,
     private val workoutDao: WorkoutDao,
+    private val syncStateDao: SyncStateDao,
     private val sessionStore: GuestSessionStore,
     private val api: FitnessApi,
     private val json: Json,
@@ -76,7 +79,9 @@ class SyncWorker @AssistedInject constructor(
         pending: List<OutboxEntity>,
         ids: List<String>,
     ): Result = try {
+        if (!sessionStore.isSyncEnabled()) return Result.success()
         val token = tokenFor(profile)
+        if (!sessionStore.isSyncEnabled()) return Result.success()
         val operations = pending.map(::toSyncOperation)
         val batchKey = UUID.nameUUIDFromBytes(
             pending.joinToString("|") { it.id }.toByteArray(StandardCharsets.UTF_8),
@@ -85,29 +90,41 @@ class SyncWorker @AssistedInject constructor(
         markSuccessful(pending, response.results.filter { it.status == "SYNCED" }.map { it.operationId }.toSet())
         val conflicts = response.results.filter { it.status == "CONFLICT" }
         if (conflicts.isNotEmpty()) recordConflicts(conflicts)
-        pullExercises(token)
+        if (sessionStore.isSyncEnabled()) pullExercises(token)
         Result.success()
     } catch (exception: Exception) {
-        outboxDao.markFailed(ids, exception.message?.take(500) ?: exception::class.java.simpleName)
+        resetRejectedCredential(exception)
+        outboxDao.markFailed(ids, safeErrorCode(exception))
         if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
     }
 
     private suspend fun pullOnly(): Result = try {
+        if (!sessionStore.isSyncEnabled()) return Result.success()
         val profile = profileDao.get() ?: return Result.success()
-        pullExercises(tokenFor(profile))
+        val token = tokenFor(profile)
+        if (sessionStore.isSyncEnabled()) pullExercises(token)
         Result.success()
     } catch (exception: Exception) {
+        resetRejectedCredential(exception)
         if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
     }
 
     private suspend fun pullExercises(token: String) {
-        var cursor = sessionStore.exerciseCursor()
+        var cursor = syncStateDao.exerciseCursor()
         do {
+            if (!sessionStore.isSyncEnabled()) return
             val page = api.pullExercises("Bearer $token", cursor)
+            if (!sessionStore.isSyncEnabled()) return
             database.withTransaction {
                 for (change in page.changes) applyRemoteChange(change)
-                sessionStore.saveExerciseCursor(page.nextCursor)
+                syncStateDao.put(
+                    SyncStateEntity(
+                        exerciseCursor = page.nextCursor,
+                        updatedAtEpochMs = clock.nowEpochMs(),
+                    ),
+                )
             }
+            sessionStore.clearLegacyExerciseCursor()
             cursor = page.nextCursor
         } while (page.hasMore)
     }
@@ -136,8 +153,11 @@ class SyncWorker @AssistedInject constructor(
         )
     }
 
-    private suspend fun tokenFor(profile: GuestProfileEntity): String = sessionStore.tokenOrNull()
+    private suspend fun tokenFor(profile: GuestProfileEntity): String {
+        check(sessionStore.isSyncEnabled()) { "PRIVATE_SYNC_DISABLED" }
+        return sessionStore.tokenOrNull()
         ?: sessionStore.bootstrapCredentials().let { (installationId, recoverySecret) ->
+            check(sessionStore.isSyncEnabled()) { "PRIVATE_SYNC_DISABLED" }
             api.createGuestSession(
                 request = GuestSessionRequest(profile.displayName, installationId, recoverySecret),
             )
@@ -146,6 +166,20 @@ class SyncWorker @AssistedInject constructor(
             profileDao.markSynced(profile.id, session.profile.userId)
             session.guestToken
         }
+    }
+
+    private fun safeErrorCode(exception: Exception): String = when {
+        exception.message == "PRIVATE_SYNC_DISABLED" -> "PRIVATE_SYNC_DISABLED"
+        exception is retrofit2.HttpException && exception.code() in setOf(401, 403) -> "AUTH_REJECTED"
+        exception is java.io.IOException -> "NETWORK_TRANSIENT"
+        else -> "SYNC_FAILED"
+    }
+
+    private suspend fun resetRejectedCredential(exception: Exception) {
+        if (exception is retrofit2.HttpException && exception.code() in setOf(401, 403)) {
+            sessionStore.clearCredentials()
+        }
+    }
 
     private fun toSyncOperation(row: OutboxEntity): SyncOperationDto {
         val (entity, action) = when (OutboxOperationType.valueOf(row.operationType)) {

@@ -183,3 +183,15 @@ interface CatalogDao {
     @Query("DELETE FROM catalog_equipment") suspend fun deleteEquipment()
     @Query("DELETE FROM catalog_metadata") suspend fun deleteMetadata()
 }
+
+@Dao
+interface SyncStateDao {
+    @Query("SELECT * FROM sync_state WHERE singletonId = 1")
+    suspend fun get(): SyncStateEntity?
+
+    @Query("SELECT COALESCE((SELECT exerciseCursor FROM sync_state WHERE singletonId = 1), 0)")
+    suspend fun exerciseCursor(): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(state: SyncStateEntity)
+}

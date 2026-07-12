@@ -70,4 +70,7 @@ interface DomainEventDispatcher {
     fun <T : DomainEvent> register(type: Class<T>, handler: DomainEventHandler<T>)
 }
 
-fun interface SyncEnqueuer { fun enqueue() }
+interface SyncEnqueuer {
+    fun enqueue()
+    fun cancel()
+}

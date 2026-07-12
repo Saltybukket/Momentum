@@ -27,8 +27,9 @@ import javax.inject.Singleton
         CatalogExerciseMuscleEntity::class,
         CatalogExerciseEquipmentEntity::class,
         CatalogMetadataEntity::class,
+        SyncStateEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,6 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun outboxDao(): OutboxDao
     abstract fun exerciseConflictDao(): ExerciseConflictDao
     abstract fun catalogDao(): CatalogDao
+    abstract fun syncStateDao(): SyncStateDao
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -104,6 +106,22 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS `sync_state` " +
+                "(`singletonId` INTEGER NOT NULL, `exerciseCursor` INTEGER NOT NULL, " +
+                "`updatedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`singletonId`))",
+        )
+        // The legacy DataStore cursor may be ahead of committed Room data. A full,
+        // idempotent replay is the only checkpoint that cannot skip remote changes.
+        database.execSQL(
+            "INSERT OR REPLACE INTO `sync_state` " +
+                "(`singletonId`, `exerciseCursor`, `updatedAtEpochMs`) VALUES (1, 0, 0)",
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -111,7 +129,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "fitness-platform.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
@@ -121,4 +139,5 @@ object DatabaseModule {
     @Provides fun provideOutboxDao(db: AppDatabase): OutboxDao = db.outboxDao()
     @Provides fun provideExerciseConflictDao(db: AppDatabase): ExerciseConflictDao = db.exerciseConflictDao()
     @Provides fun provideCatalogDao(db: AppDatabase): CatalogDao = db.catalogDao()
+    @Provides fun provideSyncStateDao(db: AppDatabase): SyncStateDao = db.syncStateDao()
 }

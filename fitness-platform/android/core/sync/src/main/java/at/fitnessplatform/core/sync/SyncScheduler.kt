@@ -28,6 +28,10 @@ class SyncScheduler @Inject constructor(@ApplicationContext private val context:
         )
     }
 
+    override fun cancel() {
+        WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_NAME)
+    }
+
     private companion object { const val UNIQUE_NAME = "fitness-platform-outbox-sync" }
 }
 

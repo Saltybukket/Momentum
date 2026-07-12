@@ -185,3 +185,10 @@ data class CatalogMetadataEntity(
     val retrievedAtEpochMs: Long,
     val source: String,
 )
+
+@Entity(tableName = "sync_state")
+data class SyncStateEntity(
+    @PrimaryKey val singletonId: Int = 1,
+    val exerciseCursor: Long = 0,
+    val updatedAtEpochMs: Long,
+)
