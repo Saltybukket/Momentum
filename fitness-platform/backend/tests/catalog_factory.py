@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from fitness_platform.domain.enums import CatalogStatus, MuscleRole, TrackingType
-from fitness_platform.domain.models import CatalogExercise
+from fitness_platform.domain.models import CatalogExercise, CatalogRelease
 from fitness_platform.infrastructure.repositories import SqlAlchemyCatalogRepository
 
 
@@ -40,3 +40,21 @@ async def persist_catalog_exercise(container, exercise: CatalogExercise) -> Cata
         result = await SqlAlchemyCatalogRepository(session).upsert(exercise)
         await session.commit()
         return result
+
+
+async def persist_catalog_release(container, exercise_count: int) -> CatalogRelease:
+    release = CatalogRelease(
+        schema_version="1",
+        catalog_version="test-release-v1",
+        content_hash="sha256:" + "a" * 64,
+        published_at=datetime(2026, 7, 12, tzinfo=UTC),
+        batch_id="test-release-v1",
+        sources=["momentum-demo"],
+        licenses=["CC0-1.0"],
+        exercise_count=exercise_count,
+        status="PUBLISHED",
+    )
+    async with container.database.session_factory() as session:
+        await SqlAlchemyCatalogRepository(session).upsert_release(release)
+        await session.commit()
+    return release

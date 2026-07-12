@@ -35,6 +35,19 @@ class CatalogExercise:
 
 
 @dataclass(slots=True)
+class CatalogRelease:
+    schema_version: str
+    catalog_version: str
+    content_hash: str
+    published_at: datetime
+    batch_id: str
+    sources: list[str]
+    licenses: list[str]
+    exercise_count: int
+    status: str
+
+
+@dataclass(slots=True)
 class User:
     id: UUID
     kind: UserKind

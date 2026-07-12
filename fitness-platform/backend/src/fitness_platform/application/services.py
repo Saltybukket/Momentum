@@ -33,6 +33,7 @@ from fitness_platform.domain.events import (
 )
 from fitness_platform.domain.models import (
     CatalogExercise,
+    CatalogRelease,
     Exercise,
     GuestSession,
     Profile,
@@ -555,11 +556,19 @@ class CatalogService:
         muscle: str | None,
         equipment: str | None,
         query: str | None = None,
-        limit: int = 100,
+        limit: int | None = 100,
         offset: int = 0,
     ) -> Sequence[CatalogExercise]:
         async with self._uow_factory() as uow:
             return await uow.catalog.list(muscle, equipment, query, limit, offset)
+
+    async def count(self, muscle: str | None, equipment: str | None, query: str | None) -> int:
+        async with self._uow_factory() as uow:
+            return await uow.catalog.count(muscle, equipment, query)
+
+    async def release(self) -> CatalogRelease | None:
+        async with self._uow_factory() as uow:
+            return await uow.catalog.get_release()
 
     async def get(self, exercise_id: UUID) -> CatalogExercise:
         async with self._uow_factory() as uow:

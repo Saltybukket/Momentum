@@ -1,6 +1,3 @@
-import hashlib
-import json
-from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -9,12 +6,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from fitness_platform.core.errors import NotFoundError
 from fitness_platform.core.security import request_fingerprint
 from fitness_platform.domain.events import DomainEvent
 from fitness_platform.domain.models import Exercise
 from fitness_platform.domain.ports import UnitOfWork
 from fitness_platform.presentation.dependencies import ContainerDep, CurrentUserId
 from fitness_platform.presentation.schemas import (
+    CatalogExercisePage,
     CatalogExerciseResponse,
     CatalogFacetResponse,
     CatalogSnapshotResponse,
@@ -40,9 +39,7 @@ from fitness_platform.presentation.schemas import (
 router = APIRouter()
 
 
-@router.get(
-    "/api/v1/catalog/exercises", response_model=list[CatalogExerciseResponse], tags=["catalog"]
-)
+@router.get("/api/v1/catalog/exercises", response_model=CatalogExercisePage, tags=["catalog"])
 async def list_catalog_exercises(
     container: ContainerDep,
     muscle: str | None = None,
@@ -50,16 +47,21 @@ async def list_catalog_exercises(
     q: Annotated[str | None, Query(max_length=120)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[CatalogExerciseResponse]:
-    return [
+) -> CatalogExercisePage:
+    items = [
         CatalogExerciseResponse.from_domain(item)
         for item in await container.catalog.list(muscle, equipment, q, limit, offset)
     ]
+    total = await container.catalog.count(muscle, equipment, q)
+    return CatalogExercisePage(items=items, page=PageMeta(limit=limit, offset=offset, total=total))
 
 
 @router.get("/api/v1/catalog/snapshot", response_model=CatalogSnapshotResponse, tags=["catalog"])
 async def get_catalog_snapshot(request: Request, container: ContainerDep) -> Response:
-    exercises = list(await container.catalog.list(None, None, None, 100, 0))
+    release = await container.catalog.release()
+    if release is None:
+        raise NotFoundError("No published catalog release is available.")
+    exercises = list(await container.catalog.list(None, None, None, None, 0))
     muscles = [
         CatalogFacetResponse(slug=slug, name=name)
         for slug, name in await container.catalog.muscles()
@@ -69,20 +71,21 @@ async def get_catalog_snapshot(request: Request, container: ContainerDep) -> Res
         for slug, name in await container.catalog.equipment()
     ]
     exercise_payload = [CatalogExerciseResponse.from_domain(item) for item in exercises]
-    hash_payload = {
-        "schema_version": "1",
-        "catalog_version": max((item.version for item in exercises), default="empty"),
-        "muscles": [item.model_dump(mode="json") for item in muscles],
-        "equipment": [item.model_dump(mode="json") for item in equipment],
-        "exercises": [item.model_dump(mode="json") for item in exercise_payload],
-    }
-    content_hash = hashlib.sha256(json.dumps(hash_payload, sort_keys=True).encode()).hexdigest()
-    etag = f'"{content_hash}"'
+    etag = f'"{release.content_hash.removeprefix("sha256:")}"'
     if request.headers.get("If-None-Match") == etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
-    published_at = max((item.updated_at for item in exercises), default=datetime.now(UTC))
     body = CatalogSnapshotResponse(
-        **hash_payload, content_hash=f"sha256:{content_hash}", published_at=published_at
+        schema_version=release.schema_version,
+        catalog_version=release.catalog_version,
+        content_hash=release.content_hash,
+        published_at=release.published_at,
+        batch_id=release.batch_id,
+        total=len(exercises),
+        sources=release.sources,
+        licenses=release.licenses,
+        muscles=muscles,
+        equipment=equipment,
+        exercises=exercise_payload,
     )
     return JSONResponse(content=body.model_dump(mode="json"), headers={"ETag": etag})
 

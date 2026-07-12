@@ -1,6 +1,27 @@
 {
   "components": {
     "schemas": {
+      "CatalogExercisePage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogExerciseResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "CatalogExercisePage",
+        "type": "object"
+      },
       "CatalogExerciseResponse": {
         "additionalProperties": false,
         "properties": {
@@ -127,9 +148,18 @@
       "CatalogSnapshotResponse": {
         "additionalProperties": false,
         "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
           "catalog_version": {
             "title": "Catalog Version",
             "type": "string"
+          },
+          "complete": {
+            "default": true,
+            "title": "Complete",
+            "type": "boolean"
           },
           "content_hash": {
             "title": "Content Hash",
@@ -149,6 +179,13 @@
             "title": "Exercises",
             "type": "array"
           },
+          "licenses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Licenses",
+            "type": "array"
+          },
           "muscles": {
             "items": {
               "$ref": "#/components/schemas/CatalogFacetResponse"
@@ -164,6 +201,17 @@
           "schema_version": {
             "title": "Schema Version",
             "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
           }
         },
         "required": [
@@ -171,6 +219,10 @@
           "catalog_version",
           "content_hash",
           "published_at",
+          "batch_id",
+          "total",
+          "sources",
+          "licenses",
           "muscles",
           "equipment",
           "exercises"
@@ -1143,11 +1195,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/CatalogExerciseResponse"
-                  },
-                  "title": "Response List Catalog Exercises Api V1 Catalog Exercises Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/CatalogExercisePage"
                 }
               }
             },

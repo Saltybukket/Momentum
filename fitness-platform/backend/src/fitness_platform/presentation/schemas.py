@@ -284,11 +284,21 @@ class CatalogFacetResponse(ApiModel):
     name: str
 
 
+class CatalogExercisePage(ApiModel):
+    items: list[CatalogExerciseResponse]
+    page: PageMeta
+
+
 class CatalogSnapshotResponse(ApiModel):
     schema_version: str
     catalog_version: str
     content_hash: str
     published_at: datetime
+    batch_id: str
+    total: int
+    complete: bool = True
+    sources: list[str]
+    licenses: list[str]
     muscles: list[CatalogFacetResponse]
     equipment: list[CatalogFacetResponse]
     exercises: list[CatalogExerciseResponse]

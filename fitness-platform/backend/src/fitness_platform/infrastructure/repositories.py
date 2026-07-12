@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from fitness_platform.domain.enums import CatalogStatus, MuscleRole, UserKind
 from fitness_platform.domain.models import (
     CatalogExercise,
+    CatalogRelease,
     Exercise,
     GuestSession,
     Profile,
@@ -21,6 +22,7 @@ from fitness_platform.infrastructure.orm import (
     CatalogExerciseEquipmentRow,
     CatalogExerciseMuscleRow,
     CatalogExerciseRow,
+    CatalogReleaseRow,
     EquipmentRow,
     ExerciseChangeRow,
     ExerciseRow,
@@ -44,7 +46,7 @@ class SqlAlchemyCatalogRepository:
         muscle: str | None,
         equipment: str | None,
         query: str | None = None,
-        limit: int = 100,
+        limit: int | None = 100,
         offset: int = 0,
     ) -> Sequence[CatalogExercise]:
         statement = select(CatalogExerciseRow).where(
@@ -65,11 +67,11 @@ class SqlAlchemyCatalogRepository:
             )
         if query:
             statement = statement.where(CatalogExerciseRow.name.ilike(f"%{query.strip()}%"))
-        statement = (
-            statement.order_by(CatalogExerciseRow.name, CatalogExerciseRow.id)
-            .limit(limit)
-            .offset(offset)
+        statement = statement.order_by(CatalogExerciseRow.name, CatalogExerciseRow.id).offset(
+            offset
         )
+        if limit is not None:
+            statement = statement.limit(limit)
         rows = (await self._session.execute(statement.distinct())).scalars().all()
         if not rows:
             return []
@@ -101,6 +103,71 @@ class SqlAlchemyCatalogRepository:
         return [
             self._row_to_model(row, muscles_by_id[row.id], equipment_by_id[row.id]) for row in rows
         ]
+
+    async def count(self, muscle: str | None, equipment: str | None, query: str | None) -> int:
+        statement = select(func.count(func.distinct(CatalogExerciseRow.id))).where(
+            CatalogExerciseRow.status == CatalogStatus.PUBLISHED,
+            CatalogExerciseRow.reviewed.is_(True),
+        )
+        if muscle:
+            statement = (
+                statement.join(CatalogExerciseMuscleRow)
+                .join(MuscleRow)
+                .where(MuscleRow.slug == muscle)
+            )
+        if equipment:
+            statement = (
+                statement.join(CatalogExerciseEquipmentRow)
+                .join(EquipmentRow)
+                .where(EquipmentRow.slug == equipment)
+            )
+        if query:
+            statement = statement.where(CatalogExerciseRow.name.ilike(f"%{query.strip()}%"))
+        return int((await self._session.scalar(statement)) or 0)
+
+    async def get_release(self) -> CatalogRelease | None:
+        row = (
+            await self._session.execute(
+                select(CatalogReleaseRow)
+                .where(CatalogReleaseRow.status == "PUBLISHED")
+                .order_by(CatalogReleaseRow.published_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return self._release_from_row(row) if row else None
+
+    async def upsert_release(self, release: CatalogRelease) -> None:
+        row = await self._session.get(CatalogReleaseRow, release.catalog_version)
+        values = {
+            "schema_version": release.schema_version,
+            "content_hash": release.content_hash,
+            "published_at": release.published_at,
+            "batch_id": release.batch_id,
+            "sources": release.sources,
+            "licenses": release.licenses,
+            "exercise_count": release.exercise_count,
+            "status": release.status,
+        }
+        if row is None:
+            self._session.add(CatalogReleaseRow(catalog_version=release.catalog_version, **values))
+        else:
+            for key, value in values.items():
+                setattr(row, key, value)
+        await self._session.flush()
+
+    @staticmethod
+    def _release_from_row(row: CatalogReleaseRow) -> CatalogRelease:
+        return CatalogRelease(
+            schema_version=row.schema_version,
+            catalog_version=row.catalog_version,
+            content_hash=row.content_hash,
+            published_at=row.published_at,
+            batch_id=row.batch_id,
+            sources=list(row.sources),
+            licenses=list(row.licenses),
+            exercise_count=row.exercise_count,
+            status=row.status,
+        )
 
     async def get(self, exercise_id: UUID) -> CatalogExercise | None:
         row = await self._session.get(CatalogExerciseRow, exercise_id)

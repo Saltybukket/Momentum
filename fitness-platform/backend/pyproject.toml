@@ -22,6 +22,7 @@ dependencies = [
   "redis>=6.2,<7",
   "structlog>=25.4,<26",
   "python-json-logger>=3.3,<4",
+  "jsonschema>=4.26.0",
 ]
 
 [project.optional-dependencies]
@@ -91,3 +92,8 @@ exclude = ["alembic/versions"]
 [[tool.mypy.overrides]]
 module = ["redis.*"]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "types-jsonschema>=4.26.0.20260518",
+]

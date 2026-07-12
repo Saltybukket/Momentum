@@ -150,6 +150,23 @@ class CatalogExerciseRow(Base):
     )
 
 
+class CatalogReleaseRow(Base):
+    __tablename__ = "catalog_releases"
+    __table_args__ = (
+        CheckConstraint("status IN ('PUBLISHED','RETIRED')", name="ck_catalog_release_status"),
+    )
+
+    catalog_version: Mapped[str] = mapped_column(String(80), primary_key=True)
+    schema_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(71), nullable=False, unique=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    batch_id: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    sources: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    licenses: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    exercise_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
 class MuscleRow(Base):
     __tablename__ = "muscles"
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)

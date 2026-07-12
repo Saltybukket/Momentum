@@ -1,21 +1,30 @@
 import json
 from copy import deepcopy
 from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 from sqlalchemy import select
 
-from fitness_platform.catalog_import import CatalogImportError, import_catalog
+from fitness_platform.catalog_import import (
+    CatalogImportError,
+    canonical_release_hash,
+    import_catalog,
+)
 from fitness_platform.infrastructure.orm import CatalogExerciseRow, EquipmentRow
 
 
 def demo_document() -> dict[str, object]:
     return {
+        "schema_version": "1",
+        "catalog_version": "test-v1",
+        "published_at": "2026-07-12T00:00:00Z",
         "batch_id": "test-v1",
         "muscles": [{"slug": "legs", "name": "Legs"}],
         "equipment": [{"slug": "none", "name": "No equipment"}],
         "exercises": [
             {
+                "id": str(uuid5(NAMESPACE_URL, "momentum-catalog:test:squat")),
                 "source": "test",
                 "external_id": "squat",
                 "provenance": "Self-authored test fixture.",
@@ -25,6 +34,7 @@ def demo_document() -> dict[str, object]:
                 "status": "PUBLISHED",
                 "reviewed": True,
                 "name": "Squat",
+                "description": "Self-authored test fixture.",
                 "tracking_type": "REPS",
                 "muscles": [{"slug": "legs", "role": "PRIMARY"}],
                 "equipment": ["none"],
@@ -35,6 +45,7 @@ def demo_document() -> dict[str, object]:
 
 def write_document(tmp_path: Path, document: dict[str, object]) -> Path:
     path = tmp_path / "catalog.json"
+    document["content_hash"] = canonical_release_hash(document)
     path.write_text(json.dumps(document), encoding="utf-8")
     return path
 
@@ -93,4 +104,4 @@ async def test_draft_or_unreviewed_entries_are_imported_but_not_public(
     document["exercises"][0].update(status="DRAFT", reviewed=False)  # type: ignore[index]
     result = await import_catalog(container, write_document(tmp_path, document))
     assert result["created"] == 1
-    assert (await client.get("/api/v1/catalog/exercises")).json() == []
+    assert (await client.get("/api/v1/catalog/exercises")).json()["items"] == []

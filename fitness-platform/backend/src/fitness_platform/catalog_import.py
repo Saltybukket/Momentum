@@ -1,20 +1,37 @@
 import argparse
 import asyncio
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import ValidationError
+
 from fitness_platform.container import AppContainer
 from fitness_platform.core.config import get_settings
 from fitness_platform.domain.enums import CatalogStatus, MuscleRole, TrackingType
-from fitness_platform.domain.models import CatalogExercise
+from fitness_platform.domain.models import CatalogExercise, CatalogRelease
 from fitness_platform.infrastructure.uow import SqlAlchemyUnitOfWork
 
 
 class CatalogImportError(ValueError):
     pass
+
+
+SCHEMA_PATH = (
+    Path(__file__).resolve().parents[3] / "data" / "schemas" / "catalog-release-v1.schema.json"
+)
+
+
+def canonical_release_hash(document: dict[str, Any]) -> str:
+    hash_payload = {key: value for key, value in document.items() if key != "content_hash"}
+    canonical = json.dumps(
+        hash_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode()
+    return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
 
 
 def _read_document(path: Path) -> object:
@@ -35,6 +52,17 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
     document = _read_document(path)
     if not isinstance(document, dict):
         raise CatalogImportError("Catalog document must be an object.")
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
+    except (OSError, json.JSONDecodeError, ValidationError) as exc:
+        raise CatalogImportError(f"Catalog schema validation failed: {exc}") from exc
+    declared_hash = document.get("content_hash")
+    computed_hash = canonical_release_hash(document)
+    if declared_hash != computed_hash:
+        raise CatalogImportError(
+            f"Catalog content_hash mismatch: expected {computed_hash}, got {declared_hash}."
+        )
     exercises = document.get("exercises")
     if not isinstance(exercises, list):
         raise CatalogImportError("exercises must be a list.")
@@ -88,9 +116,12 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
         if status is CatalogStatus.PUBLISHED and not reviewed:
             raise CatalogImportError(f"{key} cannot be published before review.")
         now = datetime.now(UTC)
+        stable_id = uuid5(NAMESPACE_URL, f"momentum-catalog:{key[0]}:{key[1]}")
+        if str(raw["id"]) != str(stable_id):
+            raise CatalogImportError(f"{key} id does not match its stable source/external_id.")
         parsed.append(
             CatalogExercise(
-                id=uuid5(NAMESPACE_URL, f"momentum-catalog:{key[0]}:{key[1]}"),
+                id=stable_id,
                 external_id=key[1],
                 source=key[0],
                 provenance=str(raw["provenance"]),
@@ -138,6 +169,23 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
                 exercise.created_at = existing.created_at
                 updated += 1
             await uow.catalog.upsert(exercise)
+        sources = sorted({item.source for item in parsed})
+        licenses = sorted({item.license_name for item in parsed})
+        await uow.catalog.upsert_release(
+            CatalogRelease(
+                schema_version=str(document["schema_version"]),
+                catalog_version=str(document["catalog_version"]),
+                content_hash=computed_hash,
+                published_at=datetime.fromisoformat(
+                    str(document["published_at"]).replace("Z", "+00:00")
+                ),
+                batch_id=str(document["batch_id"]),
+                sources=sources,
+                licenses=licenses,
+                exercise_count=len(parsed),
+                status="PUBLISHED",
+            )
+        )
         await uow.commit()
     return {
         "read": len(exercises),
@@ -148,8 +196,11 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
         "rejected": 0,
         "warnings": [],
         "errors": [],
-        "sources": sorted({item.source for item in parsed}),
-        "licenses": sorted({item.license_name for item in parsed}),
+        "sources": sources,
+        "licenses": licenses,
+        "schema_version": str(document["schema_version"]),
+        "catalog_version": str(document["catalog_version"]),
+        "content_hash": computed_hash,
         "imported_at": datetime.now(UTC).isoformat(),
         "batch_id": str(document.get("batch_id", "unknown")),
     }
