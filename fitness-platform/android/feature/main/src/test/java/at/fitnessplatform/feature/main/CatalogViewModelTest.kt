@@ -16,6 +16,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import app.cash.turbine.test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CatalogViewModelTest {
@@ -42,11 +43,39 @@ class CatalogViewModelTest {
         assertEquals("Plank", states.last().exercises.single().name)
         job.cancel()
     }
+
+    @Test
+    fun `seed failure leaves loading and exposes recoverable error`() = runTest {
+        val repository = FakeCatalogRepository().apply { failSeed = true }
+        val viewModel = CatalogViewModel(repository)
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.state.collect {}
+        }
+
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.loading)
+        assertTrue(viewModel.state.value.offline)
+        assertEquals("CATALOG_SEED_FAILED", viewModel.state.value.error)
+        job.cancel()
+    }
+
+    @Test
+    fun `detail distinguishes initial loading from not found`() = runTest {
+        val viewModel = CatalogViewModel(FakeCatalogRepository())
+
+        viewModel.detailState("missing").test {
+            assertEquals(CatalogDetailState.Loading, awaitItem())
+            assertEquals(CatalogDetailState.NotFound, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
 
 private class FakeCatalogRepository : CatalogRepository {
     private val rows = MutableStateFlow<List<CatalogExercise>>(emptyList())
     var failRefresh = false
+    var failSeed = false
     override fun observeCatalog(filter: CatalogFilter): Flow<List<CatalogExercise>> = rows.map { list ->
         list.filter { row -> (filter.muscle == null || row.muscles.any { it.slug == filter.muscle }) && (filter.equipment == null || filter.equipment in row.equipment) }
     }
@@ -54,6 +83,7 @@ private class FakeCatalogRepository : CatalogRepository {
     override fun observeMuscles() = MutableStateFlow(listOf(Muscle("core", "Core"), Muscle("legs", "Legs")))
     override fun observeEquipment() = MutableStateFlow(listOf(Equipment("bodyweight", "Bodyweight"), Equipment("bench", "Bench")))
     override suspend fun seedIfEmpty() {
+        if (failSeed) error("seed failure")
         if (rows.value.isEmpty()) rows.value = listOf(catalog("1", "Plank", "core", "bodyweight"), catalog("2", "Squat", "legs", "bench"))
     }
     override suspend fun refresh() { if (failRefresh) error("offline") }

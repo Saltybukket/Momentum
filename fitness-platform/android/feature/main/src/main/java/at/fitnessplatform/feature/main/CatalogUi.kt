@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import at.fitnessplatform.core.model.CatalogExercise
@@ -39,33 +40,44 @@ import at.fitnessplatform.core.model.CatalogExercise
 fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: CatalogViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Public exercise catalog", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-        Text("Reviewed public exercises saved on this device. Your custom exercises remain separate.")
-        if (state.offline) AssistChip(onClick = viewModel::refresh, label = { Text("Offline · saved catalog") })
+        Text(stringResource(R.string.catalog_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+        Text(stringResource(R.string.catalog_separation))
+        if (state.offline) AssistChip(onClick = viewModel::refresh, label = { Text(stringResource(R.string.catalog_offline)) })
         OutlinedTextField(
             value = state.filter.query,
             onValueChange = viewModel::setQuery,
-            label = { Text("Search exercises") },
+            label = { Text(stringResource(R.string.catalog_search)) },
             modifier = Modifier.fillMaxWidth(),
         )
-        CatalogFilterMenu("Muscle", state.filter.muscle, state.muscles.map { it.slug to it.name }, viewModel::setMuscle)
-        CatalogFilterMenu("Equipment", state.filter.equipment, state.equipment.map { it.slug to it.name }, viewModel::setEquipment)
+        CatalogFilterMenu(stringResource(R.string.catalog_muscle), state.filter.muscle, state.muscles.map { it.slug to it.name }, viewModel::setMuscle)
+        CatalogFilterMenu(stringResource(R.string.catalog_equipment), state.filter.equipment, state.equipment.map { it.slug to it.name }, viewModel::setEquipment)
         when {
             state.loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading exercise catalog" })
-            state.exercises.isEmpty() -> Text("No catalog exercises match these filters.")
+            state.exercises.isEmpty() -> Text(stringResource(R.string.catalog_empty))
             else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.exercises, key = { it.id }) { exercise ->
                     Card(onClick = { onOpen(exercise.id) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Open ${exercise.name}" }) {
                         Column(Modifier.padding(12.dp)) {
                             Text(exercise.name, style = MaterialTheme.typography.titleMedium)
-                            Text(exercise.muscles.joinToString { it.slug } + " · " + exercise.equipment.joinToString())
+                            val muscleNames = exercise.muscles.joinToString { muscle ->
+                                state.muscles.firstOrNull { it.slug == muscle.slug }?.name ?: muscle.slug
+                            }
+                            val equipmentNames = exercise.equipment.joinToString { slug ->
+                                state.equipment.firstOrNull { it.slug == slug }?.name ?: slug
+                            }
+                            Text("$muscleNames · $equipmentNames")
                         }
                     }
                 }
             }
         }
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Row { Button(onClick = viewModel::refresh) { Text("Refresh") }; TextButton(onClick = onBack) { Text("Back") } }
+        state.error?.let { code ->
+            Text(
+                stringResource(if (code == "CATALOG_SEED_FAILED") R.string.catalog_seed_failed else R.string.catalog_refresh_failed),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Row { Button(onClick = viewModel::refresh) { Text(stringResource(R.string.catalog_refresh)) }; TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } }
     }
 }
 
@@ -74,13 +86,13 @@ private fun CatalogFilterMenu(label: String, selected: String?, options: List<Pa
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded, { expanded = it }) {
         OutlinedTextField(
-            value = options.firstOrNull { it.first == selected }?.second ?: "All",
+            value = options.firstOrNull { it.first == selected }?.second ?: stringResource(R.string.catalog_all),
             onValueChange = {}, readOnly = true, label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth(),
         )
         ExposedDropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem({ Text("All") }, onClick = { onSelect(null); expanded = false })
+            DropdownMenuItem({ Text(stringResource(R.string.catalog_all)) }, onClick = { onSelect(null); expanded = false })
             options.forEach { option -> DropdownMenuItem({ Text(option.second) }, onClick = { onSelect(option.first); expanded = false }) }
         }
     }
@@ -88,21 +100,26 @@ private fun CatalogFilterMenu(label: String, selected: String?, options: List<Pa
 
 @Composable
 fun CatalogDetailRoute(id: String, onBack: () -> Unit, viewModel: CatalogViewModel = hiltViewModel()) {
-    val exercise by viewModel.observeExercise(id).collectAsStateWithLifecycle(null)
-    CatalogDetail(exercise, onBack)
+    val detail by viewModel.detailState(id).collectAsStateWithLifecycle(CatalogDetailState.Loading)
+    CatalogDetail(detail, onBack)
 }
 
 @Composable
-private fun CatalogDetail(exercise: CatalogExercise?, onBack: () -> Unit) {
+private fun CatalogDetail(detail: CatalogDetailState, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (exercise == null) Text("Catalog exercise not found.") else {
-            Text(exercise.name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-            Text(exercise.description)
-            Text("Muscles: ${exercise.muscles.joinToString { "${it.slug} (${it.role.name.lowercase()})" }}")
-            Text("Equipment: ${exercise.equipment.joinToString()}")
-            Text("Source: ${exercise.source} · ${exercise.licenseName}")
-            Text(exercise.provenance, style = MaterialTheme.typography.bodySmall)
+        when (detail) {
+            CatalogDetailState.Loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading exercise details" })
+            CatalogDetailState.NotFound -> Text(stringResource(R.string.catalog_not_found))
+            is CatalogDetailState.Error -> Text(stringResource(R.string.catalog_detail_error))
+            is CatalogDetailState.Loaded -> with(detail.exercise) {
+                Text(name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                Text(description)
+                Text("Muscles: ${muscles.joinToString { "${it.slug} (${it.role.name.lowercase()})" }}")
+                Text("Equipment: ${equipment.joinToString()}")
+                Text("Source: $source · $licenseName")
+                Text(provenance, style = MaterialTheme.typography.bodySmall)
+            }
         }
-        TextButton(onClick = onBack) { Text("Back to catalog") }
+        TextButton(onClick = onBack) { Text(stringResource(R.string.catalog_back)) }
     }
 }

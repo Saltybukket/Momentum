@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -25,6 +28,13 @@ data class CatalogUiState(
     val offline: Boolean = false,
     val error: String? = null,
 )
+
+sealed interface CatalogDetailState {
+    data object Loading : CatalogDetailState
+    data class Loaded(val exercise: CatalogExercise) : CatalogDetailState
+    data object NotFound : CatalogDetailState
+    data class Error(val message: String) : CatalogDetailState
+}
 
 @HiltViewModel
 class CatalogViewModel @Inject constructor(private val repository: CatalogRepository) : ViewModel() {
@@ -48,7 +58,18 @@ class CatalogViewModel @Inject constructor(private val repository: CatalogReposi
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CatalogUiState())
 
-    init { viewModelScope.launch { repository.seedIfEmpty(); refreshing.value = false } }
+    init {
+        viewModelScope.launch {
+            try {
+                repository.seedIfEmpty()
+            } catch (_: Exception) {
+                offline.value = true
+                error.value = "CATALOG_SEED_FAILED"
+            } finally {
+                refreshing.value = false
+            }
+        }
+    }
     fun setMuscle(slug: String?) { filter.value = filter.value.copy(muscle = slug) }
     fun setEquipment(slug: String?) { filter.value = filter.value.copy(equipment = slug) }
     fun setQuery(query: String) { filter.value = filter.value.copy(query = query) }
@@ -57,8 +78,12 @@ class CatalogViewModel @Inject constructor(private val repository: CatalogReposi
         error.value = null
         runCatching { repository.refresh() }
             .onSuccess { offline.value = false }
-            .onFailure { offline.value = true; error.value = "Showing saved catalog. Refresh failed." }
+            .onFailure { offline.value = true; error.value = "CATALOG_REFRESH_FAILED" }
         refreshing.value = false
     }
-    fun observeExercise(id: String) = repository.observeExercise(id)
+    fun detailState(id: String): Flow<CatalogDetailState> = repository.observeExercise(id)
+        .map<CatalogExercise?, CatalogDetailState> { exercise ->
+            exercise?.let(CatalogDetailState::Loaded) ?: CatalogDetailState.NotFound
+        }
+        .onStart { emit(CatalogDetailState.Loading) }
 }

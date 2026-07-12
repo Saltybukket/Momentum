@@ -1,0 +1,32 @@
+<resources>
+    <string name="catalog_title">Public exercise catalog</string>
+    <string name="catalog_separation">Reviewed public exercises saved on this device. Your custom exercises remain separate.</string>
+    <string name="catalog_offline">Offline · saved catalog</string>
+    <string name="catalog_search">Search exercises</string>
+    <string name="catalog_muscle">Muscle</string>
+    <string name="catalog_equipment">Equipment</string>
+    <string name="catalog_all">All</string>
+    <string name="catalog_loading">Loading exercise catalog</string>
+    <string name="catalog_empty">No catalog exercises match these filters.</string>
+    <string name="catalog_refresh_failed">Showing saved catalog. Refresh failed.</string>
+    <string name="catalog_seed_failed">The bundled catalog could not be loaded. Retry to use saved data.</string>
+    <string name="catalog_refresh">Refresh</string>
+    <string name="back">Back</string>
+    <string name="catalog_detail_loading">Loading exercise details</string>
+    <string name="catalog_not_found">Catalog exercise not found.</string>
+    <string name="catalog_detail_error">Exercise details could not be loaded.</string>
+    <string name="catalog_back">Back to catalog</string>
+    <string name="privacy_title">Privacy and sync</string>
+    <string name="privacy_local_default">Your profile, custom exercises and workouts stay on this device unless you explicitly enable private-data sync.</string>
+    <string name="privacy_catalog_independent">Public catalog updates never upload private data.</string>
+    <string name="privacy_pending">%1$d local change(s) are waiting or need attention.</string>
+    <string name="privacy_enabled">Private-data sync enabled</string>
+    <string name="privacy_disabled">Private-data sync disabled</string>
+    <string name="privacy_changing">Updating sync preference…</string>
+    <string name="privacy_error">The sync preference could not be changed. Try again.</string>
+    <string name="privacy_disable_note">Disabling stops future uploads. It does not delete data that may already have been uploaded.</string>
+    <string name="privacy_confirm_title">Enable private-data sync?</string>
+    <string name="privacy_confirm_text">This creates or recovers a temporary guest session and uploads your profile, custom exercises and workouts.</string>
+    <string name="privacy_enable">Enable sync</string>
+    <string name="privacy_keep_local">Keep local</string>
+</resources>
