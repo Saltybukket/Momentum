@@ -2,8 +2,9 @@
 
 package at.fitnessplatform.feature.main
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -12,12 +13,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +38,13 @@ import at.fitnessplatform.core.model.ExerciseConflictType
 import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.WorkoutStatus
 import at.fitnessplatform.domain.GuestCredentialStatus
+import at.fitnessplatform.core.designsystem.MomentumCard
+import at.fitnessplatform.core.designsystem.MomentumEmptyState
+import at.fitnessplatform.core.designsystem.MomentumScreen
+import at.fitnessplatform.core.designsystem.MomentumSectionHeader
+import at.fitnessplatform.core.designsystem.MomentumSpacing
+import at.fitnessplatform.core.designsystem.MomentumTheme
+import at.fitnessplatform.core.designsystem.MomentumSkeletonLine
 
 private object Routes {
     const val HOME = "home"
@@ -79,47 +86,24 @@ internal fun rootRouteFor(route: String?): String? =
         else -> null
     }
 
-private val MomentumLightColors = lightColorScheme(
-    primary = Color(0xFF006C4C),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF89F8C7),
-    onPrimaryContainer = Color(0xFF002116),
-    secondary = Color(0xFF4D6358),
-    tertiary = Color(0xFF3D6374),
-    surface = Color(0xFFF7FBF7),
-)
-
-private val MomentumDarkColors = darkColorScheme(
-    primary = Color(0xFF6CDBAC),
-    onPrimary = Color(0xFF003827),
-    primaryContainer = Color(0xFF005139),
-    onPrimaryContainer = Color(0xFF89F8C7),
-    secondary = Color(0xFFB4CCBE),
-    tertiary = Color(0xFFA4CDDF),
-)
-
-@Composable
-private fun MomentumTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) MomentumDarkColors else MomentumLightColors,
-        typography = Typography(
-            headlineMedium = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            titleLarge = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-        ),
-        shapes = Shapes(
-            small = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-            medium = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-            large = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-        ),
-        content = content,
-    )
+private fun routeTitle(route: String?): Int = when (route?.substringBefore('/')) {
+    "workouts" -> R.string.workouts_title
+    "exercises", "exercise", "conflicts", "conflict" -> R.string.custom_exercises_title
+    "catalog" -> R.string.catalog_title
+    "privacy" -> R.string.privacy_title
+    "locations" -> R.string.locations_title
+    "profile" -> R.string.nav_profile
+    else -> R.string.app_name
 }
 
 @Composable
+@Suppress("LongMethod")
 fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val profile = state.profile
     val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
     val snackbarHostState = remember { SnackbarHostState() }
     val operationError = stringResource(R.string.operation_failed)
     LaunchedEffect(state.errorMessage) {
@@ -130,11 +114,31 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
     }
     MomentumTheme {
         Scaffold(
-            topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) },
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(stringResource(routeTitle(currentRoute)))
+                            if (currentRoute == Routes.HOME) {
+                                Text(
+                                    stringResource(R.string.app_tagline),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    },
+                )
+            },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
             if (state.isLoading) {
-                Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                MomentumScreen(Modifier.fillMaxSize().padding(padding)) {
+                    item { MomentumSkeletonLine(Modifier.fillMaxWidth(0.55f)) }
+                    repeat(3) {
+                        item { MomentumCard(Modifier.fillMaxWidth()) { MomentumSkeletonLine(Modifier.fillMaxWidth()) } }
+                    }
+                }
             } else if (profile == null) {
                 CreateGuestScreen(
                     modifier = Modifier.padding(padding),
@@ -142,8 +146,6 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                     onCreate = viewModel::createGuest,
                 )
             } else {
-                val backStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = backStackEntry?.destination?.route
                 BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
                     val rail = usesNavigationRail(maxWidth)
                     AdaptiveRootLayout(
@@ -181,6 +183,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             state.operationInProgress,
                             viewModel::renameGuest,
                             onLocations = { navController.navigate(Routes.LOCATIONS) },
+                            onPrivacy = { navController.navigate(Routes.PRIVACY) },
                         ) { navController.popBackStack() }
                     }
                     composable(Routes.EXERCISES) {
@@ -191,6 +194,8 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onEdit = { navController.navigate("exercise/$it") },
                             onDelete = viewModel::deleteExercise,
                             onResolve = { navController.navigate("conflict/$it") },
+                            onCatalog = { navController.navigate(Routes.CATALOG) },
+                            onConflicts = { navController.navigate(Routes.CONFLICTS) },
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -320,6 +325,12 @@ private fun RootNavigationRail(currentRoute: String?, onSelect: (RootDestination
     val selectedRoot = rootRouteFor(currentRoute)
     NavigationRail {
         Spacer(Modifier.height(12.dp))
+        Text(
+            stringResource(R.string.app_name),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = MomentumSpacing.sm, vertical = MomentumSpacing.md),
+        )
         rootDestinations.forEach { destination ->
             NavigationRailItem(
                 selected = selectedRoot == destination.route,
@@ -368,26 +379,20 @@ private fun HomeScreen(
     onWorkouts: () -> Unit,
     onConflicts: () -> Unit,
     onLocations: () -> Unit,
-) {
-    LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            ActiveLocationCard(onManage = onLocations)
-        }
+) = MomentumScreen(Modifier.fillMaxSize()) {
         item {
             Text(
                 stringResource(R.string.home_greeting, state.profile?.displayName.orEmpty()),
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.semantics { heading() },
             )
-            Text(stringResource(R.string.home_local_summary, state.exercises.size, state.workouts.size))
+            Text(
+                stringResource(R.string.home_today_context),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MomentumCard(Modifier.fillMaxWidth(), emphasized = true) {
                     Text(stringResource(R.string.home_workout_title), style = MaterialTheme.typography.titleLarge)
                     val active = state.activeWorkout
                     Text(
@@ -404,14 +409,32 @@ private fun HomeScreen(
                             ),
                         )
                     }
-                }
             }
         }
         item {
-            Text(stringResource(R.string.home_recent_title), style = MaterialTheme.typography.titleLarge)
+            MomentumSectionHeader(stringResource(R.string.home_quick_actions))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm)) {
+                OutlinedButton(onClick = onLocations, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.locations_switch))
+                }
+                OutlinedButton(onClick = onCatalog, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.nav_exercises))
+                }
+            }
+        }
+        item { ActiveLocationCard(onManage = onLocations) }
+        item {
+            MomentumSectionHeader(stringResource(R.string.home_recent_title))
         }
         if (state.recentWorkouts.isEmpty()) {
-            item { Text(stringResource(R.string.home_recent_empty)) }
+            item {
+                MomentumEmptyState(
+                    stringResource(R.string.home_recent_empty_title),
+                    stringResource(R.string.home_recent_empty),
+                    stringResource(R.string.home_start_workout),
+                    onWorkouts,
+                )
+            }
         } else {
             items(state.recentWorkouts, key = { it.id }) { workout ->
                 ListItem(
@@ -421,25 +444,22 @@ private fun HomeScreen(
             }
         }
         item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MomentumCard(Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.home_library_title), style = MaterialTheme.typography.titleLarge)
-                    Text(stringResource(R.string.home_custom_count, state.exercises.size))
+                    Text(pluralStringResource(R.plurals.home_custom_count, state.exercises.size, state.exercises.size))
                     OutlinedButton(onClick = onCatalog) { Text(stringResource(R.string.home_open_catalog)) }
-                }
             }
         }
         if (state.conflicts.isNotEmpty()) {
             item {
                 Button(onClick = onConflicts, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.home_conflicts, state.conflicts.size))
+                    Text(pluralStringResource(R.plurals.home_conflicts, state.conflicts.size, state.conflicts.size))
                 }
             }
         }
         item {
             val blocked = state.credentialStatus != GuestCredentialStatus.READY
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            MomentumCard(Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.home_sync_title), style = MaterialTheme.typography.titleLarge)
                     Text(
                         stringResource(
@@ -450,13 +470,11 @@ private fun HomeScreen(
                             },
                         ),
                     )
-                    Text(stringResource(R.string.home_sync_pending, state.pendingSyncCount))
+                    Text(pluralStringResource(R.plurals.home_sync_pending, state.pendingSyncCount, state.pendingSyncCount))
                     Text(stringResource(R.string.home_offline_ready))
                     TextButton(onClick = onPrivacy) { Text(stringResource(R.string.home_manage_privacy)) }
-                }
             }
         }
-    }
 }
 
 @Composable
@@ -465,15 +483,20 @@ private fun ProfileScreen(
     busy: Boolean,
     onSave: (String) -> Unit,
     onLocations: () -> Unit,
+    onPrivacy: () -> Unit,
     onBack: () -> Unit,
 ) {
     var name by rememberSaveable(currentName) { mutableStateOf(currentName) }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.profile_title), style = MaterialTheme.typography.headlineSmall)
+        MomentumSectionHeader(stringResource(R.string.profile_identity), stringResource(R.string.profile_title))
         OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.display_name)) }, modifier = Modifier.fillMaxWidth())
         Button({ onSave(name) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save)) }
         OutlinedButton(onClick = onLocations, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.locations_manage))
+        }
+        MomentumSectionHeader(stringResource(R.string.profile_sync_privacy))
+        OutlinedButton(onClick = onPrivacy, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.home_manage_privacy))
         }
         TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
@@ -487,15 +510,41 @@ private fun ExerciseListScreen(
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
     onResolve: (String) -> Unit,
+    onCatalog: () -> Unit,
+    onConflicts: () -> Unit,
     onBack: () -> Unit,
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val visibleExercises = exercises.filter { it.name.contains(query.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = true,
+                onClick = {},
+                label = { Text(stringResource(R.string.exercises_mine)) },
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(onClick = onCatalog, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.exercises_public)) }
+            if (conflicts.isNotEmpty()) {
+                OutlinedButton(onClick = onConflicts, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.exercises_conflicts)) }
+            }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(stringResource(R.string.custom_exercises_title), style = MaterialTheme.typography.headlineSmall)
             Button(onClick = onNew) { Text(stringResource(R.string.add)) }
         }
+        OutlinedTextField(
+            query,
+            { query = it },
+            label = { Text(stringResource(R.string.exercises_search)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(exercises, key = { it.id }) { exercise ->
+            items(visibleExercises, key = { it.id }) { exercise ->
                 val conflict = conflicts.any { it.exerciseId == exercise.id }
                 val conflictDescription = stringResource(R.string.sync_conflict_description, exercise.name)
                 Card(Modifier.fillMaxWidth()) {
@@ -675,30 +724,53 @@ private fun WorkoutScreen(
 ) {
     val defaultTitle = stringResource(R.string.workout_default_title)
     var title by rememberSaveable { mutableStateOf(defaultTitle) }
+    val active = state.workouts.filter { it.status == WorkoutStatus.IN_PROGRESS || it.status == WorkoutStatus.PAUSED }
+    val planned = state.workouts.filter { it.status == WorkoutStatus.PLANNED }
+    val history = state.workouts.filter { it.status == WorkoutStatus.COMPLETED || it.status == WorkoutStatus.CANCELLED }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(stringResource(R.string.workouts_title), style = MaterialTheme.typography.headlineSmall)
         OutlinedTextField(title, { title = it }, label = { Text(stringResource(R.string.workout_title)) }, modifier = Modifier.fillMaxWidth())
         Button(
-            onClick = { onCreate(title, state.exercises.firstOrNull()?.let { listOf(it.id) } ?: emptyList()) },
+            onClick = { onCreate(title, newWorkoutExerciseIds()) },
             enabled = !state.operationInProgress,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(R.string.workout_create)) }
+        Text(
+            stringResource(R.string.workout_empty_creation_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(state.workouts, key = { it.id }) { workout ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(workout.title, style = MaterialTheme.typography.titleMedium)
-                        Text(workoutStatusLabel(workout.status))
-                        when (workout.status) {
-                            WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }) { Text(stringResource(R.string.start)) }
-                            WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }) { Text(stringResource(R.string.complete)) }
-                            else -> Unit
-                        }
-                    }
+            workoutSection(R.string.workouts_active, active, onStart, onComplete)
+            workoutSection(R.string.workouts_planned, planned, onStart, onComplete)
+            workoutSection(R.string.workouts_history, history, onStart, onComplete)
+        }
+        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
+    }
+}
+
+internal fun newWorkoutExerciseIds(): List<String> = emptyList()
+
+private fun androidx.compose.foundation.lazy.LazyListScope.workoutSection(
+    title: Int,
+    workouts: List<at.fitnessplatform.core.model.Workout>,
+    onStart: (String) -> Unit,
+    onComplete: (String) -> Unit,
+) {
+    if (workouts.isEmpty()) return
+    item { MomentumSectionHeader(stringResource(title)) }
+    items(workouts, key = { it.id }) { workout ->
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text(workout.title, style = MaterialTheme.typography.titleMedium)
+                Text(workoutStatusLabel(workout.status))
+                when (workout.status) {
+                    WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }) { Text(stringResource(R.string.start)) }
+                    WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }) { Text(stringResource(R.string.complete)) }
+                    else -> Unit
                 }
             }
         }
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
 }
 

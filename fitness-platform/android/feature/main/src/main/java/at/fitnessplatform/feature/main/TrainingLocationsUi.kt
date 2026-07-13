@@ -7,7 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -15,7 +20,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -29,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import at.fitnessplatform.core.model.EquipmentDefinition
 import at.fitnessplatform.core.model.EquipmentDefinitions
 import at.fitnessplatform.core.model.LocationPreset
+import at.fitnessplatform.core.model.LocationPresets
 import at.fitnessplatform.core.model.LocationType
 import at.fitnessplatform.core.model.TrainingLocation
 
@@ -53,7 +63,15 @@ fun ActiveLocationCard(
             val active = state.active
             Text(
                 if (active == null) stringResource(R.string.locations_none_selected)
-                else stringResource(R.string.locations_active_summary, active.name, active.equipmentSlugs.size),
+                else stringResource(
+                    R.string.locations_active_summary,
+                    active.name,
+                    pluralStringResource(
+                        R.plurals.locations_equipment_count,
+                        active.equipmentSlugs.size,
+                        active.equipmentSlugs.size,
+                    ),
+                ),
             )
             TextButton(onClick = onManage) { Text(stringResource(R.string.locations_switch)) }
         }
@@ -93,21 +111,43 @@ fun TrainingLocationsRoute(
                 item { Text(stringResource(R.string.locations_empty)) }
             }
             items(state.locations, key = { it.id }) { location ->
+                var menuExpanded by remember(location.id) { mutableStateOf(false) }
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(location.name, style = MaterialTheme.typography.titleMedium)
-                        Text(stringResource(R.string.locations_equipment_count, location.equipmentSlugs.size))
+                        Text(locationTypeLabel(location.type), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            pluralStringResource(
+                                R.plurals.locations_equipment_count,
+                                location.equipmentSlugs.size,
+                                location.equipmentSlugs.size,
+                            ),
+                        )
                         if (location.isActive) Text(stringResource(R.string.locations_active_badge))
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Button(
                                 onClick = { viewModel.setActive(location.id) },
                                 enabled = !state.busy && !location.isActive,
                             ) { Text(stringResource(R.string.locations_activate)) }
-                            TextButton(onClick = { editingEquipment = location }) {
+                            OutlinedButton(onClick = { editingEquipment = location }, enabled = !state.busy) {
                                 Text(stringResource(R.string.locations_equipment_edit))
                             }
-                            TextButton(onClick = { renaming = location }) { Text(stringResource(R.string.edit)) }
-                            TextButton(onClick = { deleting = location }) { Text(stringResource(R.string.delete)) }
+                            TextButton(onClick = { menuExpanded = true }, enabled = !state.busy) {
+                                Text(stringResource(R.string.more_actions))
+                            }
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.edit)) },
+                                    onClick = { menuExpanded = false; renaming = location },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.delete)) },
+                                    onClick = { menuExpanded = false; deleting = location },
+                                )
+                            }
                         }
                     }
                 }
@@ -196,11 +236,16 @@ private fun LocationEditorDialog(
     var name by remember(initialName) { mutableStateOf(initialName) }
     var type by remember(initialType) { mutableStateOf(initialType) }
     var preset by remember { mutableStateOf(LocationPreset.EMPTY_CUSTOM) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() }) {
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
+        LazyColumn(
+            Modifier.fillMaxWidth().heightIn(max = 560.dp).padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
                 item { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.name)) }) }
                 item { Text(stringResource(R.string.locations_type)) }
                 items(LocationType.entries) { option ->
@@ -213,11 +258,14 @@ private fun LocationEditorDialog(
                     }
                 }
                 if (error != null) item { Text(stringResource(R.string.locations_error), color = MaterialTheme.colorScheme.error) }
+        }
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.cancel)) }
+            Button(onClick = { onSave(name, type, preset) }, enabled = name.isNotBlank() && !saving) {
+                Text(stringResource(if (saving) R.string.saving else R.string.save))
             }
-        },
-        confirmButton = { TextButton(onClick = { onSave(name, type, preset) }, enabled = name.isNotBlank() && !saving) { Text(stringResource(if (saving) R.string.saving else R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
+        }
+    }
 }
 
 @Composable
@@ -242,11 +290,16 @@ private fun EquipmentEditorDialog(
                 query,
             )
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.locations_equipment_title)) },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() }) {
+        Text(
+            stringResource(R.string.locations_equipment_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
+        LazyColumn(
+            Modifier.fillMaxWidth().heightIn(max = 600.dp).padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
                 item {
                     OutlinedTextField(
                         query,
@@ -254,32 +307,66 @@ private fun EquipmentEditorDialog(
                         label = { Text(stringResource(R.string.locations_equipment_search)) },
                     )
                 }
-                item { Text(stringResource(R.string.locations_equipment_selected, selected.size)) }
+                item {
+                    Text(
+                        pluralStringResource(
+                            R.plurals.locations_equipment_selected,
+                            selected.size,
+                            selected.size,
+                        ),
+                    )
+                }
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextButton(onClick = { selected = emptySet() }, enabled = !saving) {
+                            Text(stringResource(R.string.locations_equipment_clear))
+                        }
+                        LocationPreset.entries.filterNot { it == LocationPreset.EMPTY_CUSTOM }.forEach { preset ->
+                            OutlinedButton(
+                                onClick = { selected = LocationPresets.equipment(preset) },
+                                enabled = !saving,
+                            ) {
+                                Text(locationPresetLabel(preset))
+                            }
+                        }
+                    }
+                }
                 matches.groupBy(EquipmentDefinition::category).forEach { (category, definitions) ->
                     item { Text(equipmentCategoryLabel(category), style = MaterialTheme.typography.titleSmall) }
                     items(definitions, key = EquipmentDefinition::slug) { definition ->
                         val label = equipmentLabel(definition)
                         Row(
-                            Modifier.fillMaxWidth().semantics {
-                                contentDescription = label
-                            },
+                            Modifier.fillMaxWidth()
+                                .defaultMinSize(minHeight = 48.dp)
+                                .clickable {
+                                    selected = if (definition.slug in selected) {
+                                        selected - definition.slug
+                                    } else {
+                                        selected + definition.slug
+                                    }
+                                }
+                                .semantics { contentDescription = label },
                         ) {
                             Checkbox(
                                 checked = definition.slug in selected,
-                                onCheckedChange = { checked ->
-                                    selected = if (checked) selected + definition.slug else selected - definition.slug
-                                },
+                                onCheckedChange = null,
                             )
                             Text(label)
                         }
                     }
                 }
                 if (error != null) item { Text(stringResource(R.string.locations_error), color = MaterialTheme.colorScheme.error) }
+        }
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss, enabled = !saving) { Text(stringResource(R.string.cancel)) }
+            Button(onClick = { onSave(selected) }, enabled = !saving) {
+                Text(stringResource(if (saving) R.string.saving else R.string.save))
             }
-        },
-        confirmButton = { TextButton(onClick = { onSave(selected) }, enabled = !saving) { Text(stringResource(if (saving) R.string.saving else R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
+        }
+    }
 }
 
 @Composable

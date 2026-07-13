@@ -16,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -116,7 +117,7 @@ private fun CatalogFilterMenu(label: String, selected: String?, options: List<Pa
             value = options.firstOrNull { it.first == selected }?.second ?: stringResource(R.string.catalog_all),
             onValueChange = {}, readOnly = true, label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true).fillMaxWidth(),
         )
         ExposedDropdownMenu(expanded, { expanded = false }) {
             DropdownMenuItem({ Text(stringResource(R.string.catalog_all)) }, onClick = { onSelect(null); expanded = false })
@@ -138,6 +139,7 @@ fun CatalogDetailRoute(
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun CatalogDetail(
     detail: CatalogDetailState,
     onOpen: (String) -> Unit,
@@ -155,15 +157,26 @@ private fun CatalogDetail(
             CatalogDetailState.NotFound -> Text(stringResource(R.string.catalog_not_found))
             is CatalogDetailState.Error -> Text(stringResource(R.string.catalog_detail_error))
             is CatalogDetailState.Loaded -> with(detail.exercise) {
+                val primaryRole = stringResource(R.string.muscle_role_primary)
+                val secondaryRole = stringResource(R.string.muscle_role_secondary)
                 Text(name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(description)
                 Text(
                     stringResource(
                         R.string.catalog_detail_muscles,
-                        muscles.joinToString { "${it.slug} (${it.role.name.lowercase()})" },
+                        muscles.joinToString { muscle ->
+                            val name = detail.muscleLabels[muscle.slug] ?: muscle.slug
+                            "$name (${if (muscle.role == at.fitnessplatform.core.model.MuscleRole.PRIMARY) primaryRole else secondaryRole})"
+                        },
                     ),
                 )
-                Text(stringResource(R.string.catalog_detail_equipment, equipment.joinToString()))
+                Text(
+                    stringResource(
+                        R.string.catalog_detail_equipment,
+                        equipment.joinToString { detail.equipmentLabels[it] ?: it },
+                    ),
+                )
+                Text(stringResource(R.string.catalog_detail_tracking, catalogTrackingTypeLabel(trackingType)))
                 Text(stringResource(R.string.catalog_detail_source, source, licenseName))
                 Text(provenance, style = MaterialTheme.typography.bodySmall)
                 when (detail.compatibility) {
@@ -184,7 +197,13 @@ private fun CatalogDetail(
                     if (detail.alternatives.isNotEmpty()) {
                         Text(stringResource(R.string.catalog_alternatives), style = MaterialTheme.typography.titleMedium)
                         detail.alternatives.forEach { alternative ->
-                            TextButton(onClick = { onOpen(alternative.id) }) { Text(alternative.name) }
+                            Card(onClick = { onOpen(alternative.id) }, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    alternative.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -193,3 +212,14 @@ private fun CatalogDetail(
         TextButton(onClick = onBack) { Text(stringResource(R.string.catalog_back)) }
     }
 }
+
+@Composable
+private fun catalogTrackingTypeLabel(type: at.fitnessplatform.core.model.TrackingType) = stringResource(
+    when (type) {
+        at.fitnessplatform.core.model.TrackingType.REPS_WEIGHT -> R.string.tracking_reps_weight
+        at.fitnessplatform.core.model.TrackingType.REPS -> R.string.tracking_reps
+        at.fitnessplatform.core.model.TrackingType.DURATION -> R.string.tracking_duration
+        at.fitnessplatform.core.model.TrackingType.DISTANCE_DURATION -> R.string.tracking_distance_duration
+        at.fitnessplatform.core.model.TrackingType.MANUAL -> R.string.tracking_manual
+    },
+)

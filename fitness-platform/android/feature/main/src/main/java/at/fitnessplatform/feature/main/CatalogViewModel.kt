@@ -44,6 +44,8 @@ sealed interface CatalogDetailState {
         val exercise: CatalogExercise,
         val compatibility: CatalogCompatibility,
         val missingEquipment: List<MissingEquipment>,
+        val muscleLabels: Map<String, String>,
+        val equipmentLabels: Map<String, String>,
         val alternatives: List<CatalogExercise>,
     ) : CatalogDetailState
     data object NotFound : CatalogDetailState
@@ -113,7 +115,8 @@ class CatalogViewModel @Inject constructor(
         repository.observeExercise(id),
         compatibleCatalog(showAll = true),
         repository.observeEquipment(),
-    ) { exercise, compatibleState, equipmentLabels ->
+        repository.observeMuscles(),
+    ) { exercise, compatibleState, equipmentLabels, muscleLabels ->
         if (exercise == null) {
             CatalogDetailState.NotFound
         } else {
@@ -132,6 +135,8 @@ class CatalogViewModel @Inject constructor(
                 missingEquipment = missing.map { slug ->
                     MissingEquipment(slug, equipmentLabels.firstOrNull { it.slug == slug }?.name)
                 },
+                muscleLabels = muscleLabels.associate { it.slug to it.name },
+                equipmentLabels = equipmentLabels.associate { it.slug to it.name },
                 alternatives = if (compatibility != CatalogCompatibility.MISSING_EQUIPMENT) emptyList() else {
                     findAlternatives(exercise, compatibleState.exercises, checkNotNull(location))
                 },

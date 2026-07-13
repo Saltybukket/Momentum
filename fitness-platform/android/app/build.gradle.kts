@@ -38,6 +38,7 @@ kotlin { jvmToolchain(17) }
 
 dependencies {
     implementation(project(":feature:main"))
+    implementation(project(":core:designsystem"))
     implementation(project(":data"))
     implementation(project(":core:database"))
     implementation(project(":core:datastore"))

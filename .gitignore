@@ -15,6 +15,9 @@ Thumbs.db
 **/build/
 **/local.properties
 
+# Local visual references are inspiration only and must not enter source archives or APKs.
+/icon_and_image_ideas/
+
 # Keep reproducibility inputs and generated contracts under version control.
 !fitness-platform/android/gradle/wrapper/gradle-wrapper.jar
 !fitness-platform/android/core/database/schemas/**

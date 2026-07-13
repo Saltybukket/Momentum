@@ -23,6 +23,7 @@ include(
     ":core:network",
     ":core:sync",
     ":core:testing",
+    ":core:designsystem",
     ":domain",
     ":data",
     ":feature:main",

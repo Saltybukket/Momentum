@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -37,7 +38,7 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
         Text(stringResource(R.string.privacy_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text(stringResource(R.string.privacy_local_default))
         Text(stringResource(R.string.privacy_catalog_independent))
-        Text(stringResource(R.string.privacy_pending, state.pendingCount))
+        Text(pluralStringResource(R.plurals.privacy_pending, state.pendingCount, state.pendingCount))
         Switch(
             checked = state.syncEnabled,
             enabled = !state.changing && !credentialBlocked &&

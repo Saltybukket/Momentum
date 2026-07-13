@@ -22,6 +22,7 @@ kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":domain"))
     implementation(project(":core:model"))
+    implementation(project(":core:designsystem"))
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Momentum</string>
+    <string name="app_tagline">Train consistently. Own your data.</string>
     <string name="nav_home">Home</string>
     <string name="nav_workouts">Workouts</string>
     <string name="nav_exercises">Exercises</string>
@@ -10,7 +11,8 @@
     <string name="guest_create">Create local profile</string>
     <string name="operation_failed">That local action could not be completed. Try again.</string>
     <string name="home_greeting">Hello, %1$s</string>
-    <string name="home_local_summary">%1$d custom exercises · %2$d workouts saved locally</string>
+    <string name="home_today_context">Ready when you are. Everything important works offline.</string>
+    <string name="home_quick_actions">Quick actions</string>
     <string name="home_workout_title">Today’s workout</string>
     <string name="home_no_active_workout">No workout is currently active.</string>
     <string name="home_active_workout">In progress: %1$s</string>
@@ -18,23 +20,39 @@
     <string name="home_continue_workout">Continue workout</string>
     <string name="home_recent_title">Recent workouts</string>
     <string name="home_recent_empty">Completed and planned workouts will appear here.</string>
+    <string name="home_recent_empty_title">No recent workouts</string>
     <string name="home_library_title">Exercise library</string>
-    <string name="home_custom_count">%1$d exercises created by you. Public catalog exercises remain separate.</string>
+    <plurals name="home_custom_count">
+        <item quantity="one">%1$d exercise created by you. Public catalog exercises remain separate.</item>
+        <item quantity="other">%1$d exercises created by you. Public catalog exercises remain separate.</item>
+    </plurals>
     <string name="home_open_catalog">Open public catalog</string>
-    <string name="home_conflicts">Resolve %1$d exercise sync conflict(s)</string>
+    <plurals name="home_conflicts">
+        <item quantity="one">Resolve %1$d exercise sync conflict</item>
+        <item quantity="other">Resolve %1$d exercise sync conflicts</item>
+    </plurals>
     <string name="home_sync_title">Privacy and sync</string>
     <string name="home_sync_enabled">Private-data sync is enabled.</string>
     <string name="home_sync_disabled">Private-data sync is off. Your data stays local.</string>
     <string name="home_sync_blocked">Private-data sync needs credential recovery.</string>
-    <string name="home_sync_pending">%1$d local change(s) waiting or needing attention.</string>
+    <plurals name="home_sync_pending">
+        <item quantity="one">%1$d local change is waiting or needs attention.</item>
+        <item quantity="other">%1$d local changes are waiting or need attention.</item>
+    </plurals>
     <string name="home_offline_ready">Offline-first · local data is ready.</string>
     <string name="home_manage_privacy">Manage privacy and sync</string>
     <string name="profile_title">Guest profile</string>
+    <string name="profile_identity">Identity</string>
+    <string name="profile_sync_privacy">Sync and privacy</string>
     <string name="save">Save</string>
     <string name="saving">Saving…</string>
     <string name="retry">Retry</string>
     <string name="add">Add</string>
     <string name="custom_exercises_title">Custom exercises</string>
+    <string name="exercises_mine">My exercises</string>
+    <string name="exercises_public">Public catalog</string>
+    <string name="exercises_conflicts">Conflicts</string>
+    <string name="exercises_search">Search my exercises</string>
     <string name="sync_conflict">Sync conflict</string>
     <string name="sync_conflict_description">Sync conflict: resolve %1$s</string>
     <string name="exercise_summary">%1$s · %2$s</string>
@@ -81,9 +99,13 @@
     <string name="confirm_queue_version">Queue this version for server confirmation?</string>
     <string name="confirm">Confirm</string>
     <string name="workouts_title">Workouts</string>
+    <string name="workouts_active">Active</string>
+    <string name="workouts_planned">Planned</string>
+    <string name="workouts_history">Completed and history</string>
     <string name="workout_title">Workout title</string>
     <string name="workout_default_title">Quick workout</string>
     <string name="workout_create">Create workout</string>
+    <string name="workout_empty_creation_note">Creates an empty workout. Exercise selection and sets arrive with workout planning; nothing is selected silently.</string>
     <string name="workout_planned">Planned</string>
     <string name="workout_in_progress">In progress</string>
     <string name="workout_paused">Paused</string>
@@ -109,6 +131,9 @@
     <string name="catalog_detail_muscles">Muscles: %1$s</string>
     <string name="catalog_detail_equipment">Equipment: %1$s</string>
     <string name="catalog_detail_source">Source: %1$s · %2$s</string>
+    <string name="catalog_detail_tracking">Tracking: %1$s</string>
+    <string name="muscle_role_primary">primary</string>
+    <string name="muscle_role_secondary">secondary</string>
     <string name="catalog_not_found">Catalog exercise not found.</string>
     <string name="catalog_detail_error">Exercise details could not be loaded.</string>
     <string name="catalog_back">Back to catalog</string>
@@ -125,7 +150,10 @@
     <string name="privacy_title">Privacy and sync</string>
     <string name="privacy_local_default">Your profile, custom exercises and workouts stay on this device unless you explicitly enable private-data sync.</string>
     <string name="privacy_catalog_independent">Public catalog updates never upload private data.</string>
-    <string name="privacy_pending">%1$d local change(s) are waiting or need attention.</string>
+    <plurals name="privacy_pending">
+        <item quantity="one">%1$d local change is waiting or needs attention.</item>
+        <item quantity="other">%1$d local changes are waiting or need attention.</item>
+    </plurals>
     <string name="privacy_enabled">Private-data sync enabled</string>
     <string name="privacy_disabled">Private-data sync disabled</string>
     <string name="privacy_changing">Updating sync preference…</string>
@@ -150,12 +178,11 @@
     <string name="locations_manage">Manage training locations</string>
     <string name="locations_active_title">Training location</string>
     <string name="locations_none_selected">Select a location to see compatible exercises.</string>
-    <string name="locations_active_summary">%1$s · %2$d equipment items</string>
+    <string name="locations_active_summary">%1$s · %2$s</string>
     <string name="locations_switch">Switch or manage</string>
     <string name="locations_add">Add location</string>
     <string name="locations_edit">Edit location</string>
     <string name="locations_empty">No training locations yet.</string>
-    <string name="locations_equipment_count">%1$d equipment items</string>
     <string name="locations_active_badge">Active location</string>
     <string name="locations_activate">Set active</string>
     <string name="locations_equipment_edit">Equipment</string>
@@ -166,7 +193,16 @@
     <string name="locations_delete_message">Delete %1$s from this device?</string>
     <string name="locations_equipment_title">Available equipment</string>
     <string name="locations_equipment_search">Search equipment</string>
-    <string name="locations_equipment_selected">%1$d selected</string>
+    <string name="locations_equipment_clear">Clear selection</string>
+    <string name="more_actions">More</string>
+    <plurals name="locations_equipment_count">
+        <item quantity="one">%1$d equipment item</item>
+        <item quantity="other">%1$d equipment items</item>
+    </plurals>
+    <plurals name="locations_equipment_selected">
+        <item quantity="one">%1$d selected item</item>
+        <item quantity="other">%1$d selected items</item>
+    </plurals>
     <string name="location_type_fitness_center">Fitness center</string>
     <string name="location_type_home">Home</string>
     <string name="location_type_outdoor">Outdoor</string>
