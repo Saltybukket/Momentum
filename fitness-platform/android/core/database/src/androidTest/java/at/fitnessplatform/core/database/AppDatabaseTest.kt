@@ -162,6 +162,33 @@ class AppDatabaseTest {
         assertEquals("worker-b", database.outboxDao().claimedBy("worker-b").single().claimOwner)
     }
 
+    @Test fun staleOwnerCannotFinalizeReclaimedRows() = runTest {
+        listOf("success", "failure", "conflict").forEachIndexed { index, id ->
+            database.outboxDao().insert(
+                OutboxEntity(id, id, "UPSERT_PROFILE", "{}", index.toLong(), "PENDING", 2, "old"),
+            )
+        }
+        database.outboxDao().claimBatch("worker-a", 10, 100)
+        database.outboxDao().claimBatch("worker-b", 101, 200)
+
+        assertEquals(0, database.outboxDao().markSynced(listOf("success"), "worker-a"))
+        assertEquals(0, database.outboxDao().markFailed(listOf("failure"), "worker-a", "stale"))
+        assertEquals(0, database.outboxDao().markConflict(listOf("conflict"), "worker-a"))
+
+        val reclaimed = database.outboxDao().claimedBy("worker-b").associateBy { it.id }
+        assertEquals(setOf("success", "failure", "conflict"), reclaimed.keys)
+        reclaimed.values.forEach { row ->
+            assertEquals("SYNCING", row.status)
+            assertEquals("worker-b", row.claimOwner)
+            assertEquals(2, row.retryCount)
+            assertEquals("old", row.lastError)
+        }
+
+        assertEquals(1, database.outboxDao().markSynced(listOf("success"), "worker-b"))
+        assertEquals(1, database.outboxDao().markFailed(listOf("failure"), "worker-b", "network"))
+        assertEquals(1, database.outboxDao().markConflict(listOf("conflict"), "worker-b"))
+    }
+
     @Test fun syncCursorCommitsWithPageAndRollsBackWithPage() = runTest {
         database.guestProfileDao().insert(GuestProfile("p1", "Guest", 1).toEntity())
         runCatching {

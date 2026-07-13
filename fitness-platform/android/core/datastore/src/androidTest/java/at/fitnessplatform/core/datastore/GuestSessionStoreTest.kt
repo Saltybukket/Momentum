@@ -28,6 +28,7 @@ class GuestSessionStoreTest {
         val secrets = FakeGuestSecretStore()
         val sessions = GuestSessionStore(context, secrets)
         sessions.resetCredentialsForNewIdentity()
+        sessions.setSyncEnabled(true)
         val original = sessions.bootstrapCredentials()
 
         sessions.markRecoveryRejected()
@@ -40,6 +41,7 @@ class GuestSessionStoreTest {
         val replacement = sessions.bootstrapCredentials()
         assertNotEquals(original.first, replacement.first)
         assertEquals(GuestCredentialState.READY, sessions.credentialState())
+        assertTrue(sessions.isSyncEnabled())
     }
 
     @Test

@@ -42,6 +42,7 @@ import java.time.Instant
 import kotlinx.coroutines.CancellationException
 
 private class GuestRecoveryRejectedException : IllegalStateException("Guest recovery proof was rejected")
+private class LostOutboxClaimException : IllegalStateException("Outbox claim ownership was lost")
 
 @HiltWorker
 @Suppress("LongParameterList", "TooGenericExceptionCaught", "SwallowedException")
@@ -99,9 +100,13 @@ class SyncWorker @AssistedInject constructor(
             pending.joinToString("|") { it.id }.toByteArray(StandardCharsets.UTF_8),
         ).toString()
         val response = api.pushSync("Bearer $token", batchKey, SyncPushRequest(operations))
-        markSuccessful(pending, response.results.filter { it.status == "SYNCED" }.map { it.operationId }.toSet())
+        markSuccessful(
+            pending,
+            response.results.filter { it.status == "SYNCED" }.map { it.operationId }.toSet(),
+            claimOwner,
+        )
         val conflicts = response.results.filter { it.status == "CONFLICT" }
-        if (conflicts.isNotEmpty()) recordConflicts(conflicts)
+        if (conflicts.isNotEmpty()) recordConflicts(conflicts, claimOwner)
         if (sessionStore.isSyncEnabled()) {
             pullExercises(token, claimOwner)
         } else {
@@ -111,12 +116,16 @@ class SyncWorker @AssistedInject constructor(
     } catch (exception: CancellationException) {
         outboxDao.releaseClaims(claimOwner)
         throw exception
+    } catch (_: LostOutboxClaimException) {
+        Result.success()
     } catch (exception: Exception) {
         if (safeErrorCode(exception) == "PRIVATE_SYNC_DISABLED") {
             return releaseForConsent(claimOwner)
         }
         resetRejectedCredential(exception)
-        outboxDao.markFailed(ids, safeErrorCode(exception))
+        if (outboxDao.markFailed(ids, claimOwner, safeErrorCode(exception)) == 0) {
+            return Result.success()
+        }
         when (exception) {
             is GuestRecoveryRejectedException,
             is GuestCredentialBlockedException,
@@ -255,10 +264,16 @@ class SyncWorker @AssistedInject constructor(
         )
     }
 
-    private suspend fun markSuccessful(pending: List<OutboxEntity>, successfulIds: Set<String>) {
+    private suspend fun markSuccessful(
+        pending: List<OutboxEntity>,
+        successfulIds: Set<String>,
+        claimOwner: String,
+    ) {
         val successfulRows = pending.filter { it.id in successfulIds }
         database.withTransaction {
-            outboxDao.markSynced(successfulRows.map { it.id })
+            if (outboxDao.markSynced(successfulRows.map { it.id }, claimOwner) != successfulRows.size) {
+                throw LostOutboxClaimException()
+            }
             val profiles = successfulRows
                 .filter { it.operationType == OutboxOperationType.UPSERT_PROFILE.name }
                 .map { it.aggregateId }
@@ -280,10 +295,15 @@ class SyncWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun recordConflicts(results: List<at.fitnessplatform.core.network.SyncResultDto>) {
+    private suspend fun recordConflicts(
+        results: List<at.fitnessplatform.core.network.SyncResultDto>,
+        claimOwner: String,
+    ) {
         database.withTransaction {
             val aggregateIds = results.map { it.aggregateId }
-            outboxDao.markConflict(aggregateIds)
+            if (outboxDao.markConflict(results.map { it.operationId }, claimOwner) != results.size) {
+                throw LostOutboxClaimException()
+            }
             exerciseDao.markConflict(aggregateIds)
             results.forEach { result ->
                 val remote = result.remoteExercise ?: return@forEach

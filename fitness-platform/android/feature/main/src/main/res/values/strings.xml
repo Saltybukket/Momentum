@@ -29,4 +29,14 @@
     <string name="privacy_confirm_text">This creates or recovers a temporary guest session and uploads your profile, custom exercises and workouts.</string>
     <string name="privacy_enable">Enable sync</string>
     <string name="privacy_keep_local">Keep local</string>
+    <string name="privacy_credentials_rejected">Private sync is blocked because this installation’s recovery proof was rejected.</string>
+    <string name="privacy_credentials_invalidated">Private sync is blocked because Android can no longer decrypt this installation’s guest credentials.</string>
+    <string name="privacy_credentials_local_data">Resetting keeps local workouts and exercises. It creates a new guest identity and does not delete data already stored on the server.</string>
+    <string name="privacy_credentials_reset">Reset guest identity</string>
+    <string name="privacy_credentials_resetting">Creating a new guest identity…</string>
+    <string name="privacy_credentials_reset_error">The guest identity could not be reset. Your local data is unchanged.</string>
+    <string name="privacy_credentials_confirm_title">Create a new guest identity?</string>
+    <string name="privacy_credentials_confirm_text">The blocked credentials will be removed. Local workouts and exercises remain on this device, but previously uploaded data is not automatically linked or deleted.</string>
+    <string name="privacy_credentials_confirm">Create new identity</string>
+    <string name="cancel">Cancel</string>
 </resources>

@@ -132,14 +132,14 @@ interface OutboxDao {
         return claimedBy(owner)
     }
 
-    @Query("UPDATE sync_outbox SET status = 'SYNCED', lastError = NULL, claimOwner = NULL, claimExpiresAtEpochMs = NULL WHERE id IN (:ids)")
-    suspend fun markSynced(ids: List<String>)
+    @Query("UPDATE sync_outbox SET status = 'SYNCED', lastError = NULL, claimOwner = NULL, claimExpiresAtEpochMs = NULL WHERE id IN (:ids) AND status = 'SYNCING' AND claimOwner = :owner")
+    suspend fun markSynced(ids: List<String>, owner: String): Int
 
-    @Query("UPDATE sync_outbox SET status = 'FAILED', retryCount = retryCount + 1, lastError = :error, claimOwner = NULL, claimExpiresAtEpochMs = NULL WHERE id IN (:ids)")
-    suspend fun markFailed(ids: List<String>, error: String)
+    @Query("UPDATE sync_outbox SET status = 'FAILED', retryCount = retryCount + 1, lastError = :error, claimOwner = NULL, claimExpiresAtEpochMs = NULL WHERE id IN (:ids) AND status = 'SYNCING' AND claimOwner = :owner")
+    suspend fun markFailed(ids: List<String>, owner: String, error: String): Int
 
-    @Query("UPDATE sync_outbox SET status = 'CONFLICT', lastError = 'Conflict requires resolution' WHERE aggregateId IN (:aggregateIds) AND status = 'SYNCING'")
-    suspend fun markConflict(aggregateIds: List<String>)
+    @Query("UPDATE sync_outbox SET status = 'CONFLICT', lastError = 'Conflict requires resolution', claimOwner = NULL, claimExpiresAtEpochMs = NULL WHERE id IN (:ids) AND status = 'SYNCING' AND claimOwner = :owner")
+    suspend fun markConflict(ids: List<String>, owner: String): Int
 
     @Query("DELETE FROM sync_outbox WHERE aggregateId = :aggregateId AND status IN ('PENDING', 'FAILED', 'SYNCING', 'CONFLICT')")
     suspend fun deleteUnacknowledgedForAggregate(aggregateId: String)

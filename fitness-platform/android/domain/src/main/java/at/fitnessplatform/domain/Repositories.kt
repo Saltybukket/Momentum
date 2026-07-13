@@ -60,7 +60,15 @@ interface CatalogRepository {
 interface SyncPreferencesRepository {
     fun observeEnabled(): Flow<Boolean>
     fun observePendingCount(): Flow<Int>
+    fun observeCredentialState(): Flow<GuestCredentialStatus>
     suspend fun setEnabled(enabled: Boolean)
+    suspend fun resetCredentialsForNewIdentity()
+}
+
+enum class GuestCredentialStatus {
+    READY,
+    INVALIDATED,
+    RECOVERY_REJECTED,
 }
 
 fun interface DomainEventHandler<T : DomainEvent> { suspend fun handle(event: T) }

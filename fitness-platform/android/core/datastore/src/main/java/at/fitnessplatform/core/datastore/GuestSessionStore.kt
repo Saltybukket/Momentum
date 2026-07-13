@@ -42,6 +42,8 @@ class GuestSessionStore @Inject constructor(
     }
 
     val syncEnabled: Flow<Boolean> = context.sessionDataStore.data.map { it[Keys.syncEnabled] ?: false }
+    val credentialStates: Flow<GuestCredentialState> =
+        context.sessionDataStore.data.map { it.credentialState() }
 
     suspend fun tokenOrNull(): String? {
         credentialMutex.withLock { migrateLegacySecrets() }
@@ -56,10 +58,9 @@ class GuestSessionStore @Inject constructor(
     suspend fun saveToken(value: String) = secretStore.saveToken(value)
     suspend fun clearToken() = secretStore.clearToken()
     suspend fun markRecoveryRejected() = markCredentialState(GuestCredentialState.RECOVERY_REJECTED)
-    suspend fun credentialState(): GuestCredentialState = context.sessionDataStore.data.first()
-        .credentialState()
+    suspend fun credentialState(): GuestCredentialState = credentialStates.first()
 
-    suspend fun resetCredentialsForNewIdentity() = credentialMutex.withLock {
+    suspend fun resetCredentialsForNewIdentity(): Unit = credentialMutex.withLock {
         secretStore.clearAll()
         context.sessionDataStore.edit {
             it[Keys.installationId] = UUID.randomUUID().toString()
@@ -67,6 +68,7 @@ class GuestSessionStore @Inject constructor(
             it.remove(Keys.token)
             it.remove(Keys.recoverySecret)
         }
+        Unit
     }
     suspend fun setSyncEnabled(enabled: Boolean) {
         context.sessionDataStore.edit { it[Keys.syncEnabled] = enabled }

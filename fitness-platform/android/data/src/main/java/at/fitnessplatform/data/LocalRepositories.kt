@@ -9,6 +9,7 @@ import at.fitnessplatform.core.network.CatalogExerciseDto
 import at.fitnessplatform.core.network.CatalogSnapshotDto
 import at.fitnessplatform.core.network.FitnessApi
 import at.fitnessplatform.core.datastore.GuestSessionStore
+import at.fitnessplatform.domain.GuestCredentialStatus
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import javax.inject.Inject
@@ -46,9 +47,16 @@ class RoomSyncPreferencesRepository @Inject constructor(
 ) : SyncPreferencesRepository {
     override fun observeEnabled() = sessionStore.syncEnabled
     override fun observePendingCount() = outboxDao.observePendingCount()
+    override fun observeCredentialState() = sessionStore.credentialStates.map {
+        GuestCredentialStatus.valueOf(it.name)
+    }
     override suspend fun setEnabled(enabled: Boolean) {
         sessionStore.setSyncEnabled(enabled)
         if (enabled) syncEnqueuer.enqueue() else syncEnqueuer.cancel()
+    }
+    override suspend fun resetCredentialsForNewIdentity() {
+        sessionStore.resetCredentialsForNewIdentity()
+        if (sessionStore.isSyncEnabled()) syncEnqueuer.enqueue()
     }
 }
 

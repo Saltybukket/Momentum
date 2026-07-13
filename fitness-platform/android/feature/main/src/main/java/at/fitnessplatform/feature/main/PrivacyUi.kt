@@ -27,6 +27,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var confirmEnable by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf(false) }
+    val credentialBlocked = state.credentialState in setOf(
+        CredentialRecoveryUiState.RECOVERY_REJECTED,
+        CredentialRecoveryUiState.INVALIDATED,
+        CredentialRecoveryUiState.RESET_ERROR,
+    )
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.privacy_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text(stringResource(R.string.privacy_local_default))
@@ -34,7 +40,8 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
         Text(stringResource(R.string.privacy_pending, state.pendingCount))
         Switch(
             checked = state.syncEnabled,
-            enabled = !state.changing,
+            enabled = !state.changing && !credentialBlocked &&
+                state.credentialState != CredentialRecoveryUiState.RESETTING,
             onCheckedChange = { enabled ->
                 if (enabled) confirmEnable = true else viewModel.setSyncEnabled(false)
             },
@@ -42,6 +49,31 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
         Text(stringResource(if (state.syncEnabled) R.string.privacy_enabled else R.string.privacy_disabled))
         if (state.changing) Text(stringResource(R.string.privacy_changing))
         state.error?.let { Text(stringResource(R.string.privacy_error), color = MaterialTheme.colorScheme.error) }
+        if (credentialBlocked) {
+            Text(
+                stringResource(
+                    if (state.credentialState == CredentialRecoveryUiState.RECOVERY_REJECTED) {
+                        R.string.privacy_credentials_rejected
+                    } else {
+                        R.string.privacy_credentials_invalidated
+                    },
+                ),
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(stringResource(R.string.privacy_credentials_local_data))
+            Button(onClick = { confirmReset = true }) {
+                Text(stringResource(R.string.privacy_credentials_reset))
+            }
+        }
+        if (state.credentialState == CredentialRecoveryUiState.RESETTING) {
+            Text(stringResource(R.string.privacy_credentials_resetting))
+        }
+        if (state.credentialState == CredentialRecoveryUiState.RESET_ERROR) {
+            Text(
+                stringResource(R.string.privacy_credentials_reset_error),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Text(stringResource(R.string.privacy_disable_note))
         TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
@@ -51,5 +83,21 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
         text = { Text(stringResource(R.string.privacy_confirm_text)) },
         confirmButton = { Button(onClick = { viewModel.setSyncEnabled(true); confirmEnable = false }) { Text(stringResource(R.string.privacy_enable)) } },
         dismissButton = { TextButton(onClick = { confirmEnable = false }) { Text(stringResource(R.string.privacy_keep_local)) } },
+    )
+    if (confirmReset) AlertDialog(
+        onDismissRequest = { confirmReset = false },
+        title = { Text(stringResource(R.string.privacy_credentials_confirm_title)) },
+        text = { Text(stringResource(R.string.privacy_credentials_confirm_text)) },
+        confirmButton = {
+            Button(onClick = {
+                viewModel.resetCredentialsForNewIdentity()
+                confirmReset = false
+            }) { Text(stringResource(R.string.privacy_credentials_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = { confirmReset = false }) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
     )
 }

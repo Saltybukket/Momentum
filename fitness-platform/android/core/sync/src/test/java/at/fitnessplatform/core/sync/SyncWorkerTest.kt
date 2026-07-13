@@ -61,6 +61,7 @@ class SyncWorkerTest {
         api = mockk(relaxed = true)
         coEvery { sessionStore.isSyncEnabled() } returns true
         coEvery { profileDao.get() } returns profile()
+        coEvery { outboxDao.markFailed(any(), any(), any()) } returns 1
     }
 
     @Test
@@ -74,7 +75,7 @@ class SyncWorkerTest {
         assertResult(ListenableWorker.Result.retry(), result)
         coVerify(exactly = 1) { sessionStore.clearToken() }
         coVerify(exactly = 0) { sessionStore.markRecoveryRejected() }
-        coVerify { outboxDao.markFailed(listOf("operation-1"), "AUTH_REJECTED") }
+        coVerify { outboxDao.markFailed(listOf("operation-1"), any(), "AUTH_REJECTED") }
     }
 
     @Test
@@ -142,7 +143,7 @@ class SyncWorkerTest {
 
         assertResult(ListenableWorker.Result.success(), result)
         coVerify(exactly = 1) { outboxDao.releaseClaims(any()) }
-        coVerify(exactly = 0) { outboxDao.markFailed(any(), any()) }
+        coVerify(exactly = 0) { outboxDao.markFailed(any(), any(), any()) }
         coVerify(exactly = 0) { api.createGuestSession(any()) }
     }
 
@@ -158,7 +159,22 @@ class SyncWorkerTest {
         running.cancelAndJoin()
 
         coVerify(atLeast = 1) { outboxDao.releaseClaims(any()) }
-        coVerify(exactly = 0) { outboxDao.markFailed(any(), any()) }
+        coVerify(exactly = 0) { outboxDao.markFailed(any(), any(), any()) }
+    }
+
+    @Test
+    fun staleWorkerDoesNotRetryOrMutateAfterLosingFailureClaim() = runTest {
+        coEvery { outboxDao.claimBatch(any(), any(), any(), any()) } returns listOf(outbox())
+        coEvery { sessionStore.tokenOrNull() } returns "current-token"
+        coEvery { api.pushSync(any(), any(), any()) } throws java.io.IOException("offline")
+        coEvery { outboxDao.markFailed(any(), any(), any()) } returns 0
+
+        val result = worker().doWork()
+
+        assertResult(ListenableWorker.Result.success(), result)
+        coVerify(exactly = 1) {
+            outboxDao.markFailed(listOf("operation-1"), any(), "NETWORK_TRANSIENT")
+        }
     }
 
     private fun worker(): SyncWorker {
