@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Phase 2B offline training calendar
+
+- Added Room schema 8 with owner-scoped plan schedules, recurring plan-day rules, dated workout
+  occurrences, availability rules and one-date overrides, plus an explicit 7→8 migration.
+- Added deterministic eight-week civil-time materialization, one-off moves/copies, explicitly
+  confirmed future-rule replacement, terminal-history protection and derived conflicts.
+- Added Today/Calendar/Plans/History navigation, Week/Month/Agenda views and
+  persistence-confirmed schedule/occurrence editors.
+- Corrected Phase 2B.1 by preserving all equipment requirements, making adapt-as-copy atomic,
+  retaining descriptions, moving mutations into domain use cases, localizing labels and adding set
+  reordering.
+
 ### Premium UI and UX checkpoint
 
 - Completed explicit Material 3 light/dark roles and contrast tests, production-screen previews,

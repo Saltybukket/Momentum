@@ -60,6 +60,7 @@ private object Routes {
     const val PRIVACY = "privacy"
     const val LOCATIONS = "locations"
     const val PLANS = "plans"
+    const val CALENDAR = "calendar"
 }
 
 private data class RootDestination(
@@ -80,7 +81,7 @@ internal fun usesNavigationRail(width: Dp): Boolean = width >= 840.dp
 internal fun rootRouteFor(route: String?): String? =
     when (route?.substringBefore('/')) {
         "home" -> Routes.HOME
-        "workouts", "workout-detail", "active-workout", "workout-summary", "plans" -> Routes.WORKOUTS
+        "workouts", "workout-detail", "active-workout", "workout-summary", "plans", "calendar" -> Routes.WORKOUTS
         "exercises", "exercise", "catalog", "catalog-detail", "custom-exercise",
         "custom-exercise-edit", "conflicts", "conflict",
         -> Routes.EXERCISES
@@ -98,6 +99,7 @@ private fun routeTitle(route: String?): Int = when (route?.substringBefore('/'))
     "privacy" -> R.string.privacy_title
     "locations" -> R.string.locations_title
     "plans" -> R.string.plans_title
+    "calendar" -> R.string.calendar_title
     "profile" -> R.string.nav_profile
     else -> R.string.app_name
 }
@@ -260,6 +262,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onStart = viewModel::startWorkout,
                             onComplete = viewModel::completeWorkout,
                             onPlans = { navController.navigate(Routes.PLANS) },
+                            onCalendar = { navController.navigate(Routes.CALENDAR) },
                         )
                     }
                     composable(Routes.CATALOG) {
@@ -275,6 +278,9 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                     }
                     composable(Routes.PLANS) {
                         TrainingPlansRoute(profile.id)
+                    }
+                    composable(Routes.CALENDAR) {
+                        TrainingCalendarRoute()
                     }
                     composable(
                         Routes.CATALOG_EXERCISE,
@@ -753,13 +759,29 @@ internal fun WorkoutScreen(
     onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
     onPlans: () -> Unit,
+    onCalendar: () -> Unit,
 ) {
     val defaultTitle = stringResource(R.string.workout_default_title)
     var title by rememberSaveable { mutableStateOf(defaultTitle) }
     val active = state.workouts.filter { it.status == WorkoutStatus.IN_PROGRESS || it.status == WorkoutStatus.PAUSED }
     val planned = state.workouts.filter { it.status == WorkoutStatus.PLANNED }
     val history = state.workouts.filter { it.status == WorkoutStatus.COMPLETED || it.status == WorkoutStatus.CANCELLED }
+    var section by rememberSaveable { mutableStateOf(WorkoutListSection.TODAY) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            FilterChip(
+                selected = section == WorkoutListSection.TODAY,
+                onClick = { section = WorkoutListSection.TODAY },
+                label = { Text(stringResource(R.string.calendar_today)) },
+            )
+            FilterChip(selected = false, onClick = onCalendar, label = { Text(stringResource(R.string.calendar_title)) })
+            FilterChip(selected = false, onClick = onPlans, label = { Text(stringResource(R.string.plans_title)) })
+            FilterChip(
+                selected = section == WorkoutListSection.HISTORY,
+                onClick = { section = WorkoutListSection.HISTORY },
+                label = { Text(stringResource(R.string.workouts_history)) },
+            )
+        }
         OutlinedTextField(title, { title = it }, label = { Text(stringResource(R.string.workout_title)) }, modifier = Modifier.fillMaxWidth())
         Button(
             onClick = { onCreate(title, newWorkoutExerciseIds()) },
@@ -771,16 +793,18 @@ internal fun WorkoutScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedButton(onClick = onPlans, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.plans_title))
-        }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            workoutSection(R.string.workouts_active, active, onStart, onComplete)
-            workoutSection(R.string.workouts_planned, planned, onStart, onComplete)
-            workoutSection(R.string.workouts_history, history, onStart, onComplete)
+            if (section == WorkoutListSection.TODAY) {
+                workoutSection(R.string.workouts_active, active, onStart, onComplete)
+                workoutSection(R.string.workouts_planned, planned, onStart, onComplete)
+            } else {
+                workoutSection(R.string.workouts_history, history, onStart, onComplete)
+            }
         }
     }
 }
+
+private enum class WorkoutListSection { TODAY, HISTORY }
 
 internal fun newWorkoutExerciseIds(): List<String> = emptyList()
 

@@ -278,17 +278,26 @@ class RoomTrainingPlanRepository @Inject constructor(
         }
     }
 
-    override suspend fun copy(id: String): TrainingPlan {
+    override suspend fun copy(id: String, transform: (TrainingPlan) -> TrainingPlan): TrainingPlan {
         val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
         val source = requireNotNull(dao.get(id, owner.id)?.toModel()) { "Training plan does not exist." }
         check(source.deletedAtEpochMs == null) { "Deleted training plans cannot be copied." }
         val now = clock.nowEpochMs()
-        val copied = source.deepCopy(
+        val copied = transform(source.deepCopy(
             id = ids.newUuid(),
             name = "${source.name} (Copy)",
             sourceTemplateId = source.sourceTemplateId ?: source.id,
             now = now,
             ids = ids,
+        )).copy(
+            ownerProfileId = owner.id,
+            isActive = false,
+            isArchived = false,
+            sourceTemplateId = source.sourceTemplateId ?: source.id,
+            createdAtEpochMs = now,
+            updatedAtEpochMs = now,
+            revision = 0,
+            deletedAtEpochMs = null,
         )
         validateTrainingPlan(copied)
         database.withTransaction { insertAggregate(copied) }
@@ -465,7 +474,7 @@ class RoomTrainingPlanRepository @Inject constructor(
         kind = ExerciseReferenceKind.CATALOG,
         catalogSource = "momentum-self-authored-demo",
         catalogExternalId = externalId,
-        snapshot = ExerciseSnapshot(name, trackingType, equipment, primaryMuscle),
+        snapshot = ExerciseSnapshot(name, trackingType, setOf(equipment), primaryMuscle),
     )
 }
 

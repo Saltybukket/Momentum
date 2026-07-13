@@ -19,7 +19,7 @@ interface TrainingPlanRepository {
     suspend fun getPlan(id: String): TrainingPlan?
     suspend fun create(plan: TrainingPlan): TrainingPlan
     suspend fun update(plan: TrainingPlan): TrainingPlan
-    suspend fun copy(id: String): TrainingPlan
+    suspend fun copy(id: String, transform: (TrainingPlan) -> TrainingPlan = { it }): TrainingPlan
     suspend fun setActive(id: String)
     suspend fun setArchived(id: String, archived: Boolean)
     suspend fun delete(id: String)
@@ -191,6 +191,217 @@ class SaveTrainingPlanUseCase(private val repository: TrainingPlanRepository) {
 
 class CopyTrainingPlanUseCase(private val repository: TrainingPlanRepository) {
     suspend operator fun invoke(id: String) = repository.copy(id)
+}
+
+class AdaptTrainingPlanCopyUseCase(
+    private val repository: TrainingPlanRepository,
+    private val alternatives: FindCompatibleAlternativesUseCase,
+) {
+    suspend operator fun invoke(
+        id: String,
+        location: TrainingLocation,
+        catalog: List<CatalogExercise>,
+    ): TrainingPlan = repository.copy(id) { copied ->
+        copied.copy(
+            name = "${copied.name} · ${location.name}",
+            weeks = copied.weeks.map { week ->
+                week.copy(days = week.days.map { day ->
+                    day.copy(blocks = day.blocks.map { block ->
+                        block.copy(exercises = block.exercises.map { exercise ->
+                            adaptExercise(exercise, location, catalog)
+                        })
+                    })
+                })
+            },
+        )
+    }
+
+    private fun adaptExercise(
+        exercise: PlanExercise,
+        location: TrainingLocation,
+        catalog: List<CatalogExercise>,
+    ): PlanExercise = if (
+        exercise.reference.snapshot.equipment.all {
+            it == EquipmentDefinitions.NONE || it in location.availableEquipment
+        }
+    ) {
+        exercise
+    } else {
+        val original = catalog.firstOrNull {
+            it.source == exercise.reference.catalogSource && it.externalId == exercise.reference.catalogExternalId
+        }
+        original?.let { alternatives(it, catalog, location).firstOrNull() }?.let { replacement ->
+            exercise.copy(
+                reference = ExerciseReference(
+                    kind = ExerciseReferenceKind.CATALOG,
+                    catalogSource = replacement.source,
+                    catalogExternalId = replacement.externalId,
+                    catalogExerciseId = replacement.id,
+                    snapshot = ExerciseSnapshot(
+                        replacement.name,
+                        replacement.trackingType,
+                        replacement.equipment.toSortedSet().ifEmpty { sortedSetOf(EquipmentDefinitions.NONE) },
+                        replacement.muscles.firstOrNull { it.role == MuscleRole.PRIMARY }?.slug,
+                    ),
+                ),
+            )
+        } ?: exercise
+    }
+}
+
+enum class PlanStructureKind { WEEK, DAY, BLOCK }
+
+class EditTrainingPlanUseCase(
+    private val repository: TrainingPlanRepository,
+    private val ids: UuidProvider,
+) {
+    suspend fun addExercise(plan: TrainingPlan, blockId: String, reference: ExerciseReference) = save(
+        plan.mapBlock(blockId) { block ->
+            block.copy(
+                exercises = block.exercises + PlanExercise(
+                    ids.newUuid(),
+                    block.exercises.size,
+                    reference,
+                    sets = listOf(defaultSet(reference, ids.newUuid())),
+                ),
+            )
+        },
+    )
+
+    suspend fun addWeek(plan: TrainingPlan) = save(plan.copy(weeks = plan.weeks + PlanWeek(
+        ids.newUuid(),
+        plan.weeks.size,
+        "Week ${plan.weeks.size + 1}",
+    )))
+
+    suspend fun addDay(plan: TrainingPlan, weekId: String) = save(plan.mapWeek(weekId) { week ->
+        val position = week.days.size
+        week.copy(days = week.days + PlanDay(ids.newUuid(), position, "Day ${position + 1}"))
+    })
+
+    suspend fun addBlock(plan: TrainingPlan, dayId: String) = save(plan.mapDay(dayId) { day ->
+        val position = day.blocks.size
+        day.copy(blocks = day.blocks + PlanBlock(ids.newUuid(), position, PlanBlockType.MAIN, "Block ${position + 1}"))
+    })
+
+    suspend fun removeStructure(plan: TrainingPlan, kind: PlanStructureKind, id: String) = save(
+        when (kind) {
+            PlanStructureKind.WEEK -> plan.copy(weeks = plan.weeks.filterNot { it.id == id }.reindexWeeks())
+            PlanStructureKind.DAY -> plan.copy(weeks = plan.weeks.map { week ->
+                week.copy(days = week.days.filterNot { it.id == id }.reindexDays())
+            })
+            PlanStructureKind.BLOCK -> plan.copy(weeks = plan.weeks.map { week ->
+                week.copy(days = week.days.map { day ->
+                    day.copy(blocks = day.blocks.filterNot { it.id == id }.reindexBlocks())
+                })
+            })
+        },
+    )
+
+    suspend fun moveStructure(plan: TrainingPlan, kind: PlanStructureKind, id: String, delta: Int) = save(
+        when (kind) {
+            PlanStructureKind.WEEK -> plan.copy(weeks = plan.weeks.moveItem(id, delta) { it.id }.reindexWeeks())
+            PlanStructureKind.DAY -> plan.copy(weeks = plan.weeks.map { week ->
+                week.copy(days = week.days.moveItem(id, delta) { it.id }.reindexDays())
+            })
+            PlanStructureKind.BLOCK -> plan.copy(weeks = plan.weeks.map { week ->
+                week.copy(days = week.days.map { day ->
+                    day.copy(blocks = day.blocks.moveItem(id, delta) { it.id }.reindexBlocks())
+                })
+            })
+        },
+    )
+
+    suspend fun removeExercise(plan: TrainingPlan, exerciseId: String) = save(plan.mapExerciseLists { rows ->
+        rows.filterNot { it.id == exerciseId }.reindexExercises()
+    })
+
+    suspend fun moveExercise(plan: TrainingPlan, exerciseId: String, delta: Int) = save(
+        plan.mapExerciseLists { it.moveItem(exerciseId, delta) { row -> row.id }.reindexExercises() },
+    )
+
+    suspend fun saveSet(plan: TrainingPlan, exerciseId: String, set: SetPrescription) = save(
+        plan.mapExercise(exerciseId) { exercise ->
+            val rows = if (exercise.sets.any { it.id == set.id }) {
+                exercise.sets.map { if (it.id == set.id) set else it }
+            } else {
+                exercise.sets + set.copy(position = exercise.sets.size)
+            }
+            exercise.copy(sets = rows.sortedBy { it.position })
+        },
+    )
+
+    suspend fun addSet(plan: TrainingPlan, exerciseId: String) = save(plan.mapExercise(exerciseId) { exercise ->
+        exercise.copy(sets = exercise.sets + defaultSet(exercise.reference, ids.newUuid()).copy(position = exercise.sets.size))
+    })
+
+    suspend fun deleteSet(plan: TrainingPlan, exerciseId: String, setId: String) = save(
+        plan.mapExercise(exerciseId) { exercise ->
+            exercise.copy(sets = exercise.sets.filterNot { it.id == setId }.mapIndexed { index, row ->
+                row.copy(position = index)
+            })
+        },
+    )
+
+    suspend fun moveSet(plan: TrainingPlan, exerciseId: String, setId: String, delta: Int) = save(
+        plan.mapExercise(exerciseId) { exercise ->
+            exercise.copy(sets = exercise.sets.moveItem(setId, delta) { it.id }.mapIndexed { index, row ->
+                row.copy(position = index)
+            })
+        },
+    )
+
+    private suspend fun save(plan: TrainingPlan) = repository.update(plan)
+}
+
+private fun defaultSet(reference: ExerciseReference, id: String) = SetPrescription(
+    id = id,
+    position = 0,
+    repsMin = 8.takeIf { reference.snapshot.trackingType in setOf(TrackingType.REPS, TrackingType.REPS_WEIGHT) },
+    repsMax = 8.takeIf { reference.snapshot.trackingType in setOf(TrackingType.REPS, TrackingType.REPS_WEIGHT) },
+    durationSeconds = 30.takeIf {
+        reference.snapshot.trackingType in setOf(TrackingType.DURATION, TrackingType.DISTANCE_DURATION)
+    },
+    restSeconds = 90,
+)
+
+private fun TrainingPlan.mapBlock(id: String, transform: (PlanBlock) -> PlanBlock) = copy(
+    weeks = weeks.map { week -> week.copy(days = week.days.map { day ->
+        day.copy(blocks = day.blocks.map { if (it.id == id) transform(it) else it })
+    }) },
+)
+
+private fun TrainingPlan.mapWeek(id: String, transform: (PlanWeek) -> PlanWeek) =
+    copy(weeks = weeks.map { if (it.id == id) transform(it) else it })
+
+private fun TrainingPlan.mapDay(id: String, transform: (PlanDay) -> PlanDay) = copy(
+    weeks = weeks.map { week -> week.copy(days = week.days.map { if (it.id == id) transform(it) else it }) },
+)
+
+private fun TrainingPlan.mapExerciseLists(transform: (List<PlanExercise>) -> List<PlanExercise>) = copy(
+    weeks = weeks.map { week -> week.copy(days = week.days.map { day ->
+        day.copy(blocks = day.blocks.map { block -> block.copy(exercises = transform(block.exercises)) })
+    }) },
+)
+
+private fun TrainingPlan.mapExercise(id: String, transform: (PlanExercise) -> PlanExercise) = copy(
+    weeks = weeks.map { week -> week.copy(days = week.days.map { day ->
+        day.copy(blocks = day.blocks.map { block ->
+            block.copy(exercises = block.exercises.map { if (it.id == id) transform(it) else it })
+        })
+    }) },
+)
+
+private fun List<PlanWeek>.reindexWeeks() = mapIndexed { index, row -> row.copy(position = index, weekIndex = index) }
+private fun List<PlanDay>.reindexDays() = mapIndexed { index, row -> row.copy(position = index, relativeDayIndex = index) }
+private fun List<PlanBlock>.reindexBlocks() = mapIndexed { index, row -> row.copy(position = index) }
+private fun List<PlanExercise>.reindexExercises() = mapIndexed { index, row -> row.copy(position = index) }
+
+private fun <T> List<T>.moveItem(id: String, delta: Int, identifier: (T) -> String): List<T> {
+    val from = indexOfFirst { identifier(it) == id }
+    if (from < 0) return this
+    val to = (from + delta).coerceIn(0, lastIndex)
+    return if (from == to) this else toMutableList().apply { add(to, removeAt(from)) }
 }
 
 class SetActiveTrainingPlanUseCase(private val repository: TrainingPlanRepository) {

@@ -194,6 +194,89 @@ class AppDatabaseTest {
         context.deleteDatabase(migrationName)
     }
 
+    @Test fun migrationSevenToEightPreservesPlansAndCanonicalizesEquipmentSnapshots() {
+        val migrationName = "training-calendar-migration.db"
+        val original = migrationHelper.createDatabase(migrationName, 7)
+        original.execSQL(
+            "INSERT INTO guest_profile VALUES ('profile', 'Guest', 1, 'METRIC', 'COMPLETED', 'LOCAL_ONLY', NULL, NULL)",
+        )
+        original.execSQL(
+            "INSERT INTO training_plans VALUES ('plan', 'profile', 'Strength', '', 'STRENGTH', 1, 'profile', 0, NULL, 1, 1, 0, NULL)",
+        )
+        original.execSQL("INSERT INTO plan_weeks VALUES ('week', 'plan', 0, 'Week', 0)")
+        original.execSQL("INSERT INTO plan_days VALUES ('day', 'week', 0, 'Day', 0, 60, '')")
+        original.execSQL("INSERT INTO plan_blocks VALUES ('block', 'day', 0, 'MAIN', 'Main', NULL)")
+        original.execSQL(
+            "INSERT INTO plan_exercises VALUES ('exercise', 'block', 0, 'CATALOG', NULL, 'demo', " +
+                "'squat', 'catalog', 'Squat', 'REPS', 'barbell', 'legs', 'RESOLVED', 0, '')",
+        )
+        original.close()
+
+        val migrated = migrationHelper.runMigrationsAndValidate(migrationName, 8, true, MIGRATION_7_8)
+        migrated.query("SELECT snapshotEquipment FROM plan_exercises WHERE id = 'exercise'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("[\"barbell\"]", cursor.getString(0))
+        }
+        migrated.query("SELECT COUNT(*) FROM plan_schedules").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.close()
+        context.deleteDatabase(migrationName)
+    }
+
+    @Test fun calendarRelationsAllowMultipleSessionsAndProtectTerminalHistory() = runTest {
+        database.guestProfileDao().insert(GuestProfile("profile", "Guest", 1).toEntity())
+        database.trainingPlanDao().insertPlan(
+            TrainingPlanEntity(
+                "plan", "profile", "Plan", "", "STRENGTH", true, "profile", false, null, 1, 1, 0, null,
+            ),
+        )
+        database.trainingPlanDao().insertWeeks(listOf(PlanWeekEntity("week", "plan", 0, "Week", 0)))
+        database.trainingPlanDao().insertDays(
+            listOf(
+                PlanDayEntity("day-a", "week", 0, "Morning", 0, 60, ""),
+                PlanDayEntity("day-b", "week", 1, "Evening", 1, 60, ""),
+            ),
+        )
+        val schedule = PlanSchedule(
+            "schedule", "profile", "plan", java.time.LocalDate.of(2026, 7, 13),
+            "Europe/Berlin", true, 1, 1,
+            rules = listOf(
+                PlanDayScheduleRule(
+                    "rule-a", "schedule", "day-a", java.time.DayOfWeek.MONDAY,
+                    java.time.LocalTime.of(8, 0), 60, null, 0,
+                ),
+                PlanDayScheduleRule(
+                    "rule-b", "schedule", "day-b", java.time.DayOfWeek.MONDAY,
+                    java.time.LocalTime.of(18, 0), 60, null, 1,
+                ),
+            ),
+        )
+        database.calendarDao().saveSchedule(schedule.toEntity(), schedule.rules.map { it.toEntity() })
+        val rows = listOf(
+            ScheduledWorkoutOccurrence(
+                "one", "profile", "schedule", "plan", "day-a", "Morning",
+                java.time.LocalDate.of(2026, 7, 13), java.time.LocalTime.of(8, 0),
+                "Europe/Berlin", 60, createdAtEpochMs = 1, updatedAtEpochMs = 1,
+            ),
+            ScheduledWorkoutOccurrence(
+                "two", "profile", "schedule", "plan", "day-b", "Evening",
+                java.time.LocalDate.of(2026, 7, 13), java.time.LocalTime.of(18, 0),
+                "Europe/Berlin", 60, status = ScheduledWorkoutStatus.COMPLETED,
+                createdAtEpochMs = 1, updatedAtEpochMs = 1,
+            ),
+        )
+        val inserted = database.calendarDao().insertOccurrences(rows.map { it.toEntity() })
+        assertEquals(2, inserted.size)
+        assertTrue(inserted.all { it != -1L })
+        assertEquals(2, database.calendarDao().observeOccurrences("profile", "2026-07-13", "2026-07-13").first().size)
+        assertEquals(0, database.calendarDao().changeStatus("two", "profile", "CANCELLED", 2))
+        database.calendarDao().deleteFuturePlanningRows("profile", "schedule", "2026-07-13", "2026-07-20")
+        assertEquals("COMPLETED", database.calendarDao().getOccurrence("two", "profile")?.status)
+        assertNull(database.calendarDao().getOccurrence("one", "profile"))
+    }
+
     @Test fun trainingPlanRelationsPersistOrderCascadeAndOneActivePlan() = runTest {
         database.guestProfileDao().insert(GuestProfile("profile", "Guest", 1).toEntity())
         val dao = database.trainingPlanDao()
@@ -213,7 +296,7 @@ class AppDatabaseTest {
             listOf(
                 PlanExerciseEntity(
                     "exercise", "block", 0, "CUSTOM", "custom", null, null, null,
-                    "Squat", "REPS", "none", "legs", "RESOLVED", false, "",
+                    "Squat", "REPS", "[\"none\"]", "legs", "RESOLVED", false, "",
                 ),
             ),
         )

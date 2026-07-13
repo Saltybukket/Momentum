@@ -20,6 +20,8 @@ public exercise catalog; broader product domains remain planned.
 - Development guest recovery, profile/exercise/workout endpoints, private exercise push/pull sync,
   push-oriented profile/workout sync, request IDs, structured errors and idempotency.
 - Immutable public catalog release import/activation, complete snapshot API and hash-verified Android Room refresh.
+- Editable owner-scoped offline training plans and a local civil-time training calendar with
+  recurring rules, dated occurrences, availability, one-off overrides and derived conflicts.
 - PostgreSQL schema and Alembic migration; Redis health and future distributed rate-limit foundation.
 - Deterministic provider mocks, module-boundary catalog and event dispatcher.
 - Backend tests, Android unit/instrumentation/UI test foundations, CI and Docker Compose.

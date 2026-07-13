@@ -40,8 +40,13 @@ interface DatabaseStartupProbe {
         PlanBlockEntity::class,
         PlanExerciseEntity::class,
         PlanSetPrescriptionEntity::class,
+        PlanScheduleEntity::class,
+        PlanDayScheduleRuleEntity::class,
+        ScheduledWorkoutOccurrenceEntity::class,
+        AvailabilityRuleEntity::class,
+        ScheduleOverrideEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -54,6 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun syncStateDao(): SyncStateDao
     abstract fun trainingLocationDao(): TrainingLocationDao
     abstract fun trainingPlanDao(): TrainingPlanDao
+    abstract fun calendarDao(): CalendarDao
 }
 
 private class RoomDatabaseStartupProbe(private val database: AppDatabase) : DatabaseStartupProbe {
@@ -247,6 +253,114 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Room 7 stored a single equipment slug. Room 8 stores a canonical JSON array so a
+        // catalog snapshot cannot silently lose additional requirements.
+        database.execSQL(
+            "UPDATE plan_exercises SET snapshotEquipment = " +
+                "CASE WHEN substr(snapshotEquipment, 1, 1) = '[' THEN snapshotEquipment " +
+                "ELSE '[\"' || snapshotEquipment || '\"]' END",
+        )
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `plan_schedules` (
+                `id` TEXT NOT NULL, `ownerProfileId` TEXT NOT NULL, `planId` TEXT NOT NULL,
+                `startDate` TEXT NOT NULL, `timeZoneId` TEXT NOT NULL, `isActive` INTEGER NOT NULL,
+                `activeSlot` TEXT, `createdAtEpochMs` INTEGER NOT NULL,
+                `updatedAtEpochMs` INTEGER NOT NULL, `revision` INTEGER NOT NULL,
+                PRIMARY KEY(`id`),
+                FOREIGN KEY(`ownerProfileId`) REFERENCES `guest_profile`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`planId`) REFERENCES `training_plans`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE)""",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_schedules_ownerProfileId` ON `plan_schedules` (`ownerProfileId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_schedules_planId` ON `plan_schedules` (`planId`)")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_plan_schedules_activeSlot` ON `plan_schedules` (`activeSlot`)")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `plan_day_schedule_rules` (
+                `id` TEXT NOT NULL, `scheduleId` TEXT NOT NULL, `planDayId` TEXT NOT NULL,
+                `dayOfWeek` INTEGER NOT NULL, `defaultStartTime` TEXT,
+                `defaultDurationMinutes` INTEGER NOT NULL, `preferredLocationId` TEXT,
+                `position` INTEGER NOT NULL, PRIMARY KEY(`id`),
+                FOREIGN KEY(`scheduleId`) REFERENCES `plan_schedules`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`planDayId`) REFERENCES `plan_days`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`preferredLocationId`) REFERENCES `training_locations`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL)""",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_day_schedule_rules_scheduleId` ON `plan_day_schedule_rules` (`scheduleId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_day_schedule_rules_planDayId` ON `plan_day_schedule_rules` (`planDayId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_day_schedule_rules_preferredLocationId` ON `plan_day_schedule_rules` (`preferredLocationId`)")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_plan_day_schedule_rules_scheduleId_planDayId` ON `plan_day_schedule_rules` (`scheduleId`, `planDayId`)")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_plan_day_schedule_rules_scheduleId_position` ON `plan_day_schedule_rules` (`scheduleId`, `position`)")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `scheduled_workout_occurrences` (
+                `id` TEXT NOT NULL, `ownerProfileId` TEXT NOT NULL, `scheduleId` TEXT,
+                `planId` TEXT, `planDayId` TEXT, `titleSnapshot` TEXT NOT NULL,
+                `scheduledLocalDate` TEXT NOT NULL, `scheduledLocalStartTime` TEXT,
+                `timeZoneId` TEXT NOT NULL, `plannedDurationMinutes` INTEGER NOT NULL,
+                `trainingLocationId` TEXT, `status` TEXT NOT NULL,
+                `originalScheduledDate` TEXT, `movedFromOccurrenceId` TEXT,
+                `notes` TEXT NOT NULL, `createdAtEpochMs` INTEGER NOT NULL,
+                `updatedAtEpochMs` INTEGER NOT NULL, `revision` INTEGER NOT NULL,
+                `deletedAtEpochMs` INTEGER, PRIMARY KEY(`id`),
+                FOREIGN KEY(`ownerProfileId`) REFERENCES `guest_profile`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`scheduleId`) REFERENCES `plan_schedules`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL,
+                FOREIGN KEY(`planId`) REFERENCES `training_plans`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL,
+                FOREIGN KEY(`planDayId`) REFERENCES `plan_days`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL,
+                FOREIGN KEY(`trainingLocationId`) REFERENCES `training_locations`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL)""",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_scheduled_workout_occurrences_ownerProfileId` ON `scheduled_workout_occurrences` (`ownerProfileId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_scheduled_workout_occurrences_scheduleId` ON `scheduled_workout_occurrences` (`scheduleId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_scheduled_workout_occurrences_planId` ON `scheduled_workout_occurrences` (`planId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_scheduled_workout_occurrences_planDayId` ON `scheduled_workout_occurrences` (`planDayId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_scheduled_workout_occurrences_trainingLocationId` ON `scheduled_workout_occurrences` (`trainingLocationId`)")
+        database.execSQL(
+            "CREATE INDEX IF NOT EXISTS " +
+                "`index_scheduled_workout_occurrences_ownerProfileId_scheduledLocalDate` " +
+                "ON `scheduled_workout_occurrences` (`ownerProfileId`, `scheduledLocalDate`)",
+        )
+        database.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                "`index_scheduled_workout_occurrences_scheduleId_planDayId_scheduledLocalDate` " +
+                "ON `scheduled_workout_occurrences` (`scheduleId`, `planDayId`, `scheduledLocalDate`)",
+        )
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `availability_rules` (
+                `id` TEXT NOT NULL, `ownerProfileId` TEXT NOT NULL, `dayOfWeek` INTEGER NOT NULL,
+                `earliestLocalTime` TEXT, `latestLocalTime` TEXT, `maxDurationMinutes` INTEGER,
+                `preferredLocationId` TEXT, `enabled` INTEGER NOT NULL, PRIMARY KEY(`id`),
+                FOREIGN KEY(`ownerProfileId`) REFERENCES `guest_profile`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`preferredLocationId`) REFERENCES `training_locations`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL)""",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_availability_rules_ownerProfileId` ON `availability_rules` (`ownerProfileId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_availability_rules_preferredLocationId` ON `availability_rules` (`preferredLocationId`)")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_availability_rules_ownerProfileId_dayOfWeek` ON `availability_rules` (`ownerProfileId`, `dayOfWeek`)")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `schedule_overrides` (
+                `id` TEXT NOT NULL, `ownerProfileId` TEXT NOT NULL, `localDate` TEXT NOT NULL,
+                `unavailable` INTEGER NOT NULL, `earliestLocalTime` TEXT, `latestLocalTime` TEXT,
+                `maxDurationMinutes` INTEGER, `locationId` TEXT, `note` TEXT, PRIMARY KEY(`id`),
+                FOREIGN KEY(`ownerProfileId`) REFERENCES `guest_profile`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`locationId`) REFERENCES `training_locations`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL)""",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_schedule_overrides_ownerProfileId` ON `schedule_overrides` (`ownerProfileId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_schedule_overrides_locationId` ON `schedule_overrides` (`locationId`)")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_schedule_overrides_ownerProfileId_localDate` ON `schedule_overrides` (`ownerProfileId`, `localDate`)")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -261,6 +375,7 @@ object DatabaseModule {
                 MIGRATION_4_5,
                 MIGRATION_5_6,
                 MIGRATION_6_7,
+                MIGRATION_7_8,
             )
             .build()
 
@@ -273,5 +388,6 @@ object DatabaseModule {
     @Provides fun provideSyncStateDao(db: AppDatabase): SyncStateDao = db.syncStateDao()
     @Provides fun provideTrainingLocationDao(db: AppDatabase): TrainingLocationDao = db.trainingLocationDao()
     @Provides fun provideTrainingPlanDao(db: AppDatabase): TrainingPlanDao = db.trainingPlanDao()
+    @Provides fun provideCalendarDao(db: AppDatabase): CalendarDao = db.calendarDao()
     @Provides fun provideDatabaseStartupProbe(db: AppDatabase): DatabaseStartupProbe = RoomDatabaseStartupProbe(db)
 }

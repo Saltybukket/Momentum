@@ -105,6 +105,17 @@ class RoomTrainingPlanRepositoryTest {
         assertEquals("Squat", resolved.exercise().reference.snapshot.name)
     }
 
+    @Test fun adaptedCopyIsInsertedExactlyOnceOrNotAtAll() = runTest {
+        val created = repository.create(plan("plan-1", "Original"))
+        val before = repository.observePlans().first().size
+        val adapted = repository.copy(created.id) { it.copy(name = "Adapted once") }
+        assertEquals(before + 1, repository.observePlans().first().size)
+        assertEquals("Adapted once", adapted.name)
+
+        assertTrue(runCatching { repository.copy(created.id) { error("adaptation failed") } }.isFailure)
+        assertEquals(before + 1, repository.observePlans().first().size)
+    }
+
     @Test fun starterPlansAreIdempotentEditableAndKeepStableCatalogIdentity() = runTest {
         repository.seedStarterPlans()
         repository.seedStarterPlans()
@@ -145,7 +156,7 @@ class RoomTrainingPlanRepositoryTest {
                                 ExerciseReference(
                                     ExerciseReferenceKind.CUSTOM,
                                     customExerciseId = "custom",
-                                    snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, "none", "legs"),
+                                    snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, setOf("none"), "legs"),
                                 ),
                                 sets = listOf(SetPrescription("set", 0, repsMin = 8, restSeconds = 90)),
                             ),

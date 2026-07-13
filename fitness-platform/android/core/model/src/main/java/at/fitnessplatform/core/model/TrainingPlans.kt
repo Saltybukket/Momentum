@@ -9,7 +9,7 @@ enum class PlanSetType { WARMUP, WORK, DROP, AMRAP, TIME, DISTANCE }
 data class ExerciseSnapshot(
     val name: String,
     val trackingType: TrackingType,
-    val equipment: String,
+    val equipment: Set<String>,
     val primaryMuscle: String? = null,
 )
 

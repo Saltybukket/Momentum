@@ -2,9 +2,11 @@ package at.fitnessplatform.core.database
 
 import at.fitnessplatform.core.model.*
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private val conflictJson = Json { ignoreUnknownKeys = true }
+private val snapshotJson = Json
 
 @Serializable
 data class ExerciseConflictSnapshot(
@@ -186,7 +188,7 @@ private fun PlanExerciseWithSets.toModel() = PlanExercise(
         snapshot = ExerciseSnapshot(
             name = exercise.snapshotName,
             trackingType = TrackingType.valueOf(exercise.snapshotTrackingType),
-            equipment = exercise.snapshotEquipment,
+            equipment = snapshotJson.decodeFromString<List<String>>(exercise.snapshotEquipment).toSortedSet(),
             primaryMuscle = exercise.snapshotPrimaryMuscle,
         ),
         resolutionStatus = ExerciseResolutionStatus.valueOf(exercise.resolutionStatus),
@@ -283,7 +285,7 @@ fun TrainingPlan.toRows(): TrainingPlanRows {
                         catalogExerciseId = reference.catalogExerciseId,
                         snapshotName = reference.snapshot.name,
                         snapshotTrackingType = reference.snapshot.trackingType.name,
-                        snapshotEquipment = reference.snapshot.equipment,
+                        snapshotEquipment = snapshotJson.encodeToString(reference.snapshot.equipment.toSortedSet().toList()),
                         snapshotPrimaryMuscle = reference.snapshot.primaryMuscle,
                         resolutionStatus = reference.resolutionStatus.name,
                         optional = exercise.optional,

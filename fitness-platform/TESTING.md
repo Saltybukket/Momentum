@@ -208,6 +208,15 @@ relation ordering and cascade behavior, one-active-plan enforcement, atomic repl
 deep copy, deleted-private snapshots and non-resurrecting idempotent starter seeding. These sources
 compile in the normal gate; their runtime execution remains a connected-test claim only.
 
+Training-calendar domain/JVM tests cover IANA-zone validation, DST-safe civil time, bounded and
+stable multi-session materialization, invalid plan-day references, combined availability,
+duration, location/equipment and overlap conflicts, terminal occurrence protection and explicit
+future replacement. ViewModel tests cover finite loading/operation state and local conflict/status
+updates. Room/data AndroidTest sources cover the 7→8 value/schema migration, canonical
+multi-equipment snapshots, calendar relations, idempotent materialization, atomic future
+replacement, completed-history preservation and ad-hoc copy separation. The normal gate compiles
+these sources; runtime execution is not claimed without the stable API-36 Windows AVD.
+
 `make doctor` warns for a missing Windows stable API-36 AVD; `make doctor-connected` is strict. Install with `sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, then `avdmanager.bat create avd -n Momentum_API_36 -k "system-images;android-36;google_apis;x86_64"`.
 
 ## Presentation verification

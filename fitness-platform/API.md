@@ -1,5 +1,9 @@
 # API conventions
 
+> Training plans and the Phase 2B.2 calendar are currently Android-local Room domains. No
+> plan/calendar sync endpoint is implied; that requires a separate ownership, conflict and consent
+> contract.
+
 ## Base URL and versioning
 
 All product routes use `/api/v1/`. The unversioned `GET /health` route is operational. Breaking changes require a new major route prefix; additive schema fields may be introduced within v1 because clients must ignore unknown response fields.

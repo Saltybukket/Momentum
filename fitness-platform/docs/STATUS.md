@@ -1,7 +1,7 @@
 # Project status
 
-Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified Gate UI.1
-checkpoint `62945a7` plus locally verified Phase 2B.1 training plans.
+Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, locally verified
+Phase 2B.2 calendar gate pending the final pushed-commit CI record.
 
 ## Implemented
 
@@ -37,40 +37,25 @@ checkpoint `62945a7` plus locally verified Phase 2B.1 training plans.
   references with durable snapshots, atomic copy/activation/archive/delete operations, Room-backed
   plan editing and idempotent self-authored starter plans. The immutable workout snapshot boundary
   is defined without beginning workout execution or plan synchronization.
+- Phase 2B.2 adds Room-backed recurring schedules, civil-time dated occurrences, availability and
+  overrides, deterministic eight-week materialization, explicit one-off versus future edits and
+  derived conflicts. Workouts expose Today, Calendar, Plans and History without beginning workout
+  execution or calendar synchronization.
 - Repository, migration, static-analysis, JVM/build and container verification workflows.
 
 ## Schema and verification authority
 
 - Alembic head: `0d4f6a8b2c17`.
-- Android Room version: 7; exported schemas 1–7 are committed.
+- Android Room version: 8; exported schemas 1–8 are committed.
 - The canonical command matrix and connected-test limitation are in [TESTING.md](../TESTING.md).
-  Phase 2A.1 passed the complete 128-test PostgreSQL backend suite on pytest 9.1.1 at
-  79.27% combined coverage, fresh SQLite/PostgreSQL migration checks, 43 distinct Android JVM
-  tests (81 debug/release executions), the 579-task Android gate and the 192-task AndroidTest
-  compile gate.
-- The current APK size/hash and final test counts are recorded in the latest premium UI handoff.
-- Premium local verification passed 128 PostgreSQL backend tests at 79.14% combined coverage,
-  49 distinct Android JVM tests (92 variant executions), the 644-task Android gate and 208-task
-  AndroidTest compile gate. Room remains version 6.
-- Gate UI.1 local verification passed 128 PostgreSQL backend tests at 79.20% combined coverage,
-  56 distinct Android JVM tests (106 debug/release and pure-JVM executions), the 656-task Android
-  gate and 208-task AndroidTest compile gate. Room remains version 6.
-- Phase 2B.1 local verification passed 128 PostgreSQL backend tests at 79.37% combined coverage,
-  fresh PostgreSQL and SQLite Alembic upgrade/check at `0d4f6a8b2c17`, Android JVM/domain tests,
-  the complete Android lint/static-analysis/build matrix and compilation of Room/data AndroidTest
-  sources. Connected Room migration execution is not claimed because the stable API-36 AVD remains
-  unavailable. Room is version 7.
-- Gate Q CI [run 29253072791](https://github.com/Saltybukket/Momentum/actions/runs/29253072791),
-  attempt 1, passed all backend, Android and repository-security jobs for `ed34e4f`.
-- Phase 2A.1 implementation CI [run 29256173819](https://github.com/Saltybukket/Momentum/actions/runs/29256173819),
-  attempt 1, passed all three jobs for `745894a` without reruns.
-- UX.0 correction CI [run 29261976736](https://github.com/Saltybukket/Momentum/actions/runs/29261976736),
-  attempt 1, passed all three jobs for `9b9325e` without reruns.
-- Premium implementation CI [run 29265287902](https://github.com/Saltybukket/Momentum/actions/runs/29265287902),
-  attempt 1, passed backend, Android and repository-security for exact head `07aa0bf` without rerun.
-- Phase 2B.1 CI [run 29290254292](https://github.com/Saltybukket/Momentum/actions/runs/29290254292),
-  attempt 1, passed Android, backend and repository-security for exact implementation head
-  `5f6fc73` without reruns.
+- Phase 2B.2 local verification passed 128 PostgreSQL backend tests with zero skips and 79.37%
+  combined coverage, fresh PostgreSQL and SQLite Alembic upgrade/check at `0d4f6a8b2c17`, 65
+  distinct Android JVM tests (118 debug/release and pure-JVM executions), the complete 656-task
+  Android gate and the 208-task AndroidTest compile gate. Connected Room migration execution is
+  not claimed because the stable API-36 AVD remains unavailable.
+- Docker Compose config/build/up, container migration and smoke passed. Gitleaks found no secrets;
+  Trivy found no fixed HIGH/CRITICAL filesystem or runtime-image vulnerabilities. The image report
+  retains 20 unfixed HIGH/CRITICAL Debian findings for review.
 
 ## Active risks
 
@@ -86,9 +71,6 @@ checkpoint `62945a7` plus locally verified Phase 2B.1 training plans.
 
 ## Next phase
 
-Phase 2B.1 editable offline training plans are locally complete. The next explicitly gated slice is
-Phase 2B.2, the local training calendar and occurrence materialization. Optional location
-synchronization remains separate and is not a prerequisite for local use.
-
-Latest operational handoff: [Phase 2B.1 checkpoint](HANDOFF_2026-07-13_PHASE_2B1.md). Historical
-reports and handoffs are under [archive](archive/README.md).
+Phase 2B.2 is locally complete and awaits only the final commit, push and exact-head CI evidence.
+No later feature gate is open. Workout execution, calendar sync, gamification and optional location
+synchronization remain outside this gate.

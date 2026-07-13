@@ -17,6 +17,7 @@ abstract class RepositoryBindings {
     @Binds @Singleton abstract fun bindCatalogRepository(impl: RoomCatalogRepository): CatalogRepository
     @Binds @Singleton abstract fun bindTrainingLocationRepository(impl: RoomTrainingLocationRepository): TrainingLocationRepository
     @Binds @Singleton abstract fun bindTrainingPlanRepository(impl: RoomTrainingPlanRepository): TrainingPlanRepository
+    @Binds @Singleton abstract fun bindTrainingCalendarRepository(impl: RoomTrainingCalendarRepository): TrainingCalendarRepository
     @Binds @Singleton abstract fun bindSyncPreferencesRepository(impl: RoomSyncPreferencesRepository): SyncPreferencesRepository
     @Binds @Singleton abstract fun bindEventDispatcher(impl: LocalEventDispatcher): DomainEventDispatcher
 }
@@ -61,8 +62,30 @@ object TrainingPlanUseCaseModule {
     @Provides fun observeActiveTrainingPlan(repository: TrainingPlanRepository) = ObserveActiveTrainingPlanUseCase(repository)
     @Provides fun saveTrainingPlan(repository: TrainingPlanRepository) = SaveTrainingPlanUseCase(repository)
     @Provides fun copyTrainingPlan(repository: TrainingPlanRepository) = CopyTrainingPlanUseCase(repository)
+    @Provides fun adaptTrainingPlanCopy(
+        repository: TrainingPlanRepository,
+        alternatives: FindCompatibleAlternativesUseCase,
+    ) = AdaptTrainingPlanCopyUseCase(repository, alternatives)
+    @Provides fun editTrainingPlan(repository: TrainingPlanRepository, ids: at.fitnessplatform.core.model.UuidProvider) =
+        EditTrainingPlanUseCase(repository, ids)
     @Provides fun setActiveTrainingPlan(repository: TrainingPlanRepository) = SetActiveTrainingPlanUseCase(repository)
     @Provides fun archiveTrainingPlan(repository: TrainingPlanRepository) = ArchiveTrainingPlanUseCase(repository)
     @Provides fun deleteTrainingPlan(repository: TrainingPlanRepository) = DeleteTrainingPlanUseCase(repository)
     @Provides fun seedStarterTrainingPlans(repository: TrainingPlanRepository) = SeedStarterTrainingPlansUseCase(repository)
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object TrainingCalendarUseCaseModule {
+    @Provides fun materializeSchedule(repository: TrainingCalendarRepository) = MaterializeScheduleUseCase(repository)
+    @Provides fun replaceFutureSchedule(repository: TrainingCalendarRepository) = ReplaceFutureScheduleUseCase(repository)
+    @Provides fun moveOccurrence(repository: TrainingCalendarRepository) = MoveOccurrenceUseCase(repository)
+    @Provides fun changeOccurrenceStatus(repository: TrainingCalendarRepository) = ChangeOccurrenceStatusUseCase(repository)
+    @Provides fun detectCalendarConflicts() = DetectCalendarConflictsUseCase()
+    @Provides fun createPlanSchedule(
+        repository: TrainingCalendarRepository,
+        ids: at.fitnessplatform.core.model.UuidProvider,
+        clock: at.fitnessplatform.core.model.Clock,
+    ) = CreatePlanScheduleUseCase(repository, ids, clock)
+    @Provides fun updateScheduleRule(repository: TrainingCalendarRepository) = UpdateScheduleRuleUseCase(repository)
 }

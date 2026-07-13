@@ -43,7 +43,7 @@ class TrainingPlanUseCasesTest {
                 kind = ExerciseReferenceKind.CATALOG,
                 catalogSource = "demo",
                 catalogExternalId = null,
-                snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, "none"),
+                snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, setOf("none")),
             ),
         )
         assertTrue(runCatching { validateTrainingPlan(invalidCatalog) }.exceptionOrNull() is ValidationException)
@@ -119,7 +119,7 @@ class TrainingPlanUseCasesTest {
         ExerciseReference(
             kind = ExerciseReferenceKind.CUSTOM,
             customExerciseId = "custom",
-            snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, "none", "legs"),
+            snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, setOf("none"), "legs"),
         ),
         sets = listOf(
             SetPrescription(
@@ -172,9 +172,10 @@ private class FakeTrainingPlanRepository : TrainingPlanRepository {
     override suspend fun update(plan: TrainingPlan) = plan.also { updated ->
         plans.value = plans.value.map { if (it.id == updated.id) updated else it }
     }
-    override suspend fun copy(id: String): TrainingPlan {
+    override suspend fun copy(id: String, transform: (TrainingPlan) -> TrainingPlan): TrainingPlan {
         val source = requireNotNull(getPlan(id))
-        return source.copy(id = "$id-copy", sourceTemplateId = source.sourceTemplateId ?: id).also { plans.value += it }
+        return transform(source.copy(id = "$id-copy", sourceTemplateId = source.sourceTemplateId ?: id))
+            .also { plans.value += it }
     }
     override suspend fun setActive(id: String) = Unit
     override suspend fun setArchived(id: String, archived: Boolean) = Unit

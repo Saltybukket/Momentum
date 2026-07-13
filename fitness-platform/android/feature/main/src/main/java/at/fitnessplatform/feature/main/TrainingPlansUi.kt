@@ -50,7 +50,9 @@ import at.fitnessplatform.core.designsystem.MomentumSpacing
 import at.fitnessplatform.core.designsystem.MomentumTheme
 import at.fitnessplatform.core.model.ExerciseReference
 import at.fitnessplatform.core.model.ExerciseReferenceKind
+import at.fitnessplatform.core.model.ExerciseResolutionStatus
 import at.fitnessplatform.core.model.ExerciseSnapshot
+import at.fitnessplatform.core.model.EquipmentDefinitions
 import at.fitnessplatform.core.model.PlanBlock
 import at.fitnessplatform.core.model.PlanBlockType
 import at.fitnessplatform.core.model.PlanDay
@@ -62,6 +64,7 @@ import at.fitnessplatform.core.model.TempoPrescription
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.TrainingPlan
 import at.fitnessplatform.core.model.TrainingPlanGoal
+import at.fitnessplatform.domain.PlanStructureKind
 
 @Composable
 fun TrainingPlansRoute(
@@ -85,6 +88,7 @@ fun TrainingPlansRoute(
         onSaveSet = viewModel::saveSet,
         onAddSet = viewModel::addSet,
         onDeleteSet = viewModel::deleteSet,
+        onMoveSet = viewModel::moveSet,
         onMove = viewModel::move,
         onCopy = viewModel::copy,
         onAdaptCopy = viewModel::adaptCopy,
@@ -101,18 +105,19 @@ internal fun TrainingPlansScreen(
     state: TrainingPlansUiState,
     ownerProfileId: String,
     onSelect: (String?) -> Unit,
-    onCreate: (String, String, TrainingPlanGoal) -> Unit,
-    onRename: (TrainingPlan, String, String, TrainingPlanGoal) -> Unit,
-    onAddExercise: (TrainingPlan, String, PlanExerciseChoice) -> Unit,
+    onCreate: (String, String, String, TrainingPlanGoal, () -> Unit) -> Unit,
+    onRename: (TrainingPlan, String, String, TrainingPlanGoal, () -> Unit) -> Unit,
+    onAddExercise: (TrainingPlan, String, PlanExerciseChoice, () -> Unit) -> Unit,
     onAddWeek: (TrainingPlan) -> Unit,
     onAddDay: (TrainingPlan, String) -> Unit,
     onAddBlock: (TrainingPlan, String) -> Unit,
     onRemoveStructure: (TrainingPlan, PlanStructureKind, String) -> Unit,
     onMoveStructure: (TrainingPlan, PlanStructureKind, String, Int) -> Unit,
     onRemoveExercise: (TrainingPlan, String) -> Unit,
-    onSaveSet: (TrainingPlan, String, SetPrescription) -> Unit,
+    onSaveSet: (TrainingPlan, String, SetPrescription, () -> Unit) -> Unit,
     onAddSet: (TrainingPlan, String) -> Unit,
     onDeleteSet: (TrainingPlan, String, String) -> Unit,
+    onMoveSet: (TrainingPlan, String, String, Int) -> Unit,
     onMove: (TrainingPlan, String, Int) -> Unit,
     onCopy: (String) -> Unit,
     onAdaptCopy: (String) -> Unit,
@@ -151,6 +156,7 @@ internal fun TrainingPlansScreen(
             onRemoveExercise = onRemoveExercise,
             onAddSet = onAddSet,
             onDeleteSet = onDeleteSet,
+            onMoveSet = onMoveSet,
             onMove = onMove,
             onCopy = onCopy,
             onAdaptCopy = { adapting = selected },
@@ -166,7 +172,9 @@ internal fun TrainingPlansScreen(
         initialGoal = TrainingPlanGoal.GENERAL_FITNESS,
         saving = state.saving,
         onDismiss = { creating = false },
-        onSave = { name, _, goal -> onCreate(ownerProfileId, name, goal); creating = false },
+        onSave = { name, description, goal ->
+            onCreate(ownerProfileId, name, description, goal) { creating = false }
+        },
     )
     if (editing && selected != null) PlanEditorSheet(
         title = stringResource(R.string.plans_edit),
@@ -175,20 +183,24 @@ internal fun TrainingPlansScreen(
         initialGoal = selected.goal,
         saving = state.saving,
         onDismiss = { editing = false },
-        onSave = { name, description, goal -> onRename(selected, name, description, goal); editing = false },
+        onSave = { name, description, goal ->
+            onRename(selected, name, description, goal) { editing = false }
+        },
     )
     pickingBlockId?.let { blockId -> if (selected != null) ExercisePickerSheet(
         choices = state.choices,
         saving = state.saving,
         onDismiss = { pickingBlockId = null },
-        onPick = { onAddExercise(selected, blockId, it); pickingBlockId = null },
+        onPick = { choice -> onAddExercise(selected, blockId, choice) { pickingBlockId = null } },
     ) }
     editingSet?.let { (exercise, prescription) ->
         if (selected != null) SetEditorDialog(
             prescription = prescription,
             saving = state.saving,
             onDismiss = { editingSet = null },
-            onSave = { onSaveSet(selected, exercise.id, it); editingSet = null },
+            onSave = { prescription ->
+                onSaveSet(selected, exercise.id, prescription) { editingSet = null }
+            },
         )
     }
     adapting?.let { plan ->
@@ -293,6 +305,7 @@ private fun PlanDetail(
     onRemoveExercise: (TrainingPlan, String) -> Unit,
     onAddSet: (TrainingPlan, String) -> Unit,
     onDeleteSet: (TrainingPlan, String, String) -> Unit,
+    onMoveSet: (TrainingPlan, String, String, Int) -> Unit,
     onMove: (TrainingPlan, String, Int) -> Unit,
     onCopy: (String) -> Unit,
     onAdaptCopy: (String) -> Unit,
@@ -395,6 +408,7 @@ private fun PlanDetail(
                                 onRemoveExercise,
                                 onAddSet,
                                 onDeleteSet,
+                                onMoveSet,
                             )
                         }
                     }
@@ -426,6 +440,7 @@ private fun StructureActions(
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun PlanExerciseCard(
     plan: TrainingPlan,
     exercise: PlanExercise,
@@ -435,7 +450,11 @@ private fun PlanExerciseCard(
     onRemoveExercise: (TrainingPlan, String) -> Unit,
     onAddSet: (TrainingPlan, String) -> Unit,
     onDeleteSet: (TrainingPlan, String, String) -> Unit,
+    onMoveSet: (TrainingPlan, String, String, Int) -> Unit,
 ) = Card(Modifier.fillMaxWidth().semantics { contentDescription = exercise.reference.snapshot.name }) {
+    val equipmentLabels = exercise.reference.snapshot.equipment.sorted()
+        .map { it.localizedEquipmentLabel() }
+        .joinToString()
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(exercise.reference.snapshot.name, style = MaterialTheme.typography.titleMedium)
         Text(
@@ -447,8 +466,13 @@ private fun PlanExerciseCard(
                 },
             ),
         )
-        Text(stringResource(R.string.plans_equipment, exercise.reference.snapshot.equipment))
-        Text(exercise.reference.resolutionStatus.name.replace('_', ' '))
+        Text(
+            stringResource(
+                R.string.plans_equipment,
+                equipmentLabels,
+            ),
+        )
+        Text(exercise.reference.resolutionStatus.localizedLabel())
         exercise.sets.sortedBy { it.position }.forEachIndexed { index, set ->
             val restSeconds = set.restSeconds ?: 0
             Text(
@@ -460,6 +484,14 @@ private fun PlanExerciseCard(
                 ),
             )
             Row {
+                TextButton(
+                    onClick = { onMoveSet(plan, exercise.id, set.id, -1) },
+                    enabled = !state.saving && !plan.isArchived && index > 0,
+                ) { Text(stringResource(R.string.plans_move_up)) }
+                TextButton(
+                    onClick = { onMoveSet(plan, exercise.id, set.id, 1) },
+                    enabled = !state.saving && !plan.isArchived && index < exercise.sets.lastIndex,
+                ) { Text(stringResource(R.string.plans_move_down)) }
                 TextButton(
                     onClick = { onEditSet(exercise, set) },
                     enabled = !state.saving && !plan.isArchived,
@@ -570,7 +602,8 @@ private fun ExercisePickerSheet(
                                 },
                             ),
                         )
-                        Text(stringResource(R.string.plans_equipment, choice.equipment))
+                        val equipment = choice.equipment.sorted().map { it.localizedEquipmentLabel() }.joinToString()
+                        Text(stringResource(R.string.plans_equipment, equipment))
                         if (!choice.compatible) {
                             Text(stringResource(R.string.plans_incompatible), color = MaterialTheme.colorScheme.error)
                         }
@@ -613,7 +646,7 @@ private fun SetEditorDialog(
                     FilterChip(
                         selected = option == setType,
                         onClick = { setType = option },
-                        label = { Text(option.name.replace('_', ' ')) },
+                        label = { Text(option.localizedLabel()) },
                         enabled = !saving,
                     )
                 }
@@ -662,6 +695,35 @@ private fun SetEditorDialog(
 }
 
 @Composable
+private fun String.localizedEquipmentLabel(): String {
+    val definition = EquipmentDefinitions.all.firstOrNull { it.slug == this }
+    return if (definition == null) stringResource(R.string.equipment_unknown_generic)
+    else stringResource(equipmentLabelResource(definition))
+}
+
+@Composable
+private fun ExerciseResolutionStatus.localizedLabel() = stringResource(
+    when (this) {
+        ExerciseResolutionStatus.RESOLVED -> R.string.plans_resolution_resolved
+        ExerciseResolutionStatus.UNAVAILABLE -> R.string.plans_resolution_unavailable
+        ExerciseResolutionStatus.DEPRECATED -> R.string.plans_resolution_deprecated
+        ExerciseResolutionStatus.DELETED_CUSTOM -> R.string.plans_resolution_deleted_custom
+    },
+)
+
+@Composable
+private fun PlanSetType.localizedLabel() = stringResource(
+    when (this) {
+        PlanSetType.WARMUP -> R.string.plans_set_type_warmup
+        PlanSetType.WORK -> R.string.plans_set_type_work
+        PlanSetType.DROP -> R.string.plans_set_type_drop
+        PlanSetType.AMRAP -> R.string.plans_set_type_amrap
+        PlanSetType.TIME -> R.string.plans_set_type_time
+        PlanSetType.DISTANCE -> R.string.plans_set_type_distance
+    },
+)
+
+@Composable
 private fun PlanNumberField(
     value: String,
     onValueChange: (String) -> Unit,
@@ -708,18 +770,19 @@ private fun TrainingPlansPreview() = MomentumTheme {
         state = TrainingPlansUiState(loading = false, plans = listOf(previewPlan())),
         ownerProfileId = "profile",
         onSelect = {},
-        onCreate = { _, _, _ -> },
-        onRename = { _, _, _, _ -> },
-        onAddExercise = { _, _, _ -> },
+        onCreate = { _, _, _, _, success -> success() },
+        onRename = { _, _, _, _, success -> success() },
+        onAddExercise = { _, _, _, success -> success() },
         onAddWeek = {},
         onAddDay = { _, _ -> },
         onAddBlock = { _, _ -> },
         onRemoveStructure = { _, _, _ -> },
         onMoveStructure = { _, _, _, _ -> },
         onRemoveExercise = { _, _ -> },
-        onSaveSet = { _, _, _ -> },
+        onSaveSet = { _, _, _, success -> success() },
         onAddSet = { _, _ -> },
         onDeleteSet = { _, _, _ -> },
+        onMoveSet = { _, _, _, _ -> },
         onMove = { _, _, _ -> },
         onCopy = {},
         onAdaptCopy = {},
@@ -763,7 +826,7 @@ private fun previewPlan() = TrainingPlan(
                                         ExerciseReferenceKind.CATALOG,
                                         catalogSource = "self-authored",
                                         catalogExternalId = "squat",
-                                        snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, "none"),
+                                        snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, setOf("none")),
                                     ),
                                     sets = listOf(SetPrescription("set", 0, repsMin = 8, restSeconds = 90)),
                                 ),

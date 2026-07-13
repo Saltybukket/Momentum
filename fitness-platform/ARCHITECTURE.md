@@ -310,3 +310,23 @@ the same route families through a branded rail and bounded content surface. Bran
 self-authored Android vectors; the external visual-reference folder is neither a source set nor a
 packaged runtime asset. Preview fixtures call production screen composables instead of a parallel
 mock layout. See `docs/UI_DESIGN_SYSTEM.md`.
+
+## 13. Offline plans and local training calendar
+
+Room 7 introduced the owner-scoped training-plan aggregate. Room 8 keeps reusable plan structure
+strictly separate from dated `ScheduledWorkoutOccurrence` rows. A `PlanSchedule` stores an IANA
+time-zone identifier and recurring plan-day rules as local civil dates/times; conversion to an
+instant is deferred to workout execution so daylight-saving transitions cannot silently rewrite
+the user's intended wall-clock time.
+
+Materialization is a deterministic, idempotent eight-week Room transaction. Editing one
+occurrence never edits its plan or rule. Replacing future planned occurrences is a separate,
+explicitly confirmed transaction that preserves completed, running, skipped, cancelled and
+historical rows. Availability and date overrides are inputs to derived conflicts, never persisted
+conflict authority.
+
+Plan exercise snapshots store every required equipment slug as a canonical JSON array in the
+existing Room column. Compatibility and calendar conflict derivation require the full set, not a
+single representative item. Adapt-as-copy is one repository transaction: the transformed deep
+copy is inserted once or no copy is inserted. Calendar sync, workout execution and server APIs are
+not part of this local slice. See ADR-017 and ADR-018.

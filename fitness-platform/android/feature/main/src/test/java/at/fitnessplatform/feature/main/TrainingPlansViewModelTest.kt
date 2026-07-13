@@ -14,12 +14,15 @@ import at.fitnessplatform.core.model.TrainingPlanGoal
 import at.fitnessplatform.core.model.UuidProvider
 import at.fitnessplatform.core.testing.MainDispatcherRule
 import at.fitnessplatform.domain.ArchiveTrainingPlanUseCase
+import at.fitnessplatform.domain.AdaptTrainingPlanCopyUseCase
 import at.fitnessplatform.domain.CatalogRepository
 import at.fitnessplatform.domain.CopyTrainingPlanUseCase
 import at.fitnessplatform.domain.DeleteTrainingPlanUseCase
 import at.fitnessplatform.domain.ExerciseRepository
 import at.fitnessplatform.domain.FindCompatibleAlternativesUseCase
+import at.fitnessplatform.domain.EditTrainingPlanUseCase
 import at.fitnessplatform.domain.ObserveTrainingPlansUseCase
+import at.fitnessplatform.domain.PlanStructureKind
 import at.fitnessplatform.domain.SaveTrainingPlanUseCase
 import at.fitnessplatform.domain.SeedStarterTrainingPlansUseCase
 import at.fitnessplatform.domain.SetActiveTrainingPlanUseCase
@@ -47,6 +50,8 @@ class TrainingPlansViewModelTest {
             ObserveTrainingPlansUseCase(plans),
             SaveTrainingPlanUseCase(plans),
             CopyTrainingPlanUseCase(plans),
+            AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
+            EditTrainingPlanUseCase(plans, ids),
             SetActiveTrainingPlanUseCase(plans),
             ArchiveTrainingPlanUseCase(plans),
             DeleteTrainingPlanUseCase(plans),
@@ -54,16 +59,16 @@ class TrainingPlansViewModelTest {
             EmptyCatalogRepository(),
             OneExerciseRepository(),
             EmptyLocationRepository(),
-            FindCompatibleAlternativesUseCase(),
             ids,
             object : Clock { override fun nowEpochMs() = 100L },
         )
         advanceUntilIdle()
         assertEquals(listOf("Your private exercise"), viewModel.state.value.choices.map { it.name })
 
-        viewModel.create("profile", "Strength", TrainingPlanGoal.STRENGTH)
+        viewModel.create("profile", "Strength", "Description", TrainingPlanGoal.STRENGTH)
         advanceUntilIdle()
         val created = viewModel.state.value.selectedPlan ?: error("plan missing")
+        assertEquals("Description", created.description)
         viewModel.addExercise(
             created,
             created.weeks.single().days.single().blocks.single().id,
@@ -119,13 +124,15 @@ class TrainingPlansViewModelTest {
         val plans = MutablePlanRepository().apply { failSave = true }
         val viewModel = TrainingPlansViewModel(
             ObserveTrainingPlansUseCase(plans), SaveTrainingPlanUseCase(plans), CopyTrainingPlanUseCase(plans),
+            AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
+            EditTrainingPlanUseCase(plans, SequentialIds()),
             SetActiveTrainingPlanUseCase(plans), ArchiveTrainingPlanUseCase(plans), DeleteTrainingPlanUseCase(plans),
             SeedStarterTrainingPlansUseCase(plans),
             EmptyCatalogRepository(), OneExerciseRepository(), EmptyLocationRepository(),
-            FindCompatibleAlternativesUseCase(), SequentialIds(), object : Clock { override fun nowEpochMs() = 1L },
+            SequentialIds(), object : Clock { override fun nowEpochMs() = 1L },
         )
         advanceUntilIdle()
-        viewModel.create("profile", "Rejected", TrainingPlanGoal.CUSTOM)
+        viewModel.create("profile", "Rejected", "", TrainingPlanGoal.CUSTOM)
         advanceUntilIdle()
         assertTrue(viewModel.state.value.error != null)
         assertTrue(viewModel.state.value.plans.isEmpty())
@@ -156,8 +163,8 @@ private class MutablePlanRepository : TrainingPlanRepository {
         state.value = state.value.map { if (it.id == plan.id) plan else it }
         return plan
     }
-    override suspend fun copy(id: String): TrainingPlan {
-        val copied = requireNotNull(getPlan(id)).copy(id = "$id-copy", sourceTemplateId = id, isActive = false)
+    override suspend fun copy(id: String, transform: (TrainingPlan) -> TrainingPlan): TrainingPlan {
+        val copied = transform(requireNotNull(getPlan(id)).copy(id = "$id-copy", sourceTemplateId = id, isActive = false))
         state.value += copied
         return copied
     }

@@ -191,9 +191,9 @@ valid. Historical rows are retained; explicit activation supports rollback witho
 them. The pre-release global catalog tables remain solely so the migration can upgrade and
 downgrade existing installations; runtime repositories do not write them.
 
-Android Room schema 6 continues to store one validated local catalog snapshot and remains disjoint
+Android Room continues to store one validated local catalog snapshot and remains disjoint
 from owner-bound `custom_exercises`. Network content is hash-checked before the atomic Room
-replacement. Schemas 1–7 are exported under `android/core/database/schemas/`.
+replacement. Schemas 1–8 are exported under `android/core/database/schemas/`.
 
 ## Offline training plans
 
@@ -217,3 +217,21 @@ reference only the existing self-authored CC0 demo catalog and are seeded idempo
 execution is outside this slice; `WorkoutPlanSnapshot` defines the immutable handoff that a later
 execution aggregate must own, including planned duration, optional location, optional start instant
 and IANA time-zone identity.
+
+## Local training calendar
+
+Room schema 8 adds `plan_schedules`, `plan_day_schedule_rules`,
+`scheduled_workout_occurrences`, `availability_rules` and `schedule_overrides`. Schedules store an
+owner/plan, local start date, IANA zone and nullable unique active slot. Rules contain plan-day
+weekday, optional civil start time, duration, optional location and stable position. Occurrences
+store dated snapshots with nullable plan/schedule links so later plan deletion cannot destroy
+history.
+
+`(scheduleId, planDayId, scheduledLocalDate)` is unique for deterministic recurring
+materialization; ad-hoc and copied occurrences have no schedule ID, and multiple workouts per date
+remain valid. Only planned/conflicted future rows may be replaced. Running, completed, skipped and
+cancelled rows are terminal for calendar editing.
+
+Room 8 also migrates `plan_exercises.snapshotEquipment` from one slug to a canonical sorted JSON
+array. This is an immutable snapshot value; catalog and location authority remain normalized
+elsewhere. Exported schemas 1–8 live under `android/core/database/schemas/`.
