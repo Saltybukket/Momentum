@@ -192,3 +192,35 @@ data class SyncStateEntity(
     val exerciseCursor: Long = 0,
     val updatedAtEpochMs: Long,
 )
+
+@Entity(
+    tableName = "training_locations",
+    indices = [
+        Index(value = ["activeSlot"], unique = true),
+        Index(value = ["isActive", "deletedAtEpochMs"]),
+    ],
+)
+data class TrainingLocationEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val type: String,
+    val isActive: Boolean,
+    val activeSlot: Int?,
+    val createdAtEpochMs: Long,
+    val updatedAtEpochMs: Long,
+    val revision: Long,
+    val deletedAtEpochMs: Long?,
+)
+
+@Entity(
+    tableName = "training_location_equipment",
+    primaryKeys = ["locationId", "equipmentSlug"],
+    foreignKeys = [ForeignKey(
+        entity = TrainingLocationEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["locationId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("locationId"), Index("equipmentSlug")],
+)
+data class TrainingLocationEquipmentEntity(val locationId: String, val equipmentSlug: String)

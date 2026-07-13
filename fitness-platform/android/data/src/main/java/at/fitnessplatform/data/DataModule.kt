@@ -15,6 +15,7 @@ abstract class RepositoryBindings {
     @Binds @Singleton abstract fun bindExerciseRepository(impl: RoomExerciseRepository): ExerciseRepository
     @Binds @Singleton abstract fun bindWorkoutRepository(impl: RoomWorkoutRepository): WorkoutRepository
     @Binds @Singleton abstract fun bindCatalogRepository(impl: RoomCatalogRepository): CatalogRepository
+    @Binds @Singleton abstract fun bindTrainingLocationRepository(impl: RoomTrainingLocationRepository): TrainingLocationRepository
     @Binds @Singleton abstract fun bindSyncPreferencesRepository(impl: RoomSyncPreferencesRepository): SyncPreferencesRepository
     @Binds @Singleton abstract fun bindEventDispatcher(impl: LocalEventDispatcher): DomainEventDispatcher
 }
@@ -35,4 +36,18 @@ object UseCaseModule {
     @Provides fun createWorkout(repository: WorkoutRepository) = CreateWorkoutUseCase(repository)
     @Provides fun startWorkout(repository: WorkoutRepository) = StartWorkoutUseCase(repository)
     @Provides fun completeWorkout(repository: WorkoutRepository) = CompleteWorkoutUseCase(repository)
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object TrainingLocationUseCaseModule {
+    @Provides fun observeTrainingLocations(repository: TrainingLocationRepository) = ObserveTrainingLocationsUseCase(repository)
+    @Provides fun createTrainingLocation(repository: TrainingLocationRepository) = CreateTrainingLocationUseCase(repository)
+    @Provides fun updateTrainingLocation(repository: TrainingLocationRepository) = UpdateTrainingLocationUseCase(repository)
+    @Provides fun selectActiveTrainingLocation(repository: TrainingLocationRepository) = SelectActiveTrainingLocationUseCase(repository)
+    @Provides fun updateLocationEquipment(repository: TrainingLocationRepository) = UpdateLocationEquipmentUseCase(repository)
+    @Provides fun deleteTrainingLocation(repository: TrainingLocationRepository) = DeleteTrainingLocationUseCase(repository)
+    @Provides fun observeCompatibleCatalog(catalog: CatalogRepository, locations: TrainingLocationRepository) =
+        ObserveCompatibleCatalogUseCase(catalog, locations)
+    @Provides fun findCompatibleAlternatives() = FindCompatibleAlternativesUseCase()
 }

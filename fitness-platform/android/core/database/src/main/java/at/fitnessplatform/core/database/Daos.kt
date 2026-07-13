@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -199,4 +200,86 @@ interface SyncStateDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(state: SyncStateEntity)
+}
+
+data class TrainingLocationWithEquipment(
+    @androidx.room.Embedded val location: TrainingLocationEntity,
+    @androidx.room.Relation(parentColumn = "id", entityColumn = "locationId")
+    val equipment: List<TrainingLocationEquipmentEntity>,
+)
+
+@Dao
+interface TrainingLocationDao {
+    @Transaction
+    @Query("SELECT * FROM training_locations WHERE deletedAtEpochMs IS NULL ORDER BY name COLLATE NOCASE")
+    fun observeAll(): Flow<List<TrainingLocationWithEquipment>>
+
+    @Transaction
+    @Query("SELECT * FROM training_locations WHERE activeSlot = 1 AND deletedAtEpochMs IS NULL LIMIT 1")
+    fun observeActive(): Flow<TrainingLocationWithEquipment?>
+
+    @Transaction
+    @Query("SELECT * FROM training_locations WHERE activeSlot = 1 AND deletedAtEpochMs IS NULL LIMIT 1")
+    suspend fun active(): TrainingLocationWithEquipment?
+
+    @Transaction
+    @Query("SELECT * FROM training_locations WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): TrainingLocationWithEquipment?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(location: TrainingLocationEntity)
+
+    @Update
+    suspend fun update(location: TrainingLocationEntity): Int
+
+    @Upsert
+    suspend fun upsert(location: TrainingLocationEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertEquipment(rows: List<TrainingLocationEquipmentEntity>)
+
+    @Query("DELETE FROM training_location_equipment WHERE locationId = :id")
+    suspend fun deleteEquipment(id: String)
+
+    @Query("UPDATE training_locations SET isActive = 0, activeSlot = NULL WHERE activeSlot = 1")
+    suspend fun clearActive()
+
+    @Query("UPDATE training_locations SET isActive = 1, activeSlot = 1, updatedAtEpochMs = :now, revision = revision + 1 WHERE id = :id AND deletedAtEpochMs IS NULL")
+    suspend fun activate(id: String, now: Long): Int
+
+    @Query("SELECT id FROM training_locations WHERE deletedAtEpochMs IS NULL AND id != :excludedId ORDER BY createdAtEpochMs, id LIMIT 1")
+    suspend fun replacementId(excludedId: String): String?
+
+    @Query("UPDATE training_locations SET deletedAtEpochMs = :now, updatedAtEpochMs = :now, revision = revision + 1, isActive = 0, activeSlot = NULL WHERE id = :id AND deletedAtEpochMs IS NULL")
+    suspend fun softDeleteRow(id: String, now: Long): Int
+
+    @Query("SELECT COUNT(*) FROM training_locations WHERE deletedAtEpochMs IS NULL")
+    suspend fun countActiveRows(): Int
+
+    @Query("SELECT COUNT(*) FROM training_location_equipment WHERE locationId = :id")
+    suspend fun equipmentCount(id: String): Int
+
+    @Transaction
+    suspend fun replaceEquipment(id: String, slugs: Set<String>) {
+        checkNotNull(get(id)) { "Training location does not exist." }
+        deleteEquipment(id)
+        val rows = slugs.distinct().map { TrainingLocationEquipmentEntity(id, it) }
+        if (rows.isNotEmpty()) insertEquipment(rows)
+    }
+
+    @Transaction
+    suspend fun setActive(id: String, now: Long) {
+        checkNotNull(get(id)?.takeIf { it.location.deletedAtEpochMs == null }) { "Training location does not exist." }
+        clearActive()
+        check(activate(id, now) == 1) { "Training location could not be activated." }
+    }
+
+    @Transaction
+    suspend fun softDelete(id: String, now: Long) {
+        val current = get(id) ?: return
+        if (current.location.deletedAtEpochMs != null) return
+        val wasActive = current.location.isActive
+        check(softDeleteRow(id, now) == 1)
+        if (wasActive) replacementId(id)?.let { activate(it, now) }
+    }
 }

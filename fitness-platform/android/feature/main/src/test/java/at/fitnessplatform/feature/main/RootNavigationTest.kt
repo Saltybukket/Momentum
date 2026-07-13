@@ -26,6 +26,7 @@ class RootNavigationTest {
             "privacy" to "profile",
             "guest-recovery" to "profile",
             "settings" to "profile",
+            "locations" to "profile",
         ).forEach { (route, expectedRoot) ->
             assertEquals(expectedRoot, rootRouteFor(route))
         }

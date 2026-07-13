@@ -148,7 +148,7 @@ Implemented basis modules:
 - `security` foundation
 - `integrations` ports/mocks
 
-All other required future domains are catalogued as contract-only boundaries: onboarding, equipment, locations, planning, activity/steps, nutrition, measurements, health data, analytics, gamification, quests, streaks, boss events, groups, tournaments, social, moderation, notifications, commerce, advertising, administration and AI helper.
+All other required future domains are catalogued as contract-only boundaries: onboarding, planning, activity/steps, nutrition, measurements, health data, analytics, gamification, quests, streaks, boss events, groups, tournaments, social, moderation, notifications, commerce, advertising, administration and AI helper. Training locations and their equipment inventories are implemented as a local-first Android domain; server synchronization is deliberately not implied.
 
 ### 5.2 Layering
 
@@ -275,4 +275,10 @@ catalog queries. See ADR-016.
 
 Guest data is local by default. `GuestSessionStore.syncEnabled` defaults to `false`; confirmed opt-in persists consent before scheduling unique private sync work, and opt-out persists first and cancels that work. The worker rechecks consent before authentication, push and every pull page. Catalog refresh contains no private payload and never changes consent.
 
-Room schema 5 owns the private-exercise pull cursor in singleton `sync_state`. A page and its next cursor commit in one transaction. Upgrade from schema 4 initializes cursor 0 because the former DataStore cursor could be ahead of committed Room data; that legacy key is removed only after a successful Room checkpoint. Guest bearer and recovery credentials use random-IV AES/GCM under a non-exportable Android Keystore key. Installation ID and consent remain non-secret preferences.
+Room schema 5 owns the private-exercise pull cursor in singleton `sync_state`. A page and its next cursor commit in one transaction. Upgrade from schema 4 initializes cursor 0 because the former DataStore cursor could be ahead of committed Room data; that legacy key is removed only after a successful Room checkpoint. Room schema 6 adds local `training_locations` and normalized equipment relations. An indexed unique active slot prevents multiple active, non-deleted locations; active switching, equipment replacement and replacement selection after soft deletion are transactions. Location UUIDs, timestamps, revisions and tombstones keep the local model sync-capable without claiming that a backend sync contract exists. Guest bearer and recovery credentials use random-IV AES/GCM under a non-exportable Android Keystore key. Installation ID and consent remain non-secret preferences.
+
+Catalog compatibility is derived in the domain layer: exercises requiring no equipment or the
+`none` marker are always compatible, otherwise every required stable equipment slug must be in
+the active location inventory. With no active location the compatible view is empty and asks for
+selection; showing the full catalog is an explicit user choice. Alternatives share a primary
+muscle, prefer the same tracking type and use deterministic name/ID ordering.

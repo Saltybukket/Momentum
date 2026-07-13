@@ -50,6 +50,7 @@ private object Routes {
     const val CATALOG = "catalog"
     const val CATALOG_EXERCISE = "catalog/{catalogId}"
     const val PRIVACY = "privacy"
+    const val LOCATIONS = "locations"
 }
 
 private data class RootDestination(
@@ -74,7 +75,7 @@ internal fun rootRouteFor(route: String?): String? =
         "exercises", "exercise", "catalog", "catalog-detail", "custom-exercise",
         "custom-exercise-edit", "conflicts", "conflict",
         -> Routes.EXERCISES
-        "profile", "privacy", "guest-recovery", "settings" -> Routes.PROFILE
+        "profile", "privacy", "guest-recovery", "settings", "locations" -> Routes.PROFILE
         else -> null
     }
 
@@ -171,10 +172,16 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onPrivacy = { navController.navigate(Routes.PRIVACY) },
                             onWorkouts = { navController.navigate(Routes.WORKOUTS) },
                             onConflicts = { navController.navigate(Routes.CONFLICTS) },
+                            onLocations = { navController.navigate(Routes.LOCATIONS) },
                         )
                     }
                     composable(Routes.PROFILE) {
-                        ProfileScreen(profile.displayName, state.operationInProgress, viewModel::renameGuest) { navController.popBackStack() }
+                        ProfileScreen(
+                            profile.displayName,
+                            state.operationInProgress,
+                            viewModel::renameGuest,
+                            onLocations = { navController.navigate(Routes.LOCATIONS) },
+                        ) { navController.popBackStack() }
                     }
                     composable(Routes.EXERCISES) {
                         ExerciseListScreen(
@@ -237,12 +244,16 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                     composable(Routes.PRIVACY) {
                         PrivacyScreen(onBack = { navController.popBackStack() })
                     }
+                    composable(Routes.LOCATIONS) {
+                        TrainingLocationsRoute(onBack = { navController.popBackStack() })
+                    }
                     composable(
                         Routes.CATALOG_EXERCISE,
                         arguments = listOf(navArgument("catalogId") { type = NavType.StringType }),
                     ) { entry ->
                         CatalogDetailRoute(
                             id = entry.arguments?.getString("catalogId").orEmpty(),
+                            onOpen = { navController.navigate("catalog/$it") },
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -355,12 +366,16 @@ private fun HomeScreen(
     onPrivacy: () -> Unit,
     onWorkouts: () -> Unit,
     onConflicts: () -> Unit,
+    onLocations: () -> Unit,
 ) {
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 20.dp),
         contentPadding = PaddingValues(vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        item {
+            ActiveLocationCard(onManage = onLocations)
+        }
         item {
             Text(
                 stringResource(R.string.home_greeting, state.profile?.displayName.orEmpty()),
@@ -444,12 +459,21 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun ProfileScreen(currentName: String, busy: Boolean, onSave: (String) -> Unit, onBack: () -> Unit) {
+private fun ProfileScreen(
+    currentName: String,
+    busy: Boolean,
+    onSave: (String) -> Unit,
+    onLocations: () -> Unit,
+    onBack: () -> Unit,
+) {
     var name by rememberSaveable(currentName) { mutableStateOf(currentName) }
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.profile_title), style = MaterialTheme.typography.headlineSmall)
         OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.display_name)) }, modifier = Modifier.fillMaxWidth())
         Button({ onSave(name) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save)) }
+        OutlinedButton(onClick = onLocations, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.locations_manage))
+        }
         TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
 }

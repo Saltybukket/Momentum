@@ -20,7 +20,7 @@ Slices:
 
 - Licensed exercise/muscle/equipment import pipeline with provenance and schema validation.
 - Curated catalog versus private custom-exercise ownership. **Delivered with immutable releases.**
-- Training locations/equipment inventory and compatible alternative query.
+- Training locations/equipment inventory and compatible alternative query. **Delivered locally on Android; synchronization remains a separate optional slice.**
 - Plan aggregate: days, blocks, ordered exercises, sets/reps/RPE/RIR/rest/tempo.
 - Initial editable demo plans and time/equipment adaptation rules.
 

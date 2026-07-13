@@ -1,7 +1,7 @@
 # Project status
 
-Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified Gate-F.1/E.2
-and App Shell V1 final checkpoint `8dfc6bc`.
+Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified Gate Q
+checkpoint `ed34e4f` plus the locally verified Phase 2A.1 training-location slice.
 
 ## Implemented
 
@@ -20,20 +20,24 @@ and App Shell V1 final checkpoint `8dfc6bc`.
   sync state, including active/recent workouts, conflicts and offline readiness.
 - Gate-Q quality hardening uses visible self-authored root icons, route-family selection,
   resource-backed catalog semantics and structured catalog-import validation errors.
+- Phase 2A.1 adds local-first training locations, a stable equipment registry, editable presets and
+  equipment-aware public-catalog compatibility/alternatives. The local model is sync-capable but
+  no backend location sync contract is implemented or claimed.
 - Repository, migration, static-analysis, JVM/build and container verification workflows.
 
 ## Schema and verification authority
 
 - Alembic head: `0d4f6a8b2c17`.
-- Android Room version: 5; exported schemas 1–5 are committed.
+- Android Room version: 6; exported schemas 1–6 are committed.
 - The canonical command matrix and connected-test limitation are in [TESTING.md](../TESTING.md).
-  Gate Q passed the complete 128-test PostgreSQL backend suite on pytest 9.1.1 at 79.17% combined coverage,
-  fresh SQLite/PostgreSQL migration round trips and the full emulator-independent Android gate.
-- Latest verified debug APK: 40,771,238 bytes; SHA-256
-  `15f8d9579d3c4f723d6493f5e1a446867525e72aef30c96d4b5bbe6909f1a373`.
-- App Shell implementation CI: [run 29244974289](https://github.com/Saltybukket/Momentum/actions/runs/29244974289)
-  passed for `6e2e5bc`; final repetition [run 29245915692](https://github.com/Saltybukket/Momentum/actions/runs/29245915692)
-  passed all backend, Android and repository-security jobs for `8dfc6bc`.
+  Phase 2A.1 passed the complete 128-test PostgreSQL backend suite on pytest 9.1.1 at
+  79.27% combined coverage, fresh SQLite/PostgreSQL migration checks, 43 distinct Android JVM
+  tests (81 debug/release executions), the 579-task Android gate and the 192-task AndroidTest
+  compile gate.
+- Latest verified debug APK: 40,585,190 bytes; SHA-256
+  `fa17cc9964a21df59eeb82cb477e1ead483f9c87834a3304be53dd10f2a68c59`.
+- Gate Q CI [run 29253072791](https://github.com/Saltybukket/Momentum/actions/runs/29253072791),
+  attempt 1, passed all backend, Android and repository-security jobs for `ed34e4f`.
 
 ## Active risks
 
@@ -49,8 +53,9 @@ and App Shell V1 final checkpoint `8dfc6bc`.
 
 ## Next phase
 
-App Shell V1 is complete. Training-location and planning domains remain later Phase-2 vertical
-slices; no new domain should be opened merely for navigation placeholders.
+App Shell V1 and local Phase 2A.1 training locations are complete. The next product slice is Phase
+2B (`ExerciseReference` and editable training plans); optional location synchronization remains a
+separate explicitly gated slice and is not a prerequisite for local use.
 
 Latest operational handoff: [Gate F.1/E.2/App Shell checkpoint](HANDOFF_2026-07-13_GATE_F1_E2_APP_SHELL.md). Historical
 reports and handoffs are under [archive](archive/README.md).

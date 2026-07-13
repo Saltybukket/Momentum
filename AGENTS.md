@@ -53,7 +53,7 @@ Read this file, the newest active status/handoff, applicable ADRs, relevant test
 - Completed and cancelled workouts are terminal.
 - Catalog manifest, canonical hash, active release and served content must never silently diverge.
 - Catalog hashes use one documented semantic canonicalization across importer, API and Android; unordered arrays are normalized before hashing.
-- Root navigation selection is derived from documented route families, not exact leaf-route equality.
+- Root navigation selection is derived from documented route families, not exact leaf-route equality; training-location routes belong to Profile.
 - Published catalog releases are immutable.
 - Migration downgrades must preserve representable active data or fail before destructive changes; schema-only success is not enough.
 - Server-authoritative rewards, commerce, anti-cheat and social-ranking values are never trusted from client counters.

@@ -15,6 +15,17 @@
 
 Room schema 5 adds the singleton `sync_state(singletonId, exerciseCursor, updatedAtEpochMs)` row. A pulled page and its cursor commit in one transaction. Migration 4→5 deliberately initializes cursor 0 for an idempotent full replay and does not trust the legacy Preferences DataStore cursor.
 
+### Android training locations
+
+Room schema 6 adds `training_locations` and `training_location_equipment`. Locations use local
+UUIDs, a bounded normalized name, a location type, timestamps, revision and a soft-delete
+tombstone. A nullable unique `activeSlot` permits at most one active, non-deleted location while
+allowing any number of inactive locations, including multiple locations of the same type.
+Equipment relations use `(locationId, equipmentSlug)` as their primary key and cascade when a
+location is removed. The stable equipment registry is domain code rather than a mutable local
+table. `none` is implicit, always available and never persisted as physical inventory;
+`open-floor` is an explicit capability.
+
 ### `users`
 
 Internal identity root. `kind` distinguishes `GUEST` from future registered accounts. A future identity table can attach Google/email providers without changing content ownership.
@@ -150,6 +161,11 @@ Room contains:
 - `workouts`
 - `workout_exercises`
 - `sync_outbox`
+- `exercise_conflicts`
+- catalog snapshot, facet, relation and metadata tables
+- `sync_state`
+- `training_locations`
+- `training_location_equipment`
 
 Every syncable aggregate carries local UUID, optional server ID, sync status and optional conflict version. The outbox carries operation UUID, aggregate UUID, operation type, payload, status, retry count, last error and creation timestamp.
 
@@ -171,6 +187,6 @@ valid. Historical rows are retained; explicit activation supports rollback witho
 them. The pre-release global catalog tables remain solely so the migration can upgrade and
 downgrade existing installations; runtime repositories do not write them.
 
-Android Room schema 5 continues to store one validated local catalog snapshot and remains disjoint
+Android Room schema 6 continues to store one validated local catalog snapshot and remains disjoint
 from owner-bound `custom_exercises`. Network content is hash-checked before the atomic Room
-replacement. Schemas 1–5 are exported under `android/core/database/schemas/`.
+replacement. Schemas 1–6 are exported under `android/core/database/schemas/`.

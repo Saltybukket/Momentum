@@ -10,6 +10,8 @@ import at.fitnessplatform.core.model.ExerciseConflict
 import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.Workout
+import at.fitnessplatform.core.model.LocationType
+import at.fitnessplatform.core.model.TrainingLocation
 import kotlinx.coroutines.flow.Flow
 
 interface GuestProfileRepository {
@@ -55,6 +57,17 @@ interface CatalogRepository {
     fun observeEquipment(): Flow<List<Equipment>>
     suspend fun seedIfEmpty()
     suspend fun refresh()
+}
+
+interface TrainingLocationRepository {
+    fun observeLocations(): Flow<List<TrainingLocation>>
+    fun observeActiveLocation(): Flow<TrainingLocation?>
+    suspend fun getLocation(id: String): TrainingLocation?
+    suspend fun create(name: String, type: LocationType, equipmentSlugs: Set<String>): TrainingLocation
+    suspend fun update(location: TrainingLocation): TrainingLocation
+    suspend fun setActive(id: String)
+    suspend fun replaceEquipment(id: String, equipmentSlugs: Set<String>)
+    suspend fun delete(id: String)
 }
 
 interface SyncPreferencesRepository {

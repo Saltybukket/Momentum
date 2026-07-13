@@ -28,8 +28,10 @@ import javax.inject.Singleton
         CatalogExerciseEquipmentEntity::class,
         CatalogMetadataEntity::class,
         SyncStateEntity::class,
+        TrainingLocationEntity::class,
+        TrainingLocationEquipmentEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun exerciseConflictDao(): ExerciseConflictDao
     abstract fun catalogDao(): CatalogDao
     abstract fun syncStateDao(): SyncStateDao
+    abstract fun trainingLocationDao(): TrainingLocationDao
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -122,6 +125,29 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `training_locations` (
+                `id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL,
+                `isActive` INTEGER NOT NULL, `activeSlot` INTEGER,
+                `createdAtEpochMs` INTEGER NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL,
+                `revision` INTEGER NOT NULL, `deletedAtEpochMs` INTEGER, PRIMARY KEY(`id`))""",
+        )
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_training_locations_activeSlot` ON `training_locations` (`activeSlot`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_training_locations_isActive_deletedAtEpochMs` ON `training_locations` (`isActive`, `deletedAtEpochMs`)")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `training_location_equipment` (
+                `locationId` TEXT NOT NULL, `equipmentSlug` TEXT NOT NULL,
+                PRIMARY KEY(`locationId`, `equipmentSlug`),
+                FOREIGN KEY(`locationId`) REFERENCES `training_locations`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE)""",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_training_location_equipment_locationId` ON `training_location_equipment` (`locationId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_training_location_equipment_equipmentSlug` ON `training_location_equipment` (`equipmentSlug`)")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -129,7 +155,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "fitness-platform.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
@@ -140,4 +166,5 @@ object DatabaseModule {
     @Provides fun provideExerciseConflictDao(db: AppDatabase): ExerciseConflictDao = db.exerciseConflictDao()
     @Provides fun provideCatalogDao(db: AppDatabase): CatalogDao = db.catalogDao()
     @Provides fun provideSyncStateDao(db: AppDatabase): SyncStateDao = db.syncStateDao()
+    @Provides fun provideTrainingLocationDao(db: AppDatabase): TrainingLocationDao = db.trainingLocationDao()
 }

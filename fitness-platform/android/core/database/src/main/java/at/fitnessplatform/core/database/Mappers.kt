@@ -104,3 +104,27 @@ fun CatalogExercise.toEntity() = CatalogExerciseEntity(
 )
 fun CatalogExercise.toMuscleEntities() = muscles.map { CatalogExerciseMuscleEntity(id, it.slug, it.role.name) }
 fun CatalogExercise.toEquipmentEntities() = equipment.map { CatalogExerciseEquipmentEntity(id, it) }
+
+fun TrainingLocationWithEquipment.toModel() = TrainingLocation(
+    id = location.id,
+    name = location.name,
+    type = LocationType.valueOf(location.type),
+    equipmentSlugs = equipment.mapTo(linkedSetOf()) { it.equipmentSlug },
+    isActive = location.isActive,
+    createdAtEpochMs = location.createdAtEpochMs,
+    updatedAtEpochMs = location.updatedAtEpochMs,
+    revision = location.revision,
+    deletedAtEpochMs = location.deletedAtEpochMs,
+)
+
+fun TrainingLocation.toEntity() = TrainingLocationEntity(
+    id = id,
+    name = name,
+    type = type.name,
+    isActive = isActive,
+    activeSlot = if (isActive && deletedAtEpochMs == null) 1 else null,
+    createdAtEpochMs = createdAtEpochMs,
+    updatedAtEpochMs = updatedAtEpochMs,
+    revision = revision,
+    deletedAtEpochMs = deletedAtEpochMs,
+)

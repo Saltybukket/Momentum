@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Phase 2A.1 training locations
+
+- Added a local-first training-location domain with stable equipment definitions, editable
+  inventories, presets and an explicit single-active-location invariant.
+- Added Room schema 6, a data-preserving 5→6 migration, transactional active switching,
+  equipment replacement and deterministic replacement activation after soft deletion.
+- Added Home/Profile location management and equipment-aware catalog filtering, missing-equipment
+  explanations and deterministic compatible alternatives. Location synchronization is not yet
+  implemented or claimed.
+- Added domain, ViewModel, Room migration and repository coverage; connected execution remains
+  dependent on a stable Windows API-36 AVD.
+
 ### Gate Q quality hardening
 
 - Added structured catalog-import error codes and field paths so validation tests assert controlled

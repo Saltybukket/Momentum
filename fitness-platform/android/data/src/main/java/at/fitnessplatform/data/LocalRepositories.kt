@@ -68,7 +68,7 @@ private fun CatalogExerciseDto.toCatalogModel() = CatalogExercise(
 
 @Singleton
 class RoomCatalogRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val catalogDao: CatalogDao,
     private val api: FitnessApi,
@@ -114,6 +114,91 @@ class RoomCatalogRepository @Inject constructor(
                 source = source,
             ))
         }
+    }
+}
+
+@Singleton
+class RoomTrainingLocationRepository @Inject constructor(
+    private val database: AppDatabase,
+    private val dao: TrainingLocationDao,
+    private val ids: UuidProvider,
+    private val clock: Clock,
+) : TrainingLocationRepository {
+    override fun observeLocations(): Flow<List<TrainingLocation>> =
+        dao.observeAll().map { rows -> rows.map { it.toModel() } }
+
+    override fun observeActiveLocation(): Flow<TrainingLocation?> =
+        dao.observeActive().map { it?.toModel() }
+
+    override suspend fun getLocation(id: String): TrainingLocation? = dao.get(id)?.toModel()
+
+    override suspend fun create(
+        name: String,
+        type: LocationType,
+        equipmentSlugs: Set<String>,
+    ): TrainingLocation {
+        validateEquipment(equipmentSlugs)
+        val now = clock.nowEpochMs()
+        val location = database.withTransaction {
+            val activate = dao.active() == null
+            val created = TrainingLocation(
+                id = ids.newUuid(),
+                name = name,
+                type = type,
+                equipmentSlugs = equipmentSlugs,
+                isActive = activate,
+                createdAtEpochMs = now,
+                updatedAtEpochMs = now,
+            )
+            dao.insert(created.toEntity())
+            dao.replaceEquipment(created.id, equipmentSlugs)
+            created
+        }
+        return location
+    }
+
+    override suspend fun update(location: TrainingLocation): TrainingLocation {
+        validateEquipment(location.equipmentSlugs)
+        return database.withTransaction {
+            val current = requireNotNull(dao.get(location.id)?.toModel()) { "Training location does not exist." }
+            check(current.deletedAtEpochMs == null) { "Deleted training locations cannot be updated." }
+            val updated = location.copy(
+                isActive = current.isActive,
+                createdAtEpochMs = current.createdAtEpochMs,
+                updatedAtEpochMs = clock.nowEpochMs(),
+                revision = current.revision + 1,
+                deletedAtEpochMs = null,
+            )
+            check(dao.update(updated.toEntity()) == 1)
+            dao.replaceEquipment(updated.id, updated.equipmentSlugs)
+            updated
+        }
+    }
+
+    override suspend fun setActive(id: String) = dao.setActive(id, clock.nowEpochMs())
+
+    override suspend fun replaceEquipment(id: String, equipmentSlugs: Set<String>) {
+        validateEquipment(equipmentSlugs)
+        database.withTransaction {
+            val current = requireNotNull(dao.get(id)?.toModel()) { "Training location does not exist." }
+            check(current.deletedAtEpochMs == null) { "Deleted training locations cannot be updated." }
+            dao.replaceEquipment(id, equipmentSlugs)
+            dao.update(
+                current.copy(
+                    equipmentSlugs = equipmentSlugs,
+                    updatedAtEpochMs = clock.nowEpochMs(),
+                    revision = current.revision + 1,
+                ).toEntity(),
+            )
+        }
+    }
+
+    override suspend fun delete(id: String) = dao.softDelete(id, clock.nowEpochMs())
+
+    private fun validateEquipment(slugs: Set<String>) {
+        val unknown = slugs - EquipmentDefinitions.slugs
+        require(unknown.isEmpty()) { "Unknown equipment: ${unknown.sorted().joinToString()}" }
+        require(EquipmentDefinitions.NONE !in slugs) { "The none marker is implicit and must not be persisted." }
     }
 }
 

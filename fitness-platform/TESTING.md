@@ -189,4 +189,12 @@ idempotency, combined filters, atomic failure preservation and invalid-refresh c
 The emulator-independent gate compiles those sources; connected execution still requires the
 stable API-36 AVD described below.
 
+Training-location JVM coverage verifies name/equipment validation, presets, the no-location
+compatibility state and deterministic compatible alternatives. ViewModel coverage exercises
+empty, create, activate, equipment replacement, validation failure and active-location deletion.
+Room/data AndroidTest sources verify migration 5→6 data preservation, the unique active invariant,
+atomic switch/replacement, deterministic replacement activation, duplicate relation rejection,
+foreign-key cascade and repository persistence. These sources compile in the normal gate;
+execution is reported only when a real device/AVD runs them.
+
 `make doctor` warns for a missing Windows stable API-36 AVD; `make doctor-connected` is strict. Install with `sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, then `avdmanager.bat create avd -n Momentum_API_36 -k "system-images;android-36;google_apis;x86_64"`.

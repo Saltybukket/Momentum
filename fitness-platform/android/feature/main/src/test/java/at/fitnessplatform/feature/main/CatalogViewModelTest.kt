@@ -3,6 +3,9 @@ package at.fitnessplatform.feature.main
 import at.fitnessplatform.core.model.*
 import at.fitnessplatform.core.testing.MainDispatcherRule
 import at.fitnessplatform.domain.CatalogRepository
+import at.fitnessplatform.domain.ObserveCompatibleCatalogUseCase
+import at.fitnessplatform.domain.FindCompatibleAlternativesUseCase
+import at.fitnessplatform.domain.TrainingLocationRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +28,7 @@ class CatalogViewModelTest {
 
     @Test fun `offline first seed filters and refresh failure preserve catalog`() = runTest {
         val repository = FakeCatalogRepository()
-        val viewModel = CatalogViewModel(repository)
+        val viewModel = catalogViewModel(repository)
         val states = mutableListOf<CatalogUiState>()
         val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect { states += it } }
         advanceUntilIdle()
@@ -48,7 +51,7 @@ class CatalogViewModelTest {
     @Test
     fun `seed failure leaves loading and exposes recoverable error`() = runTest {
         val repository = FakeCatalogRepository().apply { failSeed = true }
-        val viewModel = CatalogViewModel(repository)
+        val viewModel = catalogViewModel(repository)
         val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             viewModel.state.collect {}
         }
@@ -63,7 +66,7 @@ class CatalogViewModelTest {
 
     @Test
     fun `detail distinguishes initial loading from not found`() = runTest {
-        val viewModel = CatalogViewModel(FakeCatalogRepository())
+        val viewModel = catalogViewModel(FakeCatalogRepository())
 
         viewModel.detailState("missing").test {
             assertEquals(CatalogDetailState.Loading, awaitItem())
@@ -75,7 +78,7 @@ class CatalogViewModelTest {
     @Test
     fun `detail maps repository failure to safe error state`() = runTest {
         val repository = FakeCatalogRepository().apply { failDetail = true }
-        val viewModel = CatalogViewModel(repository)
+        val viewModel = catalogViewModel(repository)
 
         viewModel.detailState("broken").test {
             assertEquals(CatalogDetailState.Loading, awaitItem())
@@ -83,6 +86,50 @@ class CatalogViewModelTest {
             awaitComplete()
         }
     }
+
+    @Test fun `compatible mode never silently grants all exercises without location`() = runTest {
+        val repository = FakeCatalogRepository()
+        val locations = FakeTrainingLocationRepository(null)
+        val viewModel = CatalogViewModel(
+            repository,
+            ObserveCompatibleCatalogUseCase(repository, locations),
+            FindCompatibleAlternativesUseCase(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.requiresLocationSelection)
+        assertTrue(viewModel.state.value.exercises.isEmpty())
+
+        viewModel.setShowAll(true)
+        advanceUntilIdle()
+        assertEquals(2, viewModel.state.value.exercises.size)
+        job.cancel()
+    }
+
+    private fun catalogViewModel(repository: FakeCatalogRepository): CatalogViewModel {
+        val location = TrainingLocation(
+            "location", "Gym", LocationType.FITNESS_CENTER,
+            EquipmentDefinitions.slugs + "bodyweight" - EquipmentDefinitions.NONE, true, 1, 1,
+        )
+        val locations = FakeTrainingLocationRepository(location)
+        return CatalogViewModel(
+            repository,
+            ObserveCompatibleCatalogUseCase(repository, locations),
+            FindCompatibleAlternativesUseCase(),
+        )
+    }
+}
+
+private class FakeTrainingLocationRepository(initial: TrainingLocation?) : TrainingLocationRepository {
+    private val state = MutableStateFlow(initial)
+    override fun observeLocations(): Flow<List<TrainingLocation>> = state.map { listOfNotNull(it) }
+    override fun observeActiveLocation(): Flow<TrainingLocation?> = state
+    override suspend fun getLocation(id: String) = state.value?.takeIf { it.id == id }
+    override suspend fun create(name: String, type: LocationType, equipmentSlugs: Set<String>) = error("unused")
+    override suspend fun update(location: TrainingLocation) = error("unused")
+    override suspend fun setActive(id: String) = Unit
+    override suspend fun replaceEquipment(id: String, equipmentSlugs: Set<String>) = Unit
+    override suspend fun delete(id: String) = Unit
 }
 
 private class FakeCatalogRepository : CatalogRepository {

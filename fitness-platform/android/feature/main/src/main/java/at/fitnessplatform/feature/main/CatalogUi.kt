@@ -16,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import at.fitnessplatform.core.model.CatalogExercise
+import at.fitnessplatform.domain.isCompatibleWith
 
 @Composable
 fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: CatalogViewModel = hiltViewModel()) {
@@ -43,6 +45,20 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
         Text(stringResource(R.string.catalog_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text(stringResource(R.string.catalog_separation))
         if (state.offline) AssistChip(onClick = viewModel::refresh, label = { Text(stringResource(R.string.catalog_offline)) })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !state.showAll,
+                onClick = { viewModel.setShowAll(false) },
+                label = { Text(stringResource(R.string.catalog_compatible)) },
+            )
+            FilterChip(
+                selected = state.showAll,
+                onClick = { viewModel.setShowAll(true) },
+                label = { Text(stringResource(R.string.catalog_show_all)) },
+            )
+        }
+        if (state.requiresLocationSelection) Text(stringResource(R.string.catalog_select_location))
+        state.activeLocation?.let { Text(stringResource(R.string.catalog_active_location, it.name)) }
         OutlinedTextField(
             value = state.filter.query,
             onValueChange = viewModel::setQuery,
@@ -62,6 +78,7 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
             else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.exercises, key = { it.id }) { exercise ->
                     val openDescription = stringResource(R.string.catalog_open_exercise, exercise.name)
+                    val activeLocation = state.activeLocation
                     Card(onClick = { onOpen(exercise.id) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = openDescription }) {
                         Column(Modifier.padding(12.dp)) {
                             Text(exercise.name, style = MaterialTheme.typography.titleMedium)
@@ -72,6 +89,10 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
                                 state.equipment.firstOrNull { it.slug == slug }?.name ?: slug
                             }
                             Text("$muscleNames · $equipmentNames")
+                            if (state.showAll && activeLocation?.let { !exercise.isCompatibleWith(it) } == true) {
+                                val missing = exercise.equipment.filterNot { it in activeLocation.availableEquipment }
+                                Text(stringResource(R.string.catalog_missing_equipment, missing.joinToString()))
+                            }
                         }
                     }
                 }
@@ -105,13 +126,18 @@ private fun CatalogFilterMenu(label: String, selected: String?, options: List<Pa
 }
 
 @Composable
-fun CatalogDetailRoute(id: String, onBack: () -> Unit, viewModel: CatalogViewModel = hiltViewModel()) {
+fun CatalogDetailRoute(
+    id: String,
+    onOpen: (String) -> Unit,
+    onBack: () -> Unit,
+    viewModel: CatalogViewModel = hiltViewModel(),
+) {
     val detail by viewModel.detailState(id).collectAsStateWithLifecycle(CatalogDetailState.Loading)
-    CatalogDetail(detail, onBack)
+    CatalogDetail(detail, onOpen, onBack)
 }
 
 @Composable
-private fun CatalogDetail(detail: CatalogDetailState, onBack: () -> Unit) {
+private fun CatalogDetail(detail: CatalogDetailState, onOpen: (String) -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when (detail) {
             CatalogDetailState.Loading -> {
@@ -134,6 +160,15 @@ private fun CatalogDetail(detail: CatalogDetailState, onBack: () -> Unit) {
                 Text(stringResource(R.string.catalog_detail_equipment, equipment.joinToString()))
                 Text(stringResource(R.string.catalog_detail_source, source, licenseName))
                 Text(provenance, style = MaterialTheme.typography.bodySmall)
+                if (!detail.compatible) {
+                    Text(stringResource(R.string.catalog_missing_equipment, detail.missingEquipment.joinToString()))
+                    if (detail.alternatives.isNotEmpty()) {
+                        Text(stringResource(R.string.catalog_alternatives), style = MaterialTheme.typography.titleMedium)
+                        detail.alternatives.forEach { alternative ->
+                            TextButton(onClick = { onOpen(alternative.id) }) { Text(alternative.name) }
+                        }
+                    }
+                }
             }
         }
         TextButton(onClick = onBack) { Text(stringResource(R.string.catalog_back)) }

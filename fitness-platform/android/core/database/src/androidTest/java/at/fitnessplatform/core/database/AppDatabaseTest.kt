@@ -15,6 +15,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -129,6 +130,67 @@ class AppDatabaseTest {
         }
         migrated.close()
         context.deleteDatabase(migrationName)
+    }
+
+    @Test fun migrationFiveToSixPreservesExistingTablesAndAddsLocations() {
+        val migrationName = "training-location-migration.db"
+        val original = migrationHelper.createDatabase(migrationName, 5)
+        original.execSQL(
+            "INSERT INTO guest_profile VALUES ('profile', 'Guest', 1, 'METRIC', 'COMPLETED', 'LOCAL_ONLY', NULL, NULL)",
+        )
+        original.execSQL(
+            "INSERT INTO custom_exercises VALUES ('private', 'profile', 'Squat', '', 'legs', 'none', 'REPS', '', 1, 1, 'LOCAL_ONLY', NULL, NULL, NULL)",
+        )
+        original.execSQL(
+            "INSERT INTO workouts VALUES ('workout', 'profile', 'Session', 'PLANNED', NULL, NULL, '', 1, 1, 'LOCAL_ONLY', NULL, NULL)",
+        )
+        original.execSQL(
+            "INSERT INTO catalog_muscles (slug, name) VALUES ('legs', 'Legs')",
+        )
+        original.execSQL(
+            "INSERT INTO catalog_exercises VALUES ('catalog', 'squat', 'demo', 'synthetic', 'CC0-1.0', 'https://example.test/license', '1', 'PUBLISHED', 1, 'Squat', '', 'REPS')",
+        )
+        original.close()
+        val migrated = migrationHelper.runMigrationsAndValidate(migrationName, 6, true, MIGRATION_5_6)
+        migrated.query("SELECT name FROM catalog_muscles WHERE slug = 'legs'").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals("Legs", cursor.getString(0))
+        }
+        listOf("guest_profile", "custom_exercises", "workouts", "catalog_exercises").forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertEquals(true, cursor.moveToFirst())
+                assertEquals(1, cursor.getInt(0))
+            }
+        }
+        migrated.close()
+        context.deleteDatabase(migrationName)
+    }
+
+    @Test fun trainingLocationsSwitchReplaceEquipmentAndDeleteActiveAtomically() = runTest {
+        val dao = database.trainingLocationDao()
+        dao.insert(TrainingLocationEntity("home", "Home", "HOME", true, 1, 1, 1, 0, null))
+        dao.insert(TrainingLocationEntity("gym", "Gym", "FITNESS_CENTER", false, null, 2, 2, 0, null))
+        dao.replaceEquipment("home", setOf("mat", "dumbbells"))
+        dao.replaceEquipment("home", setOf("open-floor"))
+        assertEquals(1, dao.equipmentCount("home"))
+        assertEquals("home", dao.active()?.location?.id)
+
+        dao.setActive("gym", 3)
+        assertEquals("gym", dao.active()?.location?.id)
+        dao.softDelete("gym", 4)
+        assertEquals("home", dao.active()?.location?.id)
+        assertEquals(1, dao.countActiveRows())
+    }
+
+    @Test fun trainingLocationEquipmentCascadesAndDuplicateRelationsAreRejected() = runTest {
+        val dao = database.trainingLocationDao()
+        dao.insert(TrainingLocationEntity("location", "Park", "OUTDOOR", true, 1, 1, 1, 0, null))
+        dao.insertEquipment(listOf(TrainingLocationEquipmentEntity("location", "open-floor")))
+        assertTrue(runCatching {
+            dao.insertEquipment(listOf(TrainingLocationEquipmentEntity("location", "open-floor")))
+        }.isFailure)
+        database.openHelper.writableDatabase.execSQL("DELETE FROM training_locations WHERE id = 'location'")
+        assertEquals(0, dao.equipmentCount("location"))
     }
 
     @Test fun outboxClaimsAreExclusiveAndStaleClaimsAreReclaimed() = runTest {
