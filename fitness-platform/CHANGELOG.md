@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Momentum App Shell V1
+
+- Replaced scaffold-facing navigation with a resource-backed four-root Momentum shell for Home,
+  Workouts, Exercises and Profile.
+- Added Material 3 light/dark branding, compact bottom navigation and an expanded navigation rail.
+- Added a local-first dashboard for active and recent workouts, catalog/custom-exercise shortcuts,
+  conflicts, pending/blocked sync state, offline readiness and privacy recovery access.
+- Added deterministic ViewModel and navigation tests for empty/local-data, conflict, sync and
+  adaptive-layout states without introducing placeholder product domains.
+
 ### Gate F.1 catalog verification and Gate E.2 Android recovery
 
 - Unified backend/API/Android catalog canonicalization so semantic array order cannot change a

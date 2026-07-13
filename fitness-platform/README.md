@@ -10,6 +10,8 @@ public exercise catalog; broader product domains remain planned.
 ## What is implemented
 
 - Android 9+ client scaffold: Kotlin, Compose, Material 3, MVVM/UDF, Room, DataStore, WorkManager, Retrofit, Hilt.
+- Adaptive Momentum App Shell with light/dark branding, four stable root destinations and a
+  local-first dashboard backed by real workout, exercise, conflict and sync state.
 - Offline guest profile persisted locally and editable.
 - Local custom-exercise CRUD with validation and soft deletion.
 - Minimal workout create/start/complete flow; local `WorkoutCompleted` domain event.
