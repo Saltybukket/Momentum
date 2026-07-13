@@ -79,10 +79,7 @@ fun ActiveLocationCard(
 }
 
 @Composable
-fun TrainingLocationsRoute(
-    onBack: () -> Unit,
-    viewModel: TrainingLocationsViewModel = hiltViewModel(),
-) {
+fun TrainingLocationsRoute(viewModel: TrainingLocationsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
     var editingEquipment by remember { mutableStateOf<TrainingLocation?>(null) }
@@ -97,11 +94,6 @@ fun TrainingLocationsRoute(
         onAcknowledged = viewModel::acknowledgeCompletion,
     )
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            stringResource(R.string.locations_title),
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() },
-        )
         Text(stringResource(R.string.locations_description))
         Button(onClick = { creating = true }, enabled = !state.busy) {
             Text(stringResource(R.string.locations_add))
@@ -159,7 +151,6 @@ fun TrainingLocationsRoute(
                 TextButton(onClick = viewModel::retry, enabled = !state.busy) { Text(stringResource(R.string.retry)) }
             }
         }
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
     if (creating) LocationEditorDialog(
         title = stringResource(R.string.locations_add),
@@ -223,7 +214,7 @@ private fun CompletionEffect(
 }
 
 @Composable
-private fun LocationEditorDialog(
+internal fun LocationEditorDialog(
     title: String,
     initialName: String,
     initialType: LocationType,
@@ -246,15 +237,28 @@ private fun LocationEditorDialog(
             Modifier.fillMaxWidth().heightIn(max = 560.dp).padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-                item { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.name)) }) }
+                item {
+                    OutlinedTextField(
+                        name,
+                        { name = it },
+                        label = { Text(stringResource(R.string.name)) },
+                        enabled = !saving,
+                    )
+                }
                 item { Text(stringResource(R.string.locations_type)) }
                 items(LocationType.entries) { option ->
-                    Row { RadioButton(type == option, { type = option }); Text(locationTypeLabel(option)) }
+                    Row {
+                        RadioButton(type == option, { type = option }, enabled = !saving)
+                        Text(locationTypeLabel(option))
+                    }
                 }
                 if (showPresets) {
                     item { Text(stringResource(R.string.locations_preset)) }
                     items(LocationPreset.entries) { option ->
-                        Row { RadioButton(preset == option, { preset = option }); Text(locationPresetLabel(option)) }
+                        Row {
+                            RadioButton(preset == option, { preset = option }, enabled = !saving)
+                            Text(locationPresetLabel(option))
+                        }
                     }
                 }
                 if (error != null) item { Text(stringResource(R.string.locations_error), color = MaterialTheme.colorScheme.error) }
@@ -269,7 +273,7 @@ private fun LocationEditorDialog(
 }
 
 @Composable
-private fun EquipmentEditorDialog(
+internal fun EquipmentEditorDialog(
     location: TrainingLocation,
     saving: Boolean,
     error: String?,
@@ -305,6 +309,7 @@ private fun EquipmentEditorDialog(
                         query,
                         { query = it },
                         label = { Text(stringResource(R.string.locations_equipment_search)) },
+                        enabled = !saving,
                     )
                 }
                 item {
@@ -341,7 +346,7 @@ private fun EquipmentEditorDialog(
                         Row(
                             Modifier.fillMaxWidth()
                                 .defaultMinSize(minHeight = 48.dp)
-                                .clickable {
+                                .clickable(enabled = !saving) {
                                     selected = if (definition.slug in selected) {
                                         selected - definition.slug
                                     } else {
@@ -353,6 +358,7 @@ private fun EquipmentEditorDialog(
                             Checkbox(
                                 checked = definition.slug in selected,
                                 onCheckedChange = null,
+                                enabled = !saving,
                             )
                             Text(label)
                         }

@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
@@ -40,21 +42,42 @@ import at.fitnessplatform.core.model.CatalogExercise
 import at.fitnessplatform.domain.isCompatibleWith
 
 @Composable
-fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: CatalogViewModel = hiltViewModel()) {
+fun CatalogRoute(onOpen: (String) -> Unit, viewModel: CatalogViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    CatalogScreen(
+        state = state,
+        onOpen = onOpen,
+        onRefresh = viewModel::refresh,
+        onShowAll = viewModel::setShowAll,
+        onQuery = viewModel::setQuery,
+        onMuscle = viewModel::setMuscle,
+        onEquipment = viewModel::setEquipment,
+    )
+}
+
+@Composable
+@Suppress("CyclomaticComplexMethod")
+internal fun CatalogScreen(
+    state: CatalogUiState,
+    onOpen: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onShowAll: (Boolean) -> Unit,
+    onQuery: (String) -> Unit,
+    onMuscle: (String?) -> Unit,
+    onEquipment: (String?) -> Unit,
+) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.catalog_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
         Text(stringResource(R.string.catalog_separation))
-        if (state.offline) AssistChip(onClick = viewModel::refresh, label = { Text(stringResource(R.string.catalog_offline)) })
+        if (state.offline) AssistChip(onClick = onRefresh, label = { Text(stringResource(R.string.catalog_offline)) })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = !state.showAll,
-                onClick = { viewModel.setShowAll(false) },
+                onClick = { onShowAll(false) },
                 label = { Text(stringResource(R.string.catalog_compatible)) },
             )
             FilterChip(
                 selected = state.showAll,
-                onClick = { viewModel.setShowAll(true) },
+                onClick = { onShowAll(true) },
                 label = { Text(stringResource(R.string.catalog_show_all)) },
             )
         }
@@ -62,12 +85,12 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
         state.activeLocation?.let { Text(stringResource(R.string.catalog_active_location, it.name)) }
         OutlinedTextField(
             value = state.filter.query,
-            onValueChange = viewModel::setQuery,
+            onValueChange = onQuery,
             label = { Text(stringResource(R.string.catalog_search)) },
             modifier = Modifier.fillMaxWidth(),
         )
-        CatalogFilterMenu(stringResource(R.string.catalog_muscle), state.filter.muscle, state.muscles.map { it.slug to it.name }, viewModel::setMuscle)
-        CatalogFilterMenu(stringResource(R.string.catalog_equipment), state.filter.equipment, state.equipment.map { it.slug to it.name }, viewModel::setEquipment)
+        CatalogFilterMenu(stringResource(R.string.catalog_muscle), state.filter.muscle, state.muscles.map { it.slug to it.name }, onMuscle)
+        CatalogFilterMenu(stringResource(R.string.catalog_equipment), state.filter.equipment, state.equipment.map { it.slug to it.name }, onEquipment)
         when {
             state.loading -> {
                 val loadingDescription = stringResource(R.string.catalog_loading)
@@ -92,7 +115,10 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
                             Text("$muscleNames · $equipmentNames")
                             if (state.showAll && activeLocation?.let { !exercise.isCompatibleWith(it) } == true) {
                                 val missing = exercise.equipment.filterNot { it in activeLocation.availableEquipment }
-                                Text(stringResource(R.string.catalog_missing_equipment, missing.joinToString()))
+                                val missingLabels = missing.joinToString { slug ->
+                                    state.equipment.firstOrNull { it.slug == slug }?.name ?: slug
+                                }
+                                Text(stringResource(R.string.catalog_missing_equipment, missingLabels))
                             }
                         }
                     }
@@ -105,7 +131,7 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
                 color = MaterialTheme.colorScheme.error,
             )
         }
-        Row { Button(onClick = viewModel::refresh) { Text(stringResource(R.string.catalog_refresh)) }; TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } }
+        Button(onClick = onRefresh) { Text(stringResource(R.string.catalog_refresh)) }
     }
 }
 
@@ -131,22 +157,23 @@ fun CatalogDetailRoute(
     id: String,
     onOpen: (String) -> Unit,
     onSelectLocation: () -> Unit,
-    onBack: () -> Unit,
     viewModel: CatalogViewModel = hiltViewModel(),
 ) {
     val detail by viewModel.detailState(id).collectAsStateWithLifecycle(CatalogDetailState.Loading)
-    CatalogDetail(detail, onOpen, onSelectLocation, onBack)
+    CatalogDetail(detail, onOpen, onSelectLocation)
 }
 
 @Composable
 @Suppress("CyclomaticComplexMethod")
-private fun CatalogDetail(
+internal fun CatalogDetail(
     detail: CatalogDetailState,
     onOpen: (String) -> Unit,
     onSelectLocation: () -> Unit,
-    onBack: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         when (detail) {
             CatalogDetailState.Loading -> {
                 val loadingDescription = stringResource(R.string.catalog_detail_loading)
@@ -209,7 +236,6 @@ private fun CatalogDetail(
                 }
             }
         }
-        TextButton(onClick = onBack) { Text(stringResource(R.string.catalog_back)) }
     }
 }
 

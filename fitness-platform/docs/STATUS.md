@@ -1,7 +1,7 @@
 # Project status
 
-Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified UX.0 checkpoint
-`9b9325e` plus the locally verified premium UI foundation.
+Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified premium UI
+checkpoint `e8a889e` plus locally verified Gate UI.1 corrections.
 
 ## Implemented
 
@@ -30,6 +30,9 @@ Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified 
   reusable responsive components. Existing screens use honest local state, accessible labels and
   explicit empty/loading/action states. The self-authored adaptive/monochrome launcher mark is a
   geometric Momentum M with restrained forward movement.
+- Gate UI.1 completes explicit Material 3 roles and contrast assertions, production-composable
+  previews, root/subpage navigation semantics, scroll-safe critical screens and API-28 splash
+  branding. Room startup now fails closed before feature UI and sync, with a data-preserving retry.
 - Repository, migration, static-analysis, JVM/build and container verification workflows.
 
 ## Schema and verification authority
@@ -45,6 +48,9 @@ Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified 
 - Premium local verification passed 128 PostgreSQL backend tests at 79.14% combined coverage,
   49 distinct Android JVM tests (92 variant executions), the 644-task Android gate and 208-task
   AndroidTest compile gate. Room remains version 6.
+- Gate UI.1 local verification passed 128 PostgreSQL backend tests at 79.20% combined coverage,
+  56 distinct Android JVM tests (106 debug/release and pure-JVM executions), the 656-task Android
+  gate and 208-task AndroidTest compile gate. Room remains version 6.
 - Gate Q CI [run 29253072791](https://github.com/Saltybukket/Momentum/actions/runs/29253072791),
   attempt 1, passed all backend, Android and repository-security jobs for `ed34e4f`.
 - Phase 2A.1 implementation CI [run 29256173819](https://github.com/Saltybukket/Momentum/actions/runs/29256173819),

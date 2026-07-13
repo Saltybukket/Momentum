@@ -206,7 +206,12 @@ execution is reported only when a real device/AVD runs them.
 
 The emulator-independent Android gate compiles every feature, runs JVM state/contract tests,
 Detekt, Spotless, Android Lint and debug assembly. Premium presentation previews exercise compact,
-expanded, landscape, light/dark and 200% font configurations with visibly synthetic data. APK
+expanded, landscape, light/dark and 200% font configurations by invoking the real screen
+composables with clearly synthetic fixture data. Theme tests enforce WCAG-AA contrast for key
+foreground/background pairs, and startup-gate tests cover success, failure, retry and sync
+scheduling failure. The current lint baseline contains 28 dependency/toolchain availability
+warnings (14 `NewerVersionAvailable`, 11 `GradleDependency`, 3
+`AndroidGradlePluginVersion`); there are no `UseKtx` or `ObsoleteSdkInt` findings. APK
 inspection must confirm that `icon_and_image_ideas/` is absent. Compile-only AndroidTest results
 must never be described as connected visual or accessibility execution; those require the stable
 API-36 AVD.

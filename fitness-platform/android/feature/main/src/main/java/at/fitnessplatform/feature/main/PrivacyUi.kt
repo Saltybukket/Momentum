@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -25,8 +27,17 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewModel()) {
+fun PrivacyScreen(viewModel: PrivacyViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    PrivacyContent(state, viewModel::setSyncEnabled, viewModel::resetCredentialsForNewIdentity)
+}
+
+@Composable
+internal fun PrivacyContent(
+    state: PrivacyUiState,
+    onSetSyncEnabled: (Boolean) -> Unit,
+    onResetCredentials: () -> Unit,
+) {
     var confirmEnable by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
     val credentialBlocked = state.credentialState in setOf(
@@ -34,8 +45,10 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
         CredentialRecoveryUiState.INVALIDATED,
         CredentialRecoveryUiState.RESET_ERROR,
     )
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.privacy_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Text(stringResource(R.string.privacy_local_default))
         Text(stringResource(R.string.privacy_catalog_independent))
         Text(pluralStringResource(R.plurals.privacy_pending, state.pendingCount, state.pendingCount))
@@ -44,7 +57,7 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
             enabled = !state.changing && !credentialBlocked &&
                 state.credentialState != CredentialRecoveryUiState.RESETTING,
             onCheckedChange = { enabled ->
-                if (enabled) confirmEnable = true else viewModel.setSyncEnabled(false)
+                if (enabled) confirmEnable = true else onSetSyncEnabled(false)
             },
         )
         Text(stringResource(if (state.syncEnabled) R.string.privacy_enabled else R.string.privacy_disabled))
@@ -76,13 +89,12 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
             )
         }
         Text(stringResource(R.string.privacy_disable_note))
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
     if (confirmEnable) AlertDialog(
         onDismissRequest = { confirmEnable = false },
         title = { Text(stringResource(R.string.privacy_confirm_title)) },
         text = { Text(stringResource(R.string.privacy_confirm_text)) },
-        confirmButton = { Button(onClick = { viewModel.setSyncEnabled(true); confirmEnable = false }) { Text(stringResource(R.string.privacy_enable)) } },
+        confirmButton = { Button(onClick = { onSetSyncEnabled(true); confirmEnable = false }) { Text(stringResource(R.string.privacy_enable)) } },
         dismissButton = { TextButton(onClick = { confirmEnable = false }) { Text(stringResource(R.string.privacy_keep_local)) } },
     )
     if (confirmReset) AlertDialog(
@@ -91,7 +103,7 @@ fun PrivacyScreen(onBack: () -> Unit, viewModel: PrivacyViewModel = hiltViewMode
         text = { Text(stringResource(R.string.privacy_credentials_confirm_text)) },
         confirmButton = {
             Button(onClick = {
-                viewModel.resetCredentialsForNewIdentity()
+                onResetCredentials()
                 confirmReset = false
             }) { Text(stringResource(R.string.privacy_credentials_confirm)) }
         },

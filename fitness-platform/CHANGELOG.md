@@ -4,6 +4,11 @@
 
 ### Premium UI and UX checkpoint
 
+- Completed explicit Material 3 light/dark roles and contrast tests, production-screen previews,
+  root-versus-subpage Up navigation, scroll-safe critical screens, API-28 splash branding and an
+  adaptive-icon safe-zone adjustment.
+- Added a fail-closed Android startup gate: Room must open before feature UI or private sync is
+  available, while a data-preserving retry state handles startup failure.
 - Added a dedicated Android design-system module with calm navy/silver/amber light and dark themes,
   centralized type, spacing, shape, elevation and motion tokens, responsive width helpers and
   reusable card, empty-state and skeleton components.

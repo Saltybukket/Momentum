@@ -2,6 +2,8 @@ package at.fitnessplatform.feature.main
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RootNavigationTest {
@@ -36,5 +38,15 @@ class RootNavigationTest {
     fun unknownOrMissingRouteDoesNotSelectARoot() {
         assertNull(rootRouteFor(null))
         assertNull(rootRouteFor("not-registered"))
+    }
+
+    @Test
+    fun rootDestinationsNeverShowUpWhileSubpagesDo() {
+        listOf("home", "workouts", "exercises", "profile").forEach { route ->
+            assertFalse(showsUpNavigation(route))
+        }
+        listOf("catalog", "catalog/42", "privacy", "locations", "exercise/42").forEach { route ->
+            assertTrue(showsUpNavigation(route))
+        }
     }
 }

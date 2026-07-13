@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="startup_checking">Lokale Daten werden vorbereitet…</string>
+    <string name="startup_blocked_title">Lokale Daten nicht verfügbar</string>
+    <string name="startup_blocked_message">Momentum hat deine lokalen Daten nicht verändert. Versuche es erneut, bevor du fortfährst.</string>
+    <string name="startup_retry">Erneut versuchen</string>
     <string name="app_name">Momentum</string>
 </resources>

@@ -5,6 +5,7 @@ package at.fitnessplatform.feature.main
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -86,6 +87,9 @@ internal fun rootRouteFor(route: String?): String? =
         else -> null
     }
 
+internal fun showsUpNavigation(route: String?): Boolean =
+    route != null && rootDestinations.none { it.route == route }
+
 private fun routeTitle(route: String?): Int = when (route?.substringBefore('/')) {
     "workouts" -> R.string.workouts_title
     "exercises", "exercise", "conflicts", "conflict" -> R.string.custom_exercises_title
@@ -116,6 +120,22 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
         Scaffold(
             topBar = {
                 TopAppBar(
+                    navigationIcon = {
+                        if (showsUpNavigation(currentRoute)) {
+                            IconButton(
+                                onClick = {
+                                    if (!navController.popBackStack()) {
+                                        navController.navigateRoot(rootRouteFor(currentRoute) ?: Routes.HOME)
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    painterResource(R.drawable.ic_back),
+                                    contentDescription = stringResource(R.string.navigate_up),
+                                )
+                            }
+                        }
+                    },
                     title = {
                         Column {
                             Text(stringResource(routeTitle(currentRoute)))
@@ -184,7 +204,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             viewModel::renameGuest,
                             onLocations = { navController.navigate(Routes.LOCATIONS) },
                             onPrivacy = { navController.navigate(Routes.PRIVACY) },
-                        ) { navController.popBackStack() }
+                        )
                     }
                     composable(Routes.EXERCISES) {
                         ExerciseListScreen(
@@ -196,7 +216,6 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onResolve = { navController.navigate("conflict/$it") },
                             onCatalog = { navController.navigate(Routes.CATALOG) },
                             onConflicts = { navController.navigate(Routes.CONFLICTS) },
-                            onBack = { navController.popBackStack() },
                         )
                     }
                     composable(
@@ -237,20 +256,18 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onCreate = viewModel::createWorkout,
                             onStart = viewModel::startWorkout,
                             onComplete = viewModel::completeWorkout,
-                            onBack = { navController.popBackStack() },
                         )
                     }
                     composable(Routes.CATALOG) {
                         CatalogRoute(
                             onOpen = { navController.navigate("catalog/$it") },
-                            onBack = { navController.popBackStack() },
                         )
                     }
                     composable(Routes.PRIVACY) {
-                        PrivacyScreen(onBack = { navController.popBackStack() })
+                        PrivacyScreen()
                     }
                     composable(Routes.LOCATIONS) {
-                        TrainingLocationsRoute(onBack = { navController.popBackStack() })
+                        TrainingLocationsRoute()
                     }
                     composable(
                         Routes.CATALOG_EXERCISE,
@@ -260,7 +277,6 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             id = entry.arguments?.getString("catalogId").orEmpty(),
                             onOpen = { navController.navigate("catalog/$it") },
                             onSelectLocation = { navController.navigate(Routes.LOCATIONS) },
-                            onBack = { navController.popBackStack() },
                         )
                     }
                         }
@@ -349,9 +365,12 @@ private fun RootNavigationRail(currentRoute: String?, onSelect: (RootDestination
 }
 
 @Composable
-private fun CreateGuestScreen(modifier: Modifier, busy: Boolean, onCreate: (String) -> Unit) {
+internal fun CreateGuestScreen(modifier: Modifier, busy: Boolean, onCreate: (String) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
-    Column(modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+    Column(
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
         Text(stringResource(R.string.guest_title), style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(R.string.guest_description))
         Spacer(Modifier.height(16.dp))
@@ -372,7 +391,7 @@ private fun CreateGuestScreen(modifier: Modifier, busy: Boolean, onCreate: (Stri
 }
 
 @Composable
-private fun HomeScreen(
+internal fun HomeScreen(
     state: PlatformUiState,
     onCatalog: () -> Unit,
     onPrivacy: () -> Unit,
@@ -478,16 +497,18 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun ProfileScreen(
+internal fun ProfileScreen(
     currentName: String,
     busy: Boolean,
     onSave: (String) -> Unit,
     onLocations: () -> Unit,
     onPrivacy: () -> Unit,
-    onBack: () -> Unit,
 ) {
     var name by rememberSaveable(currentName) { mutableStateOf(currentName) }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         MomentumSectionHeader(stringResource(R.string.profile_identity), stringResource(R.string.profile_title))
         OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.display_name)) }, modifier = Modifier.fillMaxWidth())
         Button({ onSave(name) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save)) }
@@ -498,12 +519,11 @@ private fun ProfileScreen(
         OutlinedButton(onClick = onPrivacy, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.home_manage_privacy))
         }
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
 }
 
 @Composable
-private fun ExerciseListScreen(
+internal fun ExerciseListScreen(
     exercises: List<at.fitnessplatform.core.model.CustomExercise>,
     conflicts: List<ExerciseConflict>,
     onNew: () -> Unit,
@@ -512,7 +532,6 @@ private fun ExerciseListScreen(
     onResolve: (String) -> Unit,
     onCatalog: () -> Unit,
     onConflicts: () -> Unit,
-    onBack: () -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val visibleExercises = exercises.filter { it.name.contains(query.trim(), ignoreCase = true) }
@@ -533,7 +552,6 @@ private fun ExerciseListScreen(
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.custom_exercises_title), style = MaterialTheme.typography.headlineSmall)
             Button(onClick = onNew) { Text(stringResource(R.string.add)) }
         }
         OutlinedTextField(
@@ -570,7 +588,6 @@ private fun ExerciseListScreen(
                 }
             }
         }
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
 }
 
@@ -715,12 +732,11 @@ private fun ConflictResolverScreen(
 }
 
 @Composable
-private fun WorkoutScreen(
+internal fun WorkoutScreen(
     state: PlatformUiState,
     onCreate: (String, List<String>) -> Unit,
     onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
-    onBack: () -> Unit,
 ) {
     val defaultTitle = stringResource(R.string.workout_default_title)
     var title by rememberSaveable { mutableStateOf(defaultTitle) }
@@ -728,7 +744,6 @@ private fun WorkoutScreen(
     val planned = state.workouts.filter { it.status == WorkoutStatus.PLANNED }
     val history = state.workouts.filter { it.status == WorkoutStatus.COMPLETED || it.status == WorkoutStatus.CANCELLED }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text(stringResource(R.string.workouts_title), style = MaterialTheme.typography.headlineSmall)
         OutlinedTextField(title, { title = it }, label = { Text(stringResource(R.string.workout_title)) }, modifier = Modifier.fillMaxWidth())
         Button(
             onClick = { onCreate(title, newWorkoutExerciseIds()) },
@@ -745,7 +760,6 @@ private fun WorkoutScreen(
             workoutSection(R.string.workouts_planned, planned, onStart, onComplete)
             workoutSection(R.string.workouts_history, history, onStart, onComplete)
         }
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
 }
 

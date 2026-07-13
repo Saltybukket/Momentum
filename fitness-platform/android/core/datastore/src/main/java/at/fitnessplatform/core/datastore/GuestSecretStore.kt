@@ -1,5 +1,6 @@
 package at.fitnessplatform.core.datastore
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -27,6 +28,7 @@ interface GuestSecretStore {
 class GuestCredentialInvalidatedException : IllegalStateException("Encrypted guest credentials are unavailable")
 
 @Singleton
+@SuppressLint("UseKtx") // commit() is deliberate: credential writes must report durable persistence failure.
 class KeystoreGuestSecretStore @Inject constructor(
     @ApplicationContext context: Context,
 ) : GuestSecretStore {
