@@ -157,4 +157,18 @@ The following are intentionally not added as generic placeholder tables: nutriti
 
 ## Exercise catalog
 
-The catalog foundation originated in `c1a4e6d91b0f`; the current Alembic head is `f26c8d0e531a`. `(source, external_id)` is unique; controlled status/role values are constrained and lookup/publication paths indexed. Android Room schema 4 mirrors the normalized catalog and remains disjoint from owner-bound `custom_exercises`. Schemas 1–4 are exported under `android/core/database/schemas/`.
+The catalog foundation originated in `c1a4e6d91b0f`; immutable releases are introduced by current
+Alembic head `0d4f6a8b2c17`. `catalog_releases` owns the immutable manifest, while
+`catalog_release_muscles`, `catalog_release_equipment`, `catalog_release_exercises` and the two
+release-scoped relation tables own its complete content. `catalog_activation` is a singleton
+foreign-key pointer to the public release. Unique version/hash/batch constraints, relation foreign
+keys, controlled status/role checks and a partial unique `ACTIVE` index protect the invariant.
+
+An import stages a complete release and atomically changes the pointer only after every row is
+valid. Historical rows are retained; explicit activation supports rollback without rewriting
+them. The pre-release global catalog tables remain solely so the migration can upgrade and
+downgrade existing installations; runtime repositories do not write them.
+
+Android Room schema 5 continues to store one validated local catalog snapshot and remains disjoint
+from owner-bound `custom_exercises`. Network content is hash-checked before the atomic Room
+replacement. Schemas 1–5 are exported under `android/core/database/schemas/`.

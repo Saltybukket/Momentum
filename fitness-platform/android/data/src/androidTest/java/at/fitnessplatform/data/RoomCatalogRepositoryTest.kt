@@ -46,17 +46,38 @@ class RoomCatalogRepositoryTest {
         runCatching { repository.refresh() }
         assertEquals(3, repository.observeCatalog().first().size)
     }
+
+    @Test fun invalidSnapshotHashKeepsSavedCatalog() = runTest {
+        repository.seedIfEmpty()
+        api.tamper = true
+
+        runCatching { repository.refresh() }
+
+        assertEquals(3, repository.observeCatalog().first().size)
+    }
 }
 
 private class FakeFitnessApi : FitnessApi {
     var fail = false
+    var tamper = false
     override suspend fun catalogExercises(muscle: String?, equipment: String?): List<CatalogExerciseDto> {
         if (fail) error("offline")
         return emptyList()
     }
     override suspend fun catalogSnapshot(): CatalogSnapshotDto {
         if (fail) error("offline")
-        return CatalogSnapshotDto("1", "test", "test-hash", "2026-07-12T00:00:00Z", emptyList(), emptyList(), emptyList())
+        val snapshot = CatalogSnapshotDto(
+            schemaVersion = "1",
+            catalogVersion = "test",
+            contentHash = "sha256:" + "0".repeat(64),
+            publishedAt = "2026-07-12T00:00:00Z",
+            batchId = "test-batch",
+            muscles = emptyList(),
+            equipment = emptyList(),
+            exercises = emptyList(),
+        )
+        val valid = snapshot.copy(contentHash = snapshot.canonicalContentHash(Json))
+        return if (tamper) valid.copy(catalogVersion = "tampered") else valid
     }
     override suspend fun catalogMuscles() = emptyList<CatalogFacetDto>()
     override suspend fun catalogEquipment() = emptyList<CatalogFacetDto>()

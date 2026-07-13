@@ -78,6 +78,11 @@ Cursor pagination may replace offset for high-volume timelines, but not silently
 | POST | `/api/v1/workouts/{workout_id}/start` | guest token | yes | implemented |
 | POST | `/api/v1/workouts/{workout_id}/complete` | guest token | yes | implemented |
 | POST | `/api/v1/sync/push` | guest token | yes | implemented push basis |
+| GET | `/api/v1/catalog/exercises` | no | no | active release page |
+| GET | `/api/v1/catalog/exercises/{exercise_id}` | no | no | active release detail |
+| GET | `/api/v1/catalog/snapshot` | no | no | complete active release |
+| GET | `/api/v1/catalog/muscles` | no | no | active release facets |
+| GET | `/api/v1/catalog/equipment` | no | no | active release facets |
 
 ## Sync push
 
@@ -117,8 +122,19 @@ The endpoint processes at most 100 operations per request. UUID upsert and opera
 
 ## Public exercise catalog
 
-- `GET /api/v1/catalog/exercises?muscle={slug}&equipment={slug}` returns only reviewed published records; filters combine and unknown facets return an empty list.
+- `GET /api/v1/catalog/exercises?muscle={slug}&equipment={slug}&q={literal}` returns only reviewed published records from one active release; filters combine, `%`/`_` are literal search characters and unknown facets return an empty list. Pages include `catalog_version` and `content_hash`.
 - `GET /api/v1/catalog/exercises/{id}` returns public detail or 404.
 - `GET /api/v1/catalog/muscles` and `/api/v1/catalog/equipment` return referenced public facets.
+- `GET /api/v1/catalog/snapshot` returns the complete manifest and content from the same active release. `ETag` is derived from its SHA-256 content hash and matching `If-None-Match` returns `304`.
 
 Responses include source, external ID, provenance, license name/URL, version, tracking type and normalized relations. Private custom exercises never appear on these routes.
+
+Catalog imports validate the full JSON document before writing. A newer release is staged and
+activated atomically; an older release is retained without replacing current content. Identical
+version/hash imports report `UNCHANGED`, while version/hash/batch conflicts fail. Operators can
+activate a retained version explicitly with:
+
+```bash
+cd backend
+uv run python -m fitness_platform.catalog_import --activate-version VERSION
+```

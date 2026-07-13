@@ -1,9 +1,14 @@
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid5
 
-from fitness_platform.domain.enums import CatalogStatus, MuscleRole, TrackingType
+from fitness_platform.domain.enums import (
+    CatalogReleaseStatus,
+    CatalogStatus,
+    MuscleRole,
+    TrackingType,
+)
 from fitness_platform.domain.models import CatalogExercise, CatalogRelease
-from fitness_platform.infrastructure.repositories import SqlAlchemyCatalogRepository
+from fitness_platform.infrastructure.catalog_releases import SqlAlchemyReleaseCatalogRepository
 
 
 def catalog_exercise(
@@ -16,7 +21,7 @@ def catalog_exercise(
 ) -> CatalogExercise:
     now = datetime.now(UTC)
     return CatalogExercise(
-        id=uuid4(),
+        id=uuid5(NAMESPACE_URL, f"momentum-catalog:momentum-demo:{external_id}"),
         external_id=external_id,
         source="momentum-demo",
         provenance="Self-authored technical demo.",
@@ -35,26 +40,35 @@ def catalog_exercise(
     )
 
 
-async def persist_catalog_exercise(container, exercise: CatalogExercise) -> CatalogExercise:
-    async with container.database.session_factory() as session:
-        result = await SqlAlchemyCatalogRepository(session).upsert(exercise)
-        await session.commit()
-        return result
-
-
-async def persist_catalog_release(container, exercise_count: int) -> CatalogRelease:
+async def persist_catalog_release(
+    container,
+    exercises: list[CatalogExercise],
+    *,
+    catalog_version: str = "test-release-v1",
+    published_at: datetime | None = None,
+) -> CatalogRelease:
     release = CatalogRelease(
         schema_version="1",
-        catalog_version="test-release-v1",
-        content_hash="sha256:" + "a" * 64,
-        published_at=datetime(2026, 7, 12, tzinfo=UTC),
-        batch_id="test-release-v1",
+        catalog_version=catalog_version,
+        content_hash="sha256:" + uuid5(NAMESPACE_URL, catalog_version).hex * 2,
+        published_at=published_at or datetime(2026, 7, 12, tzinfo=UTC),
+        batch_id=catalog_version,
         sources=["momentum-demo"],
         licenses=["CC0-1.0"],
-        exercise_count=exercise_count,
-        status="PUBLISHED",
+        exercise_count=len(exercises),
+        status=CatalogReleaseStatus.STAGED,
     )
+    muscles = sorted({slug for exercise in exercises for slug, _ in exercise.muscles})
+    equipment = sorted({slug for exercise in exercises for slug in exercise.equipment})
     async with container.database.session_factory() as session:
-        await SqlAlchemyCatalogRepository(session).upsert_release(release)
+        repository = SqlAlchemyReleaseCatalogRepository(session)
+        await repository.lock_release_changes()
+        await repository.stage_release(
+            release,
+            [(slug, slug.replace("-", " ").title()) for slug in muscles],
+            [(slug, slug.replace("-", " ").title()) for slug in equipment],
+            exercises,
+        )
+        await repository.activate_release(catalog_version, allow_rollback=True)
         await session.commit()
     return release

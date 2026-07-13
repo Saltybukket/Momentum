@@ -264,7 +264,13 @@ The modular monolith remains preferred until evidence justifies separation. A mo
 
 ## 11. Public catalog boundary
 
-The reviewed public exercise catalog is not an extension of private `custom_exercises`. Backend records require provenance, license, stable source/external IDs and normalized relations; only reviewed `PUBLISHED` records are exposed. Android mirrors the catalog in Room and renders Room flows; a Retrofit refresh replaces it atomically. Private exercise changes continue through the owner-scoped outbox and can never enter catalog queries.
+The reviewed public exercise catalog is not an extension of private `custom_exercises`. Backend records require provenance, HTTPS license, stable source/external IDs and normalized relations; only reviewed `PUBLISHED` records are exposed. Each complete import is immutable and release-scoped. A singleton activation pointer changes inside the same transaction only after staging succeeds, and every public query resolves one active version. Older releases remain audit- and rollback-capable; global mutable catalog rows have no runtime repository.
+
+Android mirrors the catalog in Room and renders Room flows. Before a Retrofit refresh reaches the
+Room transaction, the client verifies completeness, publication/review rules, relation references
+and the canonical SHA-256 content hash. A rejection or transaction failure retains the prior
+cache. Private exercise changes continue through the owner-scoped outbox and can never enter
+catalog queries. See ADR-016.
 
 Guest data is local by default. `GuestSessionStore.syncEnabled` defaults to `false`; confirmed opt-in persists consent before scheduling unique private sync work, and opt-out persists first and cancels that work. The worker rechecks consent before authentication, push and every pull page. Catalog refresh contains no private payload and never changes consent.
 

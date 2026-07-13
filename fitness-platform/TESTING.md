@@ -154,6 +154,16 @@ CI fails on formatting, lint, type errors, test failures, migration drift, Andro
 
 ## Catalog verification
 
-Backend coverage includes repeat/update import, duplicates, missing provenance/license/source, unknown relationships, review/publication rules, rollback, filters and private/public separation. Android JVM tests cover ViewModel/filter/offline state; Room/repository instrumentation sources cover persistence, migration 2→3, seed idempotency, combined filters and atomic failure preservation.
+Backend coverage includes immutable no-op/conflict identities, duplicate and unknown relations,
+unsafe licenses, review/publication rules, older imports, removal, failed staging/activation,
+explicit rollback, literal wildcard filters, 500+ item snapshots, private/public separation and
+PostgreSQL concurrent imports/activations. Migration upgrade/check/downgrade/re-upgrade runs on
+fresh SQLite and PostgreSQL databases.
+
+Android JVM tests verify canonical snapshot hashing and rejection of tampered, partial or invalid
+relationships. Room/repository instrumentation sources cover persistence, migration 2→3, seed
+idempotency, combined filters, atomic failure preservation and invalid-refresh cache retention.
+The emulator-independent gate compiles those sources; connected execution still requires the
+stable API-36 AVD described below.
 
 `make doctor` warns for a missing Windows stable API-36 AVD; `make doctor-connected` is strict. Install with `sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, then `avdmanager.bat create avd -n Momentum_API_36 -k "system-images;android-36;google_apis;x86_64"`.

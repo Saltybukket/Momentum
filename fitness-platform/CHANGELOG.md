@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Gate F immutable catalog releases
+
+- Stage complete catalog content in immutable release-scoped tables and atomically select one
+  active release, with retained history and explicit rollback.
+- Reject conflicting version/hash/batch identities, duplicate relations, unsafe license URIs and
+  invalid publication/review state before public activation.
+- Bind public pages and snapshots to one release identity and content hash, with stable ETag and
+  literal wildcard search semantics.
+- Validate complete Android snapshots and canonical SHA-256 before atomically replacing the Room
+  cache; preserve the prior cache on rejection.
+- Advance the Alembic head to `0d4f6a8b2c17`.
+
 ## Unreleased - Gate R/D reliability hardening
 
 - Bound sync replay identity to contract version, entity, action and canonical typed payload; expired operation IDs are atomically reusable.

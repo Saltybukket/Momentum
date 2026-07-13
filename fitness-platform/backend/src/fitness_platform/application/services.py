@@ -615,39 +615,65 @@ class CatalogService:
     def __init__(self, *, uow_factory: UowFactory) -> None:
         self._uow_factory = uow_factory
 
-    async def list(
+    async def page(
         self,
         muscle: str | None,
         equipment: str | None,
         query: str | None = None,
         limit: int | None = 100,
         offset: int = 0,
-    ) -> Sequence[CatalogExercise]:
+    ) -> tuple[CatalogRelease, Sequence[CatalogExercise], int]:
         async with self._uow_factory() as uow:
-            return await uow.catalog.list(muscle, equipment, query, limit, offset)
+            release = await uow.catalog.get_active_release()
+            if release is None:
+                raise NotFoundError("No active catalog release is available.")
+            items = await uow.catalog.list(
+                release.catalog_version, muscle, equipment, query, limit, offset
+            )
+            total = await uow.catalog.count(release.catalog_version, muscle, equipment, query)
+            return release, items, total
 
-    async def count(self, muscle: str | None, equipment: str | None, query: str | None) -> int:
+    async def snapshot(
+        self,
+    ) -> tuple[
+        CatalogRelease,
+        Sequence[CatalogExercise],
+        Sequence[tuple[str, str]],
+        Sequence[tuple[str, str]],
+    ]:
         async with self._uow_factory() as uow:
-            return await uow.catalog.count(muscle, equipment, query)
+            release = await uow.catalog.get_active_release()
+            if release is None:
+                raise NotFoundError("No active catalog release is available.")
+            version = release.catalog_version
+            exercises = await uow.catalog.list(version, None, None, None, None, 0)
+            muscles = await uow.catalog.list_muscles(version)
+            equipment = await uow.catalog.list_equipment(version)
+            return release, exercises, muscles, equipment
 
     async def release(self) -> CatalogRelease | None:
         async with self._uow_factory() as uow:
-            return await uow.catalog.get_release()
+            return await uow.catalog.get_active_release()
 
     async def get(self, exercise_id: UUID) -> CatalogExercise:
         async with self._uow_factory() as uow:
-            exercise = await uow.catalog.get(exercise_id)
+            release = await uow.catalog.get_active_release()
+            exercise = (
+                await uow.catalog.get(release.catalog_version, exercise_id) if release else None
+            )
         if exercise is None:
             raise NotFoundError("Catalog exercise not found.")
         return exercise
 
     async def muscles(self) -> Sequence[tuple[str, str]]:
         async with self._uow_factory() as uow:
-            return await uow.catalog.list_muscles()
+            release = await uow.catalog.get_active_release()
+            return await uow.catalog.list_muscles(release.catalog_version) if release else []
 
     async def equipment(self) -> Sequence[tuple[str, str]]:
         async with self._uow_factory() as uow:
-            return await uow.catalog.list_equipment()
+            release = await uow.catalog.get_active_release()
+            return await uow.catalog.list_equipment(release.catalog_version) if release else []
 
 
 class SyncService:

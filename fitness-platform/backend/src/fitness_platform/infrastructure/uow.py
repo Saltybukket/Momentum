@@ -2,8 +2,8 @@ from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from fitness_platform.infrastructure.catalog_releases import SqlAlchemyReleaseCatalogRepository
 from fitness_platform.infrastructure.repositories import (
-    SqlAlchemyCatalogRepository,
     SqlAlchemyExerciseRepository,
     SqlAlchemyGuestSessionRepository,
     SqlAlchemyIdempotencyRepository,
@@ -27,7 +27,7 @@ class SqlAlchemyUnitOfWork:
         self.guest_sessions = SqlAlchemyGuestSessionRepository(self._session)
         self.profiles = SqlAlchemyProfileRepository(self._session)
         self.exercises = SqlAlchemyExerciseRepository(self._session)
-        self.catalog = SqlAlchemyCatalogRepository(self._session)
+        self.catalog = SqlAlchemyReleaseCatalogRepository(self._session)
         self.workouts = SqlAlchemyWorkoutRepository(self._session)
         self.outbox = SqlAlchemyOutboxRepository(self._session)
         self.idempotency = SqlAlchemyIdempotencyRepository(self._session)

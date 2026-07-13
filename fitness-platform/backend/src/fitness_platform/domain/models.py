@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from fitness_platform.domain.enums import (
+    CatalogReleaseStatus,
     CatalogStatus,
     MuscleRole,
     OnboardingStatus,
@@ -44,7 +45,7 @@ class CatalogRelease:
     sources: list[str]
     licenses: list[str]
     exercise_count: int
-    status: str
+    status: CatalogReleaseStatus
 
 
 @dataclass(slots=True)

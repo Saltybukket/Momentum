@@ -47,6 +47,13 @@ class CatalogStatus(StrEnum):
     DEPRECATED = "DEPRECATED"
 
 
+class CatalogReleaseStatus(StrEnum):
+    STAGED = "STAGED"
+    ACTIVE = "ACTIVE"
+    RETIRED = "RETIRED"
+    FAILED = "FAILED"
+
+
 class MuscleRole(StrEnum):
     PRIMARY = "PRIMARY"
     SECONDARY = "SECONDARY"

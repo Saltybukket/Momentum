@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -15,10 +16,12 @@ from sqlalchemy import (
     Uuid,
 )
 from sqlalchemy import Enum as SqlEnum
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fitness_platform.core.database import Base
 from fitness_platform.domain.enums import (
+    CatalogReleaseStatus,
     CatalogStatus,
     MuscleRole,
     OnboardingStatus,
@@ -153,7 +156,17 @@ class CatalogExerciseRow(Base):
 class CatalogReleaseRow(Base):
     __tablename__ = "catalog_releases"
     __table_args__ = (
-        CheckConstraint("status IN ('PUBLISHED','RETIRED')", name="ck_catalog_release_status"),
+        CheckConstraint(
+            "status IN ('STAGED','ACTIVE','RETIRED','FAILED')",
+            name="ck_catalog_release_status",
+        ),
+        Index(
+            "uq_catalog_single_active_status",
+            "status",
+            unique=True,
+            sqlite_where=sql_text("status = 'ACTIVE'"),
+            postgresql_where=sql_text("status = 'ACTIVE'"),
+        ),
     )
 
     catalog_version: Mapped[str] = mapped_column(String(80), primary_key=True)
@@ -164,7 +177,120 @@ class CatalogReleaseRow(Base):
     sources: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     licenses: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     exercise_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[CatalogReleaseStatus] = mapped_column(
+        enum_column(CatalogReleaseStatus), nullable=False
+    )
+
+
+class CatalogActivationRow(Base):
+    __tablename__ = "catalog_activation"
+    __table_args__ = (CheckConstraint("singleton_id = 1", name="ck_catalog_activation_singleton"),)
+
+    singleton_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    catalog_version: Mapped[str | None] = mapped_column(
+        String(80), ForeignKey("catalog_releases.catalog_version", ondelete="RESTRICT"), unique=True
+    )
+
+
+class CatalogReleaseMuscleRow(Base):
+    __tablename__ = "catalog_release_muscles"
+
+    catalog_version: Mapped[str] = mapped_column(
+        String(80),
+        ForeignKey("catalog_releases.catalog_version", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    slug: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+
+
+class CatalogReleaseEquipmentRow(Base):
+    __tablename__ = "catalog_release_equipment"
+
+    catalog_version: Mapped[str] = mapped_column(
+        String(80),
+        ForeignKey("catalog_releases.catalog_version", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    slug: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+
+
+class CatalogReleaseExerciseRow(Base):
+    __tablename__ = "catalog_release_exercises"
+    __table_args__ = (
+        UniqueConstraint(
+            "catalog_version", "source", "external_id", name="uq_release_exercise_source_external"
+        ),
+        Index("ix_release_exercises_name", "catalog_version", "name"),
+        CheckConstraint(
+            "status IN ('DRAFT','PUBLISHED','DEPRECATED')", name="ck_release_exercise_status"
+        ),
+    )
+
+    catalog_version: Mapped[str] = mapped_column(
+        String(80),
+        ForeignKey("catalog_releases.catalog_version", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    provenance: Mapped[str] = mapped_column(Text, nullable=False)
+    license_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    license_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[CatalogStatus] = mapped_column(enum_column(CatalogStatus), nullable=False)
+    reviewed: Mapped[bool] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    tracking_type: Mapped[TrackingType] = mapped_column(enum_column(TrackingType), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CatalogReleaseExerciseMuscleRow(Base):
+    __tablename__ = "catalog_release_exercise_muscles"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["catalog_version", "exercise_id"],
+            ["catalog_release_exercises.catalog_version", "catalog_release_exercises.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["catalog_version", "muscle_slug"],
+            ["catalog_release_muscles.catalog_version", "catalog_release_muscles.slug"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("role IN ('PRIMARY','SECONDARY')", name="ck_release_muscle_role"),
+        Index("ix_release_exercise_muscle_filter", "catalog_version", "muscle_slug"),
+    )
+
+    catalog_version: Mapped[str] = mapped_column(String(80), primary_key=True)
+    exercise_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    muscle_slug: Mapped[str] = mapped_column(String(80), primary_key=True)
+    role: Mapped[MuscleRole] = mapped_column(enum_column(MuscleRole), nullable=False)
+
+
+class CatalogReleaseExerciseEquipmentRow(Base):
+    __tablename__ = "catalog_release_exercise_equipment"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["catalog_version", "exercise_id"],
+            ["catalog_release_exercises.catalog_version", "catalog_release_exercises.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["catalog_version", "equipment_slug"],
+            ["catalog_release_equipment.catalog_version", "catalog_release_equipment.slug"],
+            ondelete="RESTRICT",
+        ),
+        Index("ix_release_exercise_equipment_filter", "catalog_version", "equipment_slug"),
+    )
+
+    catalog_version: Mapped[str] = mapped_column(String(80), primary_key=True)
+    exercise_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    equipment_slug: Mapped[str] = mapped_column(String(80), primary_key=True)
 
 
 class MuscleRow(Base):

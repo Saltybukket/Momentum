@@ -86,6 +86,7 @@ class RoomCatalogRepository @Inject constructor(
     }
 
     private suspend fun replace(snapshot: CatalogSnapshotDto, source: String) {
+        snapshot.validateCompleteRelease(json)
         if (catalogDao.metadata()?.contentHash == snapshot.contentHash) return
         val exercises = snapshot.exercises.map { it.toCatalogModel() }
         database.withTransaction {

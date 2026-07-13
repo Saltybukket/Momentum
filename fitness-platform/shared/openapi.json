@@ -4,6 +4,14 @@
       "CatalogExercisePage": {
         "additionalProperties": false,
         "properties": {
+          "catalog_version": {
+            "title": "Catalog Version",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/CatalogExerciseResponse"
@@ -16,6 +24,8 @@
           }
         },
         "required": [
+          "catalog_version",
+          "content_hash",
           "items",
           "page"
         ],

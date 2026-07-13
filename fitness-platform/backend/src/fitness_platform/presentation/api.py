@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from fitness_platform.core.errors import NotFoundError
 from fitness_platform.core.security import request_fingerprint
 from fitness_platform.domain.events import DomainEvent
 from fitness_platform.domain.models import Exercise
@@ -65,28 +64,27 @@ async def list_catalog_exercises(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> CatalogExercisePage:
-    items = [
-        CatalogExerciseResponse.from_domain(item)
-        for item in await container.catalog.list(muscle, equipment, q, limit, offset)
-    ]
-    total = await container.catalog.count(muscle, equipment, q)
-    return CatalogExercisePage(items=items, page=PageMeta(limit=limit, offset=offset, total=total))
+    release, exercises, total = await container.catalog.page(muscle, equipment, q, limit, offset)
+    items = [CatalogExerciseResponse.from_domain(item) for item in exercises]
+    return CatalogExercisePage(
+        catalog_version=release.catalog_version,
+        content_hash=release.content_hash,
+        items=items,
+        page=PageMeta(limit=limit, offset=offset, total=total),
+    )
 
 
 @router.get("/api/v1/catalog/snapshot", response_model=CatalogSnapshotResponse, tags=["catalog"])
 async def get_catalog_snapshot(request: Request, container: ContainerDep) -> Response:
-    release = await container.catalog.release()
-    if release is None:
-        raise NotFoundError("No published catalog release is available.")
-    exercises = list(await container.catalog.list(None, None, None, None, 0))
-    muscles = [
-        CatalogFacetResponse(slug=slug, name=name)
-        for slug, name in await container.catalog.muscles()
-    ]
-    equipment = [
-        CatalogFacetResponse(slug=slug, name=name)
-        for slug, name in await container.catalog.equipment()
-    ]
+    (
+        release,
+        release_exercises,
+        release_muscles,
+        release_equipment,
+    ) = await container.catalog.snapshot()
+    exercises = list(release_exercises)
+    muscles = [CatalogFacetResponse(slug=slug, name=name) for slug, name in release_muscles]
+    equipment = [CatalogFacetResponse(slug=slug, name=name) for slug, name in release_equipment]
     exercise_payload = [CatalogExerciseResponse.from_domain(item) for item in exercises]
     etag = f'"{release.content_hash.removeprefix("sha256:")}"'
     if request.headers.get("If-None-Match") == etag:

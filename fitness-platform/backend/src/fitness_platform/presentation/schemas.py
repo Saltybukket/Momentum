@@ -397,6 +397,8 @@ class CatalogFacetResponse(ApiModel):
 
 
 class CatalogExercisePage(ApiModel):
+    catalog_version: str
+    content_hash: str
     items: list[CatalogExerciseResponse]
     page: PageMeta
 
