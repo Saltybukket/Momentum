@@ -38,6 +38,8 @@ checkpoint `ed34e4f` plus the locally verified Phase 2A.1 training-location slic
   `fa17cc9964a21df59eeb82cb477e1ead483f9c87834a3304be53dd10f2a68c59`.
 - Gate Q CI [run 29253072791](https://github.com/Saltybukket/Momentum/actions/runs/29253072791),
   attempt 1, passed all backend, Android and repository-security jobs for `ed34e4f`.
+- Phase 2A.1 implementation CI [run 29256173819](https://github.com/Saltybukket/Momentum/actions/runs/29256173819),
+  attempt 1, passed all three jobs for `745894a` without reruns.
 
 ## Active risks
 
@@ -57,5 +59,5 @@ App Shell V1 and local Phase 2A.1 training locations are complete. The next prod
 2B (`ExerciseReference` and editable training plans); optional location synchronization remains a
 separate explicitly gated slice and is not a prerequisite for local use.
 
-Latest operational handoff: [Gate F.1/E.2/App Shell checkpoint](HANDOFF_2026-07-13_GATE_F1_E2_APP_SHELL.md). Historical
+Latest operational handoff: [Phase 2A.1 training locations](HANDOFF_2026-07-13_PHASE_2A1_TRAINING_LOCATIONS.md). Historical
 reports and handoffs are under [archive](archive/README.md).
