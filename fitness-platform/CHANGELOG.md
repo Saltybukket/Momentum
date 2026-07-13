@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Premium UI and UX checkpoint
+
+- Added a dedicated Android design-system module with calm navy/silver/amber light and dark themes,
+  centralized type, spacing, shape, elevation and motion tokens, responsive width helpers and
+  reusable card, empty-state and skeleton components.
+- Added a self-authored adaptive geometric-M launcher mark, monochrome themed icon, consistent
+  splash surface and explicit no-backup/data-extraction rules.
+- Reworked the four-root shell and existing Home, Workouts, Exercises, Catalog, Training Locations,
+  Profile, Privacy and Conflict surfaces without inventing unsupported product metrics or domains.
+- Hardened Room downgrade startup, training-location text and finite-operation behavior, catalog
+  compatibility and equipment labels before the visual pass.
+
 ### Phase 2A.1 training locations
 
 - Added a local-first training-location domain with stable equipment definitions, editable

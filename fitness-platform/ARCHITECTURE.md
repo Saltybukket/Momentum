@@ -284,3 +284,13 @@ selection; showing the full catalog is an explicit user choice. Alternatives sha
 muscle, prefer the same tracking type and use deterministic name/ID ordering.
 Catalog detail represents compatibility as `COMPATIBLE`, `LOCATION_REQUIRED` or
 `MISSING_EQUIPMENT`; it never presents absence of a location as missing equipment.
+
+## 12. Android presentation foundation
+
+`android/core/designsystem` is the presentation-only design foundation. It owns Momentum theme
+tokens, responsive width policy and stateless reusable components; it has no dependency on Room,
+Retrofit, repositories or domain use cases. Feature modules retain UDF state, navigation and
+business decisions. Compact layouts use bottom navigation and sheets, while expanded layouts use
+the same route families through a branded rail and bounded content surface. Brand assets are
+self-authored Android vectors; the external visual-reference folder is neither a source set nor a
+packaged runtime asset. See `docs/UI_DESIGN_SYSTEM.md`.

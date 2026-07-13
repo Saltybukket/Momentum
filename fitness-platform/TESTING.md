@@ -201,3 +201,12 @@ foreign-key cascade and repository persistence. These sources compile in the nor
 execution is reported only when a real device/AVD runs them.
 
 `make doctor` warns for a missing Windows stable API-36 AVD; `make doctor-connected` is strict. Install with `sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, then `avdmanager.bat create avd -n Momentum_API_36 -k "system-images;android-36;google_apis;x86_64"`.
+
+## Presentation verification
+
+The emulator-independent Android gate compiles every feature, runs JVM state/contract tests,
+Detekt, Spotless, Android Lint and debug assembly. Premium presentation previews exercise compact,
+expanded, landscape, light/dark and 200% font configurations with visibly synthetic data. APK
+inspection must confirm that `icon_and_image_ideas/` is absent. Compile-only AndroidTest results
+must never be described as connected visual or accessibility execution; those require the stable
+API-36 AVD.

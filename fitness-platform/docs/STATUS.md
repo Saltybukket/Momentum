@@ -1,7 +1,7 @@
 # Project status
 
-Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified Gate Q
-checkpoint `ed34e4f` plus the locally verified Phase 2A.1 training-location slice.
+Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified UX.0 checkpoint
+`9b9325e` plus the locally verified premium UI foundation.
 
 ## Implemented
 
@@ -23,6 +23,13 @@ checkpoint `ed34e4f` plus the locally verified Phase 2A.1 training-location slic
 - Phase 2A.1 adds local-first training locations, a stable equipment registry, editable presets and
   equipment-aware public-catalog compatibility/alternatives. The local model is sync-capable but
   no backend location sync contract is implemented or claimed.
+- UX.0 preserves Room data on unsupported downgrade, hardens single-line location names and finite
+  save/error operations, makes active switching revision-bound and distinguishes catalog location
+  requirements from genuinely missing equipment.
+- The premium Android presentation foundation centralizes navy/silver/amber light/dark tokens and
+  reusable responsive components. Existing screens use honest local state, accessible labels and
+  explicit empty/loading/action states. The self-authored adaptive/monochrome launcher mark is a
+  geometric Momentum M with restrained forward movement.
 - Repository, migration, static-analysis, JVM/build and container verification workflows.
 
 ## Schema and verification authority
@@ -34,12 +41,18 @@ checkpoint `ed34e4f` plus the locally verified Phase 2A.1 training-location slic
   79.27% combined coverage, fresh SQLite/PostgreSQL migration checks, 43 distinct Android JVM
   tests (81 debug/release executions), the 579-task Android gate and the 192-task AndroidTest
   compile gate.
-- Latest verified debug APK: 40,585,190 bytes; SHA-256
-  `fa17cc9964a21df59eeb82cb477e1ead483f9c87834a3304be53dd10f2a68c59`.
+- The current APK size/hash and final test counts are recorded in the latest premium UI handoff.
+- Premium local verification passed 128 PostgreSQL backend tests at 79.14% combined coverage,
+  49 distinct Android JVM tests (92 variant executions), the 644-task Android gate and 208-task
+  AndroidTest compile gate. Room remains version 6.
 - Gate Q CI [run 29253072791](https://github.com/Saltybukket/Momentum/actions/runs/29253072791),
   attempt 1, passed all backend, Android and repository-security jobs for `ed34e4f`.
 - Phase 2A.1 implementation CI [run 29256173819](https://github.com/Saltybukket/Momentum/actions/runs/29256173819),
   attempt 1, passed all three jobs for `745894a` without reruns.
+- UX.0 correction CI [run 29261976736](https://github.com/Saltybukket/Momentum/actions/runs/29261976736),
+  attempt 1, passed all three jobs for `9b9325e` without reruns.
+- Premium implementation CI [run 29265287902](https://github.com/Saltybukket/Momentum/actions/runs/29265287902),
+  attempt 1, passed backend, Android and repository-security for exact head `07aa0bf` without rerun.
 
 ## Active risks
 
@@ -55,9 +68,9 @@ checkpoint `ed34e4f` plus the locally verified Phase 2A.1 training-location slic
 
 ## Next phase
 
-App Shell V1 and local Phase 2A.1 training locations are complete. The next product slice is Phase
+The premium App Shell and local Phase 2A.1 training locations are complete. The next product slice is Phase
 2B (`ExerciseReference` and editable training plans); optional location synchronization remains a
 separate explicitly gated slice and is not a prerequisite for local use.
 
-Latest operational handoff: [Phase 2A.1 training locations](HANDOFF_2026-07-13_PHASE_2A1_TRAINING_LOCATIONS.md). Historical
+Latest operational handoff: [Premium UI checkpoint](HANDOFF_2026-07-13_PREMIUM_UI.md). Historical
 reports and handoffs are under [archive](archive/README.md).
