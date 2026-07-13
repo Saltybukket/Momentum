@@ -8,6 +8,7 @@ import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.Workout
+import at.fitnessplatform.core.model.WorkoutStatus
 import at.fitnessplatform.domain.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -23,9 +24,18 @@ data class PlatformUiState(
     val exercises: List<CustomExercise> = emptyList(),
     val conflicts: List<ExerciseConflict> = emptyList(),
     val workouts: List<Workout> = emptyList(),
+    val syncEnabled: Boolean = false,
+    val pendingSyncCount: Int = 0,
+    val credentialStatus: GuestCredentialStatus = GuestCredentialStatus.READY,
     val operationInProgress: Boolean = false,
     val errorMessage: String? = null,
-)
+) {
+    val activeWorkout: Workout?
+        get() = workouts.firstOrNull { it.status == WorkoutStatus.IN_PROGRESS }
+
+    val recentWorkouts: List<Workout>
+        get() = workouts.filter { it.status != WorkoutStatus.IN_PROGRESS }.take(3)
+}
 
 @HiltViewModel
 @Suppress("LongParameterList")
@@ -34,6 +44,7 @@ class PlatformViewModel @Inject constructor(
     observeExercises: ObserveExercisesUseCase,
     observeConflicts: ObserveExerciseConflictsUseCase,
     observeWorkouts: ObserveWorkoutsUseCase,
+    syncPreferences: SyncPreferencesRepository,
     private val createProfile: CreateGuestProfileUseCase,
     private val updateProfile: UpdateGuestProfileUseCase,
     private val createExercise: CreateExerciseUseCase,
@@ -51,6 +62,12 @@ class PlatformViewModel @Inject constructor(
         val conflicts: List<ExerciseConflict>,
     )
 
+    private data class SyncSummary(
+        val enabled: Boolean,
+        val pendingCount: Int,
+        val credentials: GuestCredentialStatus,
+    )
+
     private val operationInProgress = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
 
@@ -60,8 +77,30 @@ class PlatformViewModel @Inject constructor(
         PlatformData(profile, exercises, workouts, conflicts)
     }
 
-    val uiState = combine(platformData, operationInProgress, errorMessage) { data, busy, error ->
-        PlatformUiState(false, data.profile, data.exercises, data.conflicts, data.workouts, busy, error)
+    private val syncSummary = combine(
+        syncPreferences.observeEnabled(),
+        syncPreferences.observePendingCount(),
+        syncPreferences.observeCredentialState(),
+    ) { enabled, pending, credentials -> SyncSummary(enabled, pending, credentials) }
+
+    val uiState = combine(
+        platformData,
+        syncSummary,
+        operationInProgress,
+        errorMessage,
+    ) { data, sync, busy, error ->
+        PlatformUiState(
+            isLoading = false,
+            profile = data.profile,
+            exercises = data.exercises,
+            conflicts = data.conflicts,
+            workouts = data.workouts,
+            syncEnabled = sync.enabled,
+            pendingSyncCount = sync.pendingCount,
+            credentialStatus = sync.credentials,
+            operationInProgress = busy,
+            errorMessage = error,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlatformUiState())
 
     fun clearError() { errorMessage.value = null }
