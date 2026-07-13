@@ -51,8 +51,10 @@ Read this file, the newest active status/handoff, applicable ADRs, relevant test
 - Durable backend events use at-least-once delivery. Every real side-effect handler must be durably idempotent.
 - Outbox claims and finalization must reject stale workers and stale claim tokens.
 - Completed and cancelled workouts are terminal.
-- Catalog manifest, hash, active release and served content must never silently diverge.
+- Catalog manifest, canonical hash, active release and served content must never silently diverge.
+- Catalog hashes use one documented semantic canonicalization across importer, API and Android; unordered arrays are normalized before hashing.
 - Published catalog releases are immutable.
+- Migration downgrades must preserve representable active data or fail before destructive changes; schema-only success is not enough.
 - Server-authoritative rewards, commerce, anti-cheat and social-ranking values are never trusted from client counters.
 - Production adapters use official provider APIs only and remain replaceable through ports.
 
@@ -134,6 +136,7 @@ export ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk}
 
 ./gradlew \
   :core:database:compileDebugAndroidTestKotlin \
+  :core:datastore:compileDebugAndroidTestKotlin \
   :core:sync:compileDebugAndroidTestKotlin \
   :data:compileDebugAndroidTestKotlin \
   :app:compileDebugAndroidTestKotlin \
@@ -203,6 +206,8 @@ A green filesystem scan must not be described as a green image scan. Record fixe
 - Use fakes for deterministic application tests and mocks only for narrow interaction assertions.
 - Do not use arbitrary sleeps where a clock, event or virtual scheduler can express the behavior.
 - Test success, validation, conflict, cancellation, process interruption and retry paths.
+- For cross-platform hashes, test the exact serialized API response against the Android verifier; testing the source fixture alone is insufficient.
+- Migration round trips must assert domain data, counts and hashes, not only successful commands.
 - Measure combined, statement and branch coverage separately.
 - Coverage percentage alone does not replace adversarial state-transition tests.
 - Never claim unexecuted tests, integrations, migrations, scans or builds.
@@ -267,7 +272,7 @@ A slice is complete only when:
 - source and built-image security results are reported honestly;
 - canonical documentation is current;
 - the logical unit is committed and pushed;
-- the final CI run is tied to the correct commit;
+- the final CI run is tied to the correct commit and documented with run ID, URL, attempt and head SHA;
 - `git status --short` is empty.
 
 The final report must list exact commands, test counts, skipped tests, coverage, migration heads, Room version, APK hash when built, CI run ID, commits, push status and remaining risks.
