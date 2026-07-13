@@ -1,9 +1,9 @@
 {
   "schema_version": "1",
-  "catalog_version": "2026.07.12-demo.1",
-  "content_hash": "sha256:44870e2573bb28a796f5e36d218b4533d213d239f2c024aeb8345b03b4c255a2",
+  "catalog_version": "2026.07.13-demo.2",
+  "content_hash": "sha256:b3a3fec064548ccdcf1c9166d5641f1b8c9da46a19337feeb88ae923906f1fa7",
   "published_at": "2026-07-12T00:00:00Z",
-  "batch_id": "momentum-self-authored-demo-v1",
+  "batch_id": "momentum-self-authored-demo-v2",
   "muscles": [
     {"slug": "quadriceps", "name": "Quadriceps"},
     {"slug": "glutes", "name": "Glutes"},

@@ -21,6 +21,8 @@ from fitness_platform.infrastructure.orm import (
     CatalogReleaseRow,
 )
 
+DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "exercises"
+
 
 def demo_document(
     *,
@@ -66,6 +68,15 @@ def write_document(tmp_path: Path, document: dict[str, object], name: str = "cat
     return path
 
 
+def write_untrusted_document(
+    tmp_path: Path, document: dict[str, object], name: str = "untrusted-catalog.json"
+) -> Path:
+    document["content_hash"] = "sha256:" + "0" * 64
+    path = tmp_path / name
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+
 async def test_identical_reimport_is_a_true_noop(app_client, tmp_path) -> None:
     _client, container = app_client
     document = demo_document()
@@ -86,6 +97,72 @@ async def test_identical_reimport_is_a_true_noop(app_client, tmp_path) -> None:
         rows = (await session.execute(select(CatalogReleaseExerciseRow))).scalars().all()
         assert len(rows) == 1
         assert rows[0].updated_at == initial_updated_at
+
+
+async def test_snapshot_hash_is_semantic_and_matches_exact_api_shape(app_client, tmp_path) -> None:
+    client, container = app_client
+    document = demo_document(catalog_version="canonical-v1")
+    document["muscles"] = [
+        {"slug": "upper-back", "name": "Upper back"},
+        {"slug": "legs", "name": "Legs"},
+    ]
+    document["equipment"] = [
+        {"slug": "rack", "name": "Rack"},
+        {"slug": "none", "name": "No equipment"},
+    ]
+    second = exercise("row")
+    second["muscles"] = [
+        {"slug": "upper-back", "role": "SECONDARY"},
+        {"slug": "legs", "role": "PRIMARY"},
+    ]
+    second["equipment"] = ["rack", "none"]
+    document["exercises"] = [second, document["exercises"][0]]  # type: ignore[index]
+    shuffled = deepcopy(document)
+    shuffled["muscles"] = list(reversed(shuffled["muscles"]))  # type: ignore[arg-type]
+    shuffled["equipment"] = list(reversed(shuffled["equipment"]))  # type: ignore[arg-type]
+    shuffled["exercises"] = list(reversed(shuffled["exercises"]))  # type: ignore[arg-type]
+    for item in shuffled["exercises"]:  # type: ignore[union-attr]
+        item["muscles"] = list(reversed(item["muscles"]))
+        item["equipment"] = list(reversed(item["equipment"]))
+
+    assert canonical_release_hash(document) == canonical_release_hash(shuffled)
+    await import_catalog(container, write_document(tmp_path, shuffled))
+
+    snapshot = await client.get("/api/v1/catalog/snapshot")
+    page = await client.get("/api/v1/catalog/exercises")
+    assert snapshot.status_code == 200
+    assert canonical_release_hash(snapshot.json()) == snapshot.json()["content_hash"]
+    assert (
+        snapshot.headers["ETag"] == f'"{snapshot.json()["content_hash"].removeprefix("sha256:")}"'
+    )
+    assert page.json()["catalog_version"] == snapshot.json()["catalog_version"]
+    assert page.json()["content_hash"] == snapshot.json()["content_hash"]
+    assert [item["slug"] for item in snapshot.json()["muscles"]] == ["legs", "upper-back"]
+    assert [item["slug"] for item in snapshot.json()["equipment"]] == ["none", "rack"]
+    assert [
+        (item["source"], item["external_id"], item["id"]) for item in snapshot.json()["exercises"]
+    ] == sorted(
+        (item["source"], item["external_id"], item["id"]) for item in snapshot.json()["exercises"]
+    )
+
+
+async def test_demo_api_snapshot_matches_cross_platform_contract(app_client) -> None:
+    client, container = app_client
+    await import_catalog(container, DATA_DIR / "catalog-demo.json")
+
+    response = await client.get("/api/v1/catalog/snapshot")
+    expected = json.loads((DATA_DIR / "catalog-demo-api-snapshot.json").read_text())
+
+    assert response.status_code == 200
+    assert response.json() == expected
+    assert canonical_release_hash(response.json()) == response.json()["content_hash"]
+
+
+def test_semantic_hash_changes_when_content_changes() -> None:
+    document = demo_document()
+    changed = deepcopy(document)
+    changed["exercises"][0]["description"] = "Actually different"  # type: ignore[index]
+    assert canonical_release_hash(document) != canonical_release_hash(changed)
 
 
 async def test_same_version_with_different_hash_is_rejected_and_active_unchanged(
@@ -151,6 +228,77 @@ async def test_invalid_release_is_rejected_before_any_write(
         assert (
             await session.scalar(select(func.count()).select_from(CatalogReleaseExerciseRow)) == 0
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("catalog_version", "bad\nversion"),
+        ("batch_id", "bad\u202ebatch"),
+    ],
+)
+async def test_unsafe_release_identity_is_rejected(app_client, tmp_path, field, value) -> None:
+    _client, container = app_client
+    document = demo_document()
+    document[field] = value
+    with pytest.raises(CatalogImportError, match=r"control|single-line"):
+        await import_catalog(container, write_untrusted_document(tmp_path, document))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "bad\x00name",
+        "bad\u202ename",
+        "bad\nname",
+    ],
+)
+async def test_unsafe_exercise_text_is_rejected_on_sqlite(app_client, tmp_path, value) -> None:
+    _client, container = app_client
+    document = demo_document()
+    document["exercises"][0]["name"] = value  # type: ignore[index]
+    with pytest.raises(CatalogImportError, match=r"control|single-line"):
+        await import_catalog(container, write_untrusted_document(tmp_path, document))
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https:foo",
+        "https:/foo",
+        "https://",
+        "https://user:pass@example.com/",
+        "https://example.com:invalid/",
+        "https://exa mple.com/",
+    ],
+)
+async def test_non_absolute_or_credentialed_https_url_is_rejected(
+    app_client, tmp_path, url
+) -> None:
+    _client, container = app_client
+    document = demo_document()
+    document["exercises"][0]["license_url"] = url  # type: ignore[index]
+    with pytest.raises(CatalogImportError, match="absolute https"):
+        await import_catalog(container, write_untrusted_document(tmp_path, document))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", "bad\x00name"),
+        ("name", "bad\u202ename"),
+        ("license_url", "https:foo"),
+        ("license_url", "https://user:pass@example.com/"),
+    ],
+)
+async def test_unsafe_catalog_input_is_rejected_on_postgresql(
+    postgres_app_client, tmp_path, field, value
+) -> None:
+    _client, container = postgres_app_client
+    document = demo_document()
+    document["exercises"][0][field] = value  # type: ignore[index]
+    with pytest.raises(CatalogImportError):
+        await import_catalog(container, write_untrusted_document(tmp_path, document))
 
 
 async def test_full_release_removes_missing_exercises_but_keeps_history(

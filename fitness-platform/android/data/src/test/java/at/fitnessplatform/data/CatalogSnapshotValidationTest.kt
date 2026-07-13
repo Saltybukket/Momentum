@@ -29,9 +29,19 @@ class CatalogSnapshotValidationTest {
         snapshot.validateCompleteRelease(json)
 
         assertEquals(
-            "sha256:44870e2573bb28a796f5e36d218b4533d213d239f2c024aeb8345b03b4c255a2",
+            "sha256:b3a3fec064548ccdcf1c9166d5641f1b8c9da46a19337feeb88ae923906f1fa7",
             snapshot.canonicalContentHash(json),
         )
+    }
+
+    @Test fun `exact backend API snapshot is accepted`() {
+        val snapshot = json.decodeFromString<CatalogSnapshotDto>(
+            File("../../data/exercises/catalog-demo-api-snapshot.json").readText(),
+        )
+
+        snapshot.validateCompleteRelease(json)
+
+        assertEquals(snapshot.contentHash, snapshot.canonicalContentHash(json))
     }
 
     @Test fun `tampered release is rejected before persistence`() {
@@ -42,6 +52,48 @@ class CatalogSnapshotValidationTest {
 
         assertThrows(CatalogSnapshotRejectedException::class.java) {
             tampered.validateCompleteRelease(json)
+        }
+    }
+
+    @Test fun `semantic hash ignores input array order`() {
+        val snapshot = validSnapshot().copy(
+            muscles = listOf(CatalogFacetDto("legs", "Legs"), CatalogFacetDto("core", "Core")),
+            equipment = listOf(CatalogFacetDto("rack", "Rack"), CatalogFacetDto("mat", "Mat")),
+        )
+        val exercise = snapshot.exercises.single().copy(
+            muscles = listOf(
+                CatalogMuscleDto("legs", "SECONDARY"),
+                CatalogMuscleDto("core", "PRIMARY"),
+            ),
+            equipment = listOf("rack", "mat"),
+        )
+        val first = snapshot.copy(exercises = listOf(exercise))
+        val reordered = first.copy(
+            muscles = first.muscles.reversed(),
+            equipment = first.equipment.reversed(),
+            exercises = first.exercises.map {
+                it.copy(muscles = it.muscles.reversed(), equipment = it.equipment.reversed())
+            },
+        )
+
+        assertEquals(first.canonicalContentHash(json), reordered.canonicalContentHash(json))
+    }
+
+    @Test fun `unsafe text and non absolute https licenses are rejected`() {
+        val snapshot = validSnapshot()
+        listOf("https:foo", "https:/foo", "https://", "https://user:pass@example.com/").forEach { url ->
+            val invalid = snapshot.copy(
+                exercises = snapshot.exercises.map { it.copy(licenseUrl = url) },
+            ).withCanonicalHash()
+            assertThrows(CatalogSnapshotRejectedException::class.java) {
+                invalid.validateCompleteRelease(json)
+            }
+        }
+        val unsafe = snapshot.copy(
+            exercises = snapshot.exercises.map { it.copy(name = "unsafe\u202ename") },
+        ).withCanonicalHash()
+        assertThrows(CatalogSnapshotRejectedException::class.java) {
+            unsafe.validateCompleteRelease(json)
         }
     }
 
@@ -104,4 +156,7 @@ class CatalogSnapshotValidationTest {
         )
         return snapshot.copy(contentHash = snapshot.canonicalContentHash(json))
     }
+
+    private fun CatalogSnapshotDto.withCanonicalHash() =
+        copy(contentHash = canonicalContentHash(json))
 }

@@ -1,5 +1,6 @@
 import builtins
 from collections.abc import Sequence
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy import func, select, text
@@ -206,7 +207,9 @@ class SqlAlchemyReleaseCatalogRepository:
                 CatalogReleaseExerciseRow.name.ilike(f"%{escaped}%", escape="\\")
             )
         statement = statement.order_by(
-            CatalogReleaseExerciseRow.name, CatalogReleaseExerciseRow.id
+            CatalogReleaseExerciseRow.source,
+            CatalogReleaseExerciseRow.external_id,
+            CatalogReleaseExerciseRow.id,
         ).offset(offset)
         if limit is not None:
             statement = statement.limit(limit)
@@ -255,7 +258,7 @@ class SqlAlchemyReleaseCatalogRepository:
             await self._session.execute(
                 select(CatalogReleaseMuscleRow.slug, CatalogReleaseMuscleRow.name)
                 .where(CatalogReleaseMuscleRow.catalog_version == catalog_version)
-                .order_by(CatalogReleaseMuscleRow.name)
+                .order_by(CatalogReleaseMuscleRow.slug)
             )
         ).all()
         return [(str(slug), str(name)) for slug, name in rows]
@@ -265,7 +268,7 @@ class SqlAlchemyReleaseCatalogRepository:
             await self._session.execute(
                 select(CatalogReleaseEquipmentRow.slug, CatalogReleaseEquipmentRow.name)
                 .where(CatalogReleaseEquipmentRow.catalog_version == catalog_version)
-                .order_by(CatalogReleaseEquipmentRow.name)
+                .order_by(CatalogReleaseEquipmentRow.slug)
             )
         ).all()
         return [(str(slug), str(name)) for slug, name in rows]
@@ -329,11 +332,14 @@ class SqlAlchemyReleaseCatalogRepository:
 
     @staticmethod
     def _release_from_row(row: CatalogReleaseRow) -> CatalogRelease:
+        published_at = row.published_at
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=UTC)
         return CatalogRelease(
             schema_version=row.schema_version,
             catalog_version=row.catalog_version,
             content_hash=row.content_hash,
-            published_at=row.published_at,
+            published_at=published_at,
             batch_id=row.batch_id,
             sources=list(row.sources),
             licenses=list(row.licenses),

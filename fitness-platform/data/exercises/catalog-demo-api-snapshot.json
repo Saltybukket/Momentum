@@ -1,0 +1,78 @@
+{
+  "schema_version": "1",
+  "catalog_version": "2026.07.13-demo.2",
+  "content_hash": "sha256:b3a3fec064548ccdcf1c9166d5641f1b8c9da46a19337feeb88ae923906f1fa7",
+  "published_at": "2026-07-12T00:00:00Z",
+  "batch_id": "momentum-self-authored-demo-v2",
+  "total": 3,
+  "complete": true,
+  "sources": ["momentum-self-authored-demo"],
+  "licenses": ["CC0-1.0"],
+  "muscles": [
+    {"slug": "chest", "name": "Chest"},
+    {"slug": "core", "name": "Core"},
+    {"slug": "glutes", "name": "Glutes"},
+    {"slug": "quadriceps", "name": "Quadriceps"},
+    {"slug": "triceps", "name": "Triceps"}
+  ],
+  "equipment": [
+    {"slug": "mat", "name": "Exercise mat"},
+    {"slug": "none", "name": "No equipment"}
+  ],
+  "exercises": [
+    {
+      "id": "85e855ce-5a45-5af2-bf23-500030d34e11",
+      "external_id": "bodyweight-squat",
+      "source": "momentum-self-authored-demo",
+      "provenance": "Self-authored by the Momentum project for technical demonstration.",
+      "license_name": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "version": "1",
+      "status": "PUBLISHED",
+      "reviewed": true,
+      "name": "Bodyweight Squat",
+      "description": "A technical demo movement record for testing catalog behavior.",
+      "tracking_type": "REPS",
+      "muscles": [
+        {"slug": "glutes", "role": "SECONDARY"},
+        {"slug": "quadriceps", "role": "PRIMARY"}
+      ],
+      "equipment": ["none"]
+    },
+    {
+      "id": "396dc274-797d-5473-b3e3-2d3879701fde",
+      "external_id": "front-plank",
+      "source": "momentum-self-authored-demo",
+      "provenance": "Self-authored by the Momentum project for technical demonstration.",
+      "license_name": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "version": "1",
+      "status": "PUBLISHED",
+      "reviewed": true,
+      "name": "Front Plank",
+      "description": "A self-authored technical demo entry for duration tracking.",
+      "tracking_type": "DURATION",
+      "muscles": [{"slug": "core", "role": "PRIMARY"}],
+      "equipment": ["mat"]
+    },
+    {
+      "id": "766f74ee-877f-5d6c-af72-783a8c79bb04",
+      "external_id": "incline-push-up",
+      "source": "momentum-self-authored-demo",
+      "provenance": "Self-authored by the Momentum project for technical demonstration.",
+      "license_name": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "version": "1",
+      "status": "PUBLISHED",
+      "reviewed": true,
+      "name": "Incline Push-up",
+      "description": "A self-authored technical demo entry without medical or coaching claims.",
+      "tracking_type": "REPS",
+      "muscles": [
+        {"slug": "chest", "role": "PRIMARY"},
+        {"slug": "triceps", "role": "SECONDARY"}
+      ],
+      "equipment": ["none"]
+    }
+  ]
+}

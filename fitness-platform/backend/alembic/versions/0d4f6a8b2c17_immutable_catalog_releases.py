@@ -5,6 +5,7 @@ Revises: f26c8d0e531a
 """
 
 from collections.abc import Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 import sqlalchemy as sa
 from alembic import op
@@ -16,6 +17,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    connection = op.get_bind()
+    legacy_active = connection.execute(
+        sa.text(
+            "SELECT catalog_version FROM catalog_releases WHERE status = 'PUBLISHED' "
+            "ORDER BY published_at DESC, catalog_version DESC LIMIT 1"
+        )
+    ).scalar_one_or_none()
     op.execute("UPDATE catalog_releases SET status = 'RETIRED'")
     with op.batch_alter_table("catalog_releases") as batch:
         batch.drop_constraint("ck_catalog_release_status", type_="check")
@@ -186,17 +194,11 @@ def upgrade() -> None:
         ["catalog_version", "equipment_slug"],
     )
 
-    _migrate_active_legacy_release()
+    _migrate_active_legacy_release(legacy_active)
 
 
-def _migrate_active_legacy_release() -> None:
+def _migrate_active_legacy_release(active: str | None) -> None:
     connection = op.get_bind()
-    active = connection.execute(
-        sa.text(
-            "SELECT catalog_version FROM catalog_releases "
-            "ORDER BY published_at DESC, catalog_version DESC LIMIT 1"
-        )
-    ).scalar_one_or_none()
     connection.execute(
         sa.text(
             "INSERT INTO catalog_activation (singleton_id, catalog_version) "
@@ -258,7 +260,105 @@ def _migrate_active_legacy_release() -> None:
     )
 
 
+def _restore_active_release_to_legacy() -> None:
+    connection = op.get_bind()
+    active = connection.execute(
+        sa.text("SELECT catalog_version FROM catalog_activation WHERE singleton_id = 1")
+    ).scalar_one_or_none()
+    connection.execute(sa.text("DELETE FROM catalog_exercise_equipment"))
+    connection.execute(sa.text("DELETE FROM catalog_exercise_muscles"))
+    connection.execute(sa.text("DELETE FROM catalog_exercises"))
+    connection.execute(sa.text("DELETE FROM equipment"))
+    connection.execute(sa.text("DELETE FROM muscles"))
+    if active is None:
+        return
+
+    muscle_rows = connection.execute(
+        sa.text(
+            "SELECT slug, name FROM catalog_release_muscles "
+            "WHERE catalog_version = :version ORDER BY slug"
+        ),
+        {"version": active},
+    ).all()
+    equipment_rows = connection.execute(
+        sa.text(
+            "SELECT slug, name FROM catalog_release_equipment "
+            "WHERE catalog_version = :version ORDER BY slug"
+        ),
+        {"version": active},
+    ).all()
+    muscles = sa.table(
+        "muscles",
+        sa.column("id", sa.Uuid()),
+        sa.column("slug", sa.String()),
+        sa.column("name", sa.String()),
+    )
+    equipment = sa.table(
+        "equipment",
+        sa.column("id", sa.Uuid()),
+        sa.column("slug", sa.String()),
+        sa.column("name", sa.String()),
+    )
+    if muscle_rows:
+        connection.execute(
+            muscles.insert(),
+            [
+                {
+                    "id": uuid5(NAMESPACE_URL, f"momentum-catalog-muscle:{slug}"),
+                    "slug": slug,
+                    "name": name,
+                }
+                for slug, name in muscle_rows
+            ],
+        )
+    if equipment_rows:
+        connection.execute(
+            equipment.insert(),
+            [
+                {
+                    "id": uuid5(NAMESPACE_URL, f"momentum-catalog-equipment:{slug}"),
+                    "slug": slug,
+                    "name": name,
+                }
+                for slug, name in equipment_rows
+            ],
+        )
+    parameters = {"version": active}
+    connection.execute(
+        sa.text(
+            "INSERT INTO catalog_exercises "
+            "(id, external_id, source, provenance, license_name, license_url, version, status, "
+            "reviewed, name, description, tracking_type, created_at, updated_at) "
+            "SELECT id, external_id, source, provenance, license_name, license_url, version, "
+            "status, reviewed, name, description, tracking_type, created_at, updated_at "
+            "FROM catalog_release_exercises WHERE catalog_version = :version"
+        ),
+        parameters,
+    )
+    connection.execute(
+        sa.text(
+            "INSERT INTO catalog_exercise_muscles (exercise_id, muscle_id, role) "
+            "SELECT relation.exercise_id, muscle.id, relation.role "
+            "FROM catalog_release_exercise_muscles relation "
+            "JOIN muscles muscle ON muscle.slug = relation.muscle_slug "
+            "WHERE relation.catalog_version = :version"
+        ),
+        parameters,
+    )
+    connection.execute(
+        sa.text(
+            "INSERT INTO catalog_exercise_equipment (exercise_id, equipment_id) "
+            "SELECT relation.exercise_id, item.id "
+            "FROM catalog_release_exercise_equipment relation "
+            "JOIN equipment item ON item.slug = relation.equipment_slug "
+            "WHERE relation.catalog_version = :version"
+        ),
+        parameters,
+    )
+
+
 def downgrade() -> None:
+    _restore_active_release_to_legacy()
     op.drop_index("uq_catalog_single_active_status", table_name="catalog_releases")
     op.drop_index(
         "ix_release_exercise_equipment_filter",

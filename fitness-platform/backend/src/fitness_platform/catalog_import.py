@@ -1,7 +1,10 @@
 import argparse
 import asyncio
 import hashlib
+import ipaddress
 import json
+import re
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +24,7 @@ from fitness_platform.domain.enums import (
     TrackingType,
 )
 from fitness_platform.domain.models import CatalogExercise, CatalogRelease
+from fitness_platform.domain.text import normalize_multiline, normalize_single_line
 from fitness_platform.infrastructure.uow import SqlAlchemyUnitOfWork
 
 
@@ -33,12 +37,121 @@ SCHEMA_PATH = (
 )
 
 
+def canonical_catalog_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """Project a release or API snapshot into the cross-platform semantic hash contract."""
+    normalized = _normalize_document(document)
+    return {
+        "schema_version": normalized["schema_version"],
+        "catalog_version": normalized["catalog_version"],
+        "published_at": normalized["published_at"],
+        "batch_id": normalized["batch_id"],
+        "muscles": sorted(normalized["muscles"], key=lambda item: item["slug"]),
+        "equipment": sorted(normalized["equipment"], key=lambda item: item["slug"]),
+        "exercises": sorted(
+            normalized["exercises"],
+            key=lambda item: (item["source"], item["external_id"], item["id"]),
+        ),
+    }
+
+
 def canonical_release_hash(document: dict[str, Any]) -> str:
-    hash_payload = {key: value for key, value in document.items() if key != "content_hash"}
+    hash_payload = canonical_catalog_payload(document)
     canonical = json.dumps(
         hash_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
-    ).encode()
+    ).encode("utf-8")
     return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+
+
+def _single_line(value: object, field: str) -> str:
+    try:
+        return normalize_single_line(str(value), field=field)
+    except ValueError as exc:
+        raise CatalogImportError(f"Invalid single-line {field}: {exc}") from exc
+
+
+def _multiline(value: object, field: str) -> str:
+    try:
+        return normalize_multiline(str(value))
+    except ValueError as exc:
+        raise CatalogImportError(f"Invalid multiline {field}: {exc}") from exc
+
+
+def _absolute_https(value: object, field: str) -> str:
+    url = _single_line(value, field)
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError as exc:
+        raise CatalogImportError(f"{field} must be an absolute https URL.") from exc
+    hostname = parsed.hostname or ""
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or (port is not None and not 1 <= port <= 65535)
+        or not _valid_hostname(hostname)
+    ):
+        raise CatalogImportError(f"{field} must be an absolute https URL.")
+    return url
+
+
+def _valid_hostname(hostname: str) -> bool:
+    try:
+        ipaddress.ip_address(hostname)
+        return True
+    except ValueError:
+        pass
+    try:
+        ascii_hostname = hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        return False
+    if len(ascii_hostname) > 253:
+        return False
+    return all(
+        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+        for label in ascii_hostname.removesuffix(".").split(".")
+    )
+
+
+def _normalize_document(document: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(document)
+    normalized["schema_version"] = _single_line(normalized["schema_version"], "schema_version")
+    normalized["catalog_version"] = _single_line(normalized["catalog_version"], "catalog_version")
+    normalized["batch_id"] = _single_line(normalized["batch_id"], "batch_id")
+    published_at = datetime.fromisoformat(str(normalized["published_at"]).replace("Z", "+00:00"))
+    if published_at.tzinfo is None:
+        raise CatalogImportError("published_at must include a timezone.")
+    normalized["published_at"] = published_at.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    for facet_name in ("muscles", "equipment"):
+        for facet in normalized[facet_name]:
+            facet["slug"] = _single_line(facet["slug"], f"{facet_name}.slug")
+            facet["name"] = _single_line(facet["name"], f"{facet_name}.name")
+    for exercise in normalized["exercises"]:
+        for field in (
+            "id",
+            "source",
+            "external_id",
+            "version",
+            "name",
+            "tracking_type",
+            "status",
+            "license_name",
+        ):
+            exercise[field] = _single_line(exercise[field], f"exercise.{field}")
+        exercise["description"] = _multiline(exercise["description"], "exercise.description")
+        exercise["provenance"] = _multiline(exercise["provenance"], "exercise.provenance")
+        exercise["license_url"] = _absolute_https(exercise["license_url"], "exercise.license_url")
+        for relation in exercise["muscles"]:
+            relation["slug"] = _single_line(relation["slug"], "exercise.muscles.slug")
+            relation["role"] = _single_line(relation["role"], "exercise.muscles.role")
+        exercise["muscles"] = sorted(
+            exercise["muscles"], key=lambda item: (item["slug"], item["role"])
+        )
+        exercise["equipment"] = sorted(
+            _single_line(slug, "exercise.equipment") for slug in exercise["equipment"]
+        )
+    return normalized
 
 
 def _read_document(path: Path) -> object:
@@ -64,6 +177,7 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
     except (OSError, json.JSONDecodeError, ValidationError) as exc:
         raise CatalogImportError(f"Catalog schema validation failed: {exc}") from exc
+    document = _normalize_document(document)
     declared_hash = document.get("content_hash")
     computed_hash = canonical_release_hash(document)
     if declared_hash != computed_hash:
@@ -130,8 +244,6 @@ async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
         if status is not CatalogStatus.PUBLISHED or not reviewed:
             raise CatalogImportError(f"{key} is not approved for a public release.")
         license_url = str(raw["license_url"])
-        if urlsplit(license_url).scheme.lower() != "https":
-            raise CatalogImportError(f"{key} license_url must use https.")
         now = datetime.now(UTC)
         stable_id = uuid5(NAMESPACE_URL, f"momentum-catalog:{key[0]}:{key[1]}")
         if str(raw["id"]) != str(stable_id):
