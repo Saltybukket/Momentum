@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Gate F.1 catalog verification and Gate E.2 Android recovery
+
+- Unified backend/API/Android catalog canonicalization so semantic array order cannot change a
+  release hash, and added an exact shared API fixture accepted by Android verification.
+- Preserved the active catalog snapshot through downgrade and re-upgrade, including empty and
+  non-activated databases, and hardened catalog text and absolute-HTTPS validation.
+- Added an explicit confirmed guest-credential replacement flow that preserves local data and
+  only re-enqueues opted-in sync after successful reset.
+- Bound Android outbox success, failure and conflict finalization to the active claim owner and
+  added stale-worker regression coverage.
+- Compile every Android instrumentation-test source set in CI without claiming connected
+  execution.
+
 ### Gate H-lite project authority and container delivery
 
 - Established `docs/STATUS.md` as the concise current authority and archived superseded reports.

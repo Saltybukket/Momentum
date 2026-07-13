@@ -78,6 +78,15 @@ jobs:
       - name: JVM tests, formatting, analysis, lint and debug build
         working-directory: fitness-platform/android
         run: ./gradlew spotlessCheck detekt test lintDebug assembleDebug
+      - name: Compile Android instrumentation test sources
+        working-directory: fitness-platform/android
+        run: |
+          ./gradlew \
+            :core:database:compileDebugAndroidTestKotlin \
+            :core:datastore:compileDebugAndroidTestKotlin \
+            :core:sync:compileDebugAndroidTestKotlin \
+            :data:compileDebugAndroidTestKotlin \
+            :app:compileDebugAndroidTestKotlin
 
   repository-security:
     runs-on: ubuntu-latest

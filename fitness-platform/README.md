@@ -15,7 +15,8 @@ public exercise catalog; broader product domains remain planned.
 - Minimal workout create/start/complete flow; local `WorkoutCompleted` domain event.
 - Room outbox with retry/error/sync states and a WorkManager sync worker.
 - FastAPI modular-monolith backend with clean domain/application/infrastructure/presentation separation.
-- Development guest recovery, profile/exercise/workout endpoints, private push/pull sync, request IDs, structured errors and idempotency.
+- Development guest recovery, profile/exercise/workout endpoints, private exercise push/pull sync,
+  push-oriented profile/workout sync, request IDs, structured errors and idempotency.
 - Immutable public catalog release import/activation, complete snapshot API and hash-verified Android Room refresh.
 - PostgreSQL schema and Alembic migration; Redis health and future distributed rate-limit foundation.
 - Deterministic provider mocks, module-boundary catalog and event dispatcher.
@@ -113,7 +114,9 @@ Copy-Item .env.example .env
 3. Create a workout, start it and complete it.
 4. Room writes each mutation and its outbox entry atomically.
 5. WorkManager obtains a development guest token and pushes pending operations.
-6. The backend upserts UUID-addressed entities and records idempotency/outbox data.
+6. The backend upserts UUID-addressed entities and records idempotency/outbox data; private
+   exercise changes subsequently pull by revision cursor, while profiles and workouts remain
+   push-oriented.
 
 For a backend-only HTTP smoke run:
 

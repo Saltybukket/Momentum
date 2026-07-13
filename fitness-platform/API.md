@@ -78,6 +78,7 @@ Cursor pagination may replace offset for high-volume timelines, but not silently
 | POST | `/api/v1/workouts/{workout_id}/start` | guest token | yes | implemented |
 | POST | `/api/v1/workouts/{workout_id}/complete` | guest token | yes | implemented |
 | POST | `/api/v1/sync/push` | guest token | yes | implemented push basis |
+| GET | `/api/v1/sync/exercises` | guest token | no | cursor pull with tombstones |
 | GET | `/api/v1/catalog/exercises` | no | no | active release page |
 | GET | `/api/v1/catalog/exercises/{exercise_id}` | no | no | active release detail |
 | GET | `/api/v1/catalog/snapshot` | no | no | complete active release |
@@ -109,7 +110,11 @@ Example request:
 }
 ```
 
-The endpoint processes at most 100 operations per request. UUID upsert and operation/idempotency records make retries safe. Current scope is push only; pull cursors, tombstone download and conflict payloads are planned.
+The endpoint processes at most 100 operations per request. UUID upsert and operation/idempotency
+records make retries safe. Exercise revision conflicts return the authoritative remote exercise
+snapshot. `GET /api/v1/sync/exercises?cursor={revision}` supplies ordered private-exercise changes,
+including tombstones, plus the next cursor; Android commits each page and its cursor atomically in
+Room. Profiles and workouts remain push-oriented in the current client.
 
 ## Compatibility rules
 

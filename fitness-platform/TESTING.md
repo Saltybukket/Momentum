@@ -52,7 +52,15 @@ Fast tests use isolated SQLite. CI additionally applies the Alembic migration to
 
 ## Android tests
 
-Gate E/E.1 adds JVM coverage for secret-store concurrency and token/all-clear separation, bearer recovery policy, terminal recovery rejection, owner-scoped consent claim release and Catalog/Privacy/detail failure transitions. Room instrumentation sources cover schema 4→5 cursor initialization, transaction rollback/commit boundaries and claim release. Keystore instrumentation sources cover missing aliases, partial cipher pairs, corrupt ciphertext, alias deletion and repeatable reset. The emulator-independent gate compiles database, datastore, sync, data and app Android-test sources; execution still requires a suitable API-36 device/AVD.
+Gate E/E.1/E.2 adds JVM coverage for secret-store concurrency and token/all-clear separation,
+bearer recovery policy, terminal recovery rejection, explicit blocked-to-ready reset, reset failure,
+post-reset enqueue ordering, owner-scoped consent release and stale-owner finalization. Room
+instrumentation sources cover schema 4→5 cursor initialization, transaction rollback/commit
+boundaries, claim release and success/failure/conflict rejection after another worker reclaims a
+lease. Keystore instrumentation sources cover missing aliases, partial cipher pairs, corrupt
+ciphertext, alias deletion and repeatable reset. CI and the local emulator-independent gate compile
+database, datastore, sync, data and app Android-test sources; execution still requires a suitable
+API-36 device/AVD.
 
 Test layers:
 
@@ -69,6 +77,11 @@ Commands:
 ```bash
 cd android
 ./gradlew test
+./gradlew :core:database:compileDebugAndroidTestKotlin \
+  :core:datastore:compileDebugAndroidTestKotlin \
+  :core:sync:compileDebugAndroidTestKotlin \
+  :data:compileDebugAndroidTestKotlin \
+  :app:compileDebugAndroidTestKotlin
 ./gradlew connectedProjectAndroidTest # only modules with AndroidTest sources
 ./gradlew lintDebug assembleDebug
 ```

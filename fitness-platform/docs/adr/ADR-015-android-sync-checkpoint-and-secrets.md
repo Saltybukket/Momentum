@@ -15,8 +15,18 @@ Room schema 5 adds singleton `sync_state`. The worker reads only its Room cursor
 
 Private sync remains disabled by default. Opt-in persists consent before enqueuing unique work; opt-out persists it before cancellation. The worker rechecks consent before authentication, push and each pull phase. Consent abort and worker cancellation return only that worker's active outbox claims to `PENDING` without increasing retries. Public catalog seed/refresh remains independent of private consent and guest authentication.
 
+The Privacy screen observes the credential state through a domain repository port. Rejected or
+invalid credentials disable private sync and require a confirmation that a new guest identity will
+be created, local workouts/exercises remain, and server-side data is not automatically deleted.
+Only after the explicit reset succeeds may opted-in sync be enqueued again.
+
+Outbox success, failure and conflict finalizers require both `SYNCING` status and the current claim
+owner. Their row counts detect lost ownership, and success/conflict finalization shares the Room
+transaction with the corresponding domain-state updates. An expired worker therefore cannot
+mutate a row reclaimed by another worker or increment its retry count.
+
 Persisted worker errors are bounded classifications rather than exception messages, preventing accidental credential disclosure.
 
 ## Consequences
 
-A committed cursor always describes committed local changes, upgrades cannot skip pages, and secrets no longer remain in plaintext preferences. A full replay can cost additional network/time once after upgrade. Android Keystore loss or a rejected recovery proof requires an explicit identity reset decision but does not delete offline data. Cancellation of an already-running HTTP request is best-effort; boundary rechecks prevent subsequent private requests after opt-out is observed and owner-scoped release makes claims immediately retryable after a later opt-in.
+A committed cursor always describes committed local changes, upgrades cannot skip pages, and secrets no longer remain in plaintext preferences. A full replay can cost additional network/time once after upgrade. Android Keystore loss or a rejected recovery proof requires an explicit identity reset decision but does not delete offline data. Cancellation of an already-running HTTP request is best-effort; boundary rechecks prevent subsequent private requests after opt-out is observed, while owner-scoped release and finalization prevent stale workers from mutating replacement claims.
