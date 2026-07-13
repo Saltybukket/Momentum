@@ -1,115 +1,273 @@
 # AGENTS.md
 
-## Project and paths
+## Project and operating environment
 
-Momentum is a monorepository for an offline-first Android fitness platform and a FastAPI modular-monolith backend. Work from WSL distribution `ISP2025` and use Linux paths for Git, Gradle, Python, Docker and scripts.
+Momentum is a monorepository for an offline-first Android fitness platform and a FastAPI modular-monolith backend.
+
+Use only the WSL2 distribution `ISP2025` for repository work.
+
+Canonical paths:
 
 - Repository root: `/home/student/projects/Momentum`
 - Application workspace: `/home/student/projects/Momentum/fitness-platform`
 - Android: `fitness-platform/android/`
 - Backend: `fitness-platform/backend/`
-- Demo/seed data: `fitness-platform/data/`
-- Infrastructure and CI: `fitness-platform/infrastructure/`, `fitness-platform/docker-compose.yml`, `fitness-platform/.github/`
+- Demo and catalog data: `fitness-platform/data/`
+- Infrastructure: `fitness-platform/infrastructure/`, `fitness-platform/docker-compose.yml`
+- CI: `.github/workflows/`
 - ADRs and specifications: `fitness-platform/docs/`
+- Product master specification: `architecture/master-prompt.md`
+- Historical scaffold assignment: `architecture/architektur-prompt.md`
+- Research reference: `Research/FITNESS_RESEARCH_REFERENCE.md`
 
-## Authoritative references
+Use Linux paths and Linux Git, Gradle, Python, Docker and shell tools. Do not perform Momentum work from the Ubuntu WSL distribution or from a duplicate Windows checkout.
+
+## Authority order
 
 Apply requirements in this order:
 
-1. The current concrete task.
-2. `architecture/architektur-prompt.md` for the scaffold and technical architecture.
-3. `architecture/master-prompt.md` for mandatory long-term product scope.
-4. `Research/FITNESS_RESEARCH_REFERENCE.md` for exercise, anatomy and seed-data work.
-5. Accepted ADRs and documented decisions.
-6. Existing code as an implementation starting point, not as authority.
+1. The current explicit task and its allowed scope.
+2. Accepted ADRs, generated schemas, OpenAPI and other current canonical contracts.
+3. `fitness-platform/docs/STATUS.md` and the newest handoff for the active branch.
+4. `architecture/master-prompt.md` as the mandatory long-term product specification.
+5. `Research/FITNESS_RESEARCH_REFERENCE.md` only for exercise, anatomy, provenance and seed-data work.
+6. `architecture/architektur-prompt.md` as a historical scaffold reference.
+7. Existing code as an implementation starting point, not as authority.
+8. Older handoffs and archived reports as history only.
 
-Read this file, every more specific `AGENTS.md`, `fitness-platform/ARCHITECTURE.md`, the relevant module documentation and tests before editing. For conflicts, document the conflict and record material architecture changes in an ADR; never diverge silently.
+A historical prompt or report must never override a newer accepted ADR or verified contract.
 
-## Architecture rules
+Read this file, the newest active status/handoff, applicable ADRs, relevant tests and module documentation before editing. Record material architecture decisions in an ADR. Never resolve a conflict silently.
+
+## Stable architecture invariants
 
 - Preserve the monorepository, Android Clean Architecture/MVVM/UDF, Room source of truth, offline-first outbox, FastAPI modular monolith, ports-and-adapters and typed domain events.
-- Keep domain code independent of Compose, Room, Retrofit, FastAPI, SQLAlchemy and concrete vendors.
-- Keep clocks and UUID generation injectable in business logic.
-- Maintain stable UUID/idempotency semantics and server authority for rewards, commerce and anti-cheat-sensitive values.
-- Avoid cyclic dependencies, global mutable state, duplicated models without a boundary reason and business logic in UI/API layers.
-- Use official provider APIs only. Production adapters must remain replaceable through ports.
+- Domain code must not depend on Compose, Room, Retrofit, FastAPI, SQLAlchemy or concrete vendors.
+- Clocks and UUID generation remain injectable.
+- Private data is owner-scoped at every query and write boundary.
+- Private sync is explicit-consent only and defaults to disabled.
+- Applying a remote page and advancing its cursor must be one Room transaction.
+- Bearer tokens and recovery secrets must never be stored in plaintext, logged, returned in errors or persisted in WorkManager output.
+- Durable backend events use at-least-once delivery. Every real side-effect handler must be durably idempotent.
+- Outbox claims and finalization must reject stale workers and stale claim tokens.
+- Completed and cancelled workouts are terminal.
+- Catalog manifest, hash, active release and served content must never silently diverge.
+- Published catalog releases are immutable.
+- Server-authoritative rewards, commerce, anti-cheat and social-ranking values are never trusted from client counters.
+- Production adapters use official provider APIs only and remain replaceable through ports.
 
-Allowed changes are focused vertical slices, necessary scaffold repairs, tests, migrations and matching documentation. Do not add broad placeholder features, empty modules, unlicensed assets, secrets, generated build output, local databases or unrelated dependencies. Do not remove master-prompt requirements or move them to `FUTURE_FEATURES.md`.
+Do not introduce cyclic dependencies, global mutable state, business logic in UI/API layers, generic JSON domain blobs or duplicate models without a boundary reason.
 
-## Workflow
+## Scope and gate discipline
 
-1. Check `git status --short`, branch, recent history, repository structure, applicable ADRs and existing tests.
-2. Select one small vertical slice from the task, architecture prompt or `IMPLEMENTATION_PLAN.md`.
-3. Preserve unknown local changes and do not include them in commits.
-4. Implement through all affected layers and add deterministic tests.
-5. Run the affected format, lint, type, test, migration and build commands.
-6. Run `git diff --check`, review the diff and update behavior/setup documentation.
-7. Commit a verified logical unit with a Conventional Commit message. Push only to a configured remote without force.
+- Work only on the gates or slices explicitly allowed by the current task.
+- Do not begin a later gate until the current gate is green, reviewed, committed and pushed.
+- Do not combine gates that the task deliberately separates.
+- Preserve a clean recoverable checkpoint before broad migrations, security changes or new domains.
+- If the remaining quota is near the task stop threshold, finish the current logical unit, test it, commit it, push it and write a handoff. Do not begin another gate.
+- Do not add broad placeholder features, empty modules, speculative tables or unrelated dependencies.
+- Features required by the master prompt remain mandatory product scope and must not be moved to `FUTURE_FEATURES.md`.
+- `Research/` is read-only unless the current task explicitly authorizes research-data work.
 
-Never use destructive Git commands such as `git reset --hard`, `git clean -fd`, force-push or history-rewriting operations without explicit authorization.
+Never use destructive Git commands such as `git reset --hard`, `git clean -fd`, force-push, rebase or history rewriting without explicit authorization.
 
-## Commands
+## Standard workflow
 
-Run from `fitness-platform/` unless noted:
+1. Confirm WSL distribution, repository path, branch, HEAD and clean status.
+2. Read the current task, newest status/handoff and applicable ADRs.
+3. Reproduce the reported problem with a failing test.
+4. Implement one focused vertical or hardening slice through all affected layers.
+5. Run focused tests.
+6. Run the complete relevant matrix.
+7. Run migrations, OpenAPI/schema drift checks and build/security gates.
+8. Review `git diff`, `git diff --check` and repository integrity.
+9. Update canonical documentation.
+10. Commit and push one verified logical unit.
+11. Confirm the GitHub Actions run belongs to the final code commit.
+
+Preserve unknown local changes and never include them in a commit.
+
+## Backend commands
+
+Run from `fitness-platform/backend/`:
 
 ```bash
-make setup
-make backend
-make backend-test
-make backend-lint
-make android-test
-make android-build
-make test
-make lint
-make migrate
-make seed
-make openapi
-make smoke
-make dev
-```
-
-Direct backend checks:
-
-```bash
-cd backend
 uv sync --extra dev --frozen
 uv run ruff format --check . ../scripts
 uv run ruff check . ../scripts
 uv run mypy src
-uv run pytest
-uv run alembic upgrade head
-uv run alembic check
 ```
 
-Direct Android checks:
+Full backend suite must include a real dedicated PostgreSQL test database:
+
+```bash
+FITNESS_TEST_POSTGRES_URL=postgresql+asyncpg://<user>:<password>@localhost:5432/fitness_test \
+  uv run pytest
+```
+
+Do not report the PostgreSQL matrix as passed if PostgreSQL tests were skipped.
+
+Use a separate database for Alembic:
+
+```bash
+FITNESS_DATABASE_URL=postgresql+asyncpg://<user>:<password>@localhost:5432/fitness_migrations \
+  uv run alembic upgrade head
+
+FITNESS_DATABASE_URL=postgresql+asyncpg://<user>:<password>@localhost:5432/fitness_migrations \
+  uv run alembic check
+
+uv run alembic heads
+```
+
+Pytest and Alembic must never run concurrently against the same PostgreSQL database.
+
+For SQLite migration verification, use a fresh temporary file and run both upgrade and check.
+
+## Android commands
+
+Run from `fitness-platform/android/`:
 
 ```bash
 export ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk}
-cd android
-./gradlew spotlessCheck detekt test lintDebug assembleDebug
-./gradlew connectedDebugAndroidTest  # emulator/device required
+
+./gradlew spotlessCheck detekt test lintDebug assembleDebug --no-daemon
+
+./gradlew \
+  :core:database:compileDebugAndroidTestKotlin \
+  :core:sync:compileDebugAndroidTestKotlin \
+  :data:compileDebugAndroidTestKotlin \
+  :app:compileDebugAndroidTestKotlin \
+  --no-daemon
 ```
 
-Docker and migrations:
+Connected execution:
 
 ```bash
-cp .env.example .env
-docker compose config
-docker compose up --build
-docker compose exec backend alembic upgrade head
+./gradlew connectedProjectAndroidTest
 ```
 
-Windows PowerShell alternatives are in `fitness-platform/scripts/dev.ps1`.
+or from `fitness-platform/`:
+
+```bash
+make android-connected-test
+```
+
+Connected tests may be reported as passed only when they actually ran on a device/AVD and produced test results. Compilation alone is not execution.
+
+For Room changes:
+
+- increment the Room version;
+- provide explicit migrations;
+- export and commit the schema JSON;
+- compile AndroidTest sources;
+- run migration/instrumentation tests when a valid device exists.
+
+For secret-storage changes, test the real Android adapter on Android runtime in addition to JVM fakes whenever possible.
+
+## Platform, contract and security checks
+
+From `fitness-platform/`:
+
+```bash
+make openapi
+git diff --exit-code shared/openapi.json
+docker compose config --quiet
+docker compose build
+docker compose up -d
+docker compose ps
+make smoke
+```
+
+From repository root:
+
+```bash
+python3 fitness-platform/scripts/check_repository.py
+git diff --check
+git status --short
+```
+
+Security verification must distinguish:
+
+- source/filesystem scan;
+- dependency scan;
+- built-container-image scan;
+- secret scan.
+
+A green filesystem scan must not be described as a green image scan. Record fixed and unfixed findings separately.
+
+## Testing rules
+
+- Add deterministic tests for every corrected regression.
+- Use real PostgreSQL for PostgreSQL-specific locking, uniqueness and concurrency.
+- Use SQLite only where its behavior is intentionally supported.
+- Use fakes for deterministic application tests and mocks only for narrow interaction assertions.
+- Do not use arbitrary sleeps where a clock, event or virtual scheduler can express the behavior.
+- Test success, validation, conflict, cancellation, process interruption and retry paths.
+- Measure combined, statement and branch coverage separately.
+- Coverage percentage alone does not replace adversarial state-transition tests.
+- Never claim unexecuted tests, integrations, migrations, scans or builds.
+
+## Documentation rules
+
+Canonical current documents are:
+
+- `README.md`;
+- `fitness-platform/README.md`;
+- `fitness-platform/ARCHITECTURE.md`;
+- `fitness-platform/API.md`;
+- `fitness-platform/DATA_MODEL.md`;
+- `fitness-platform/SECURITY.md`;
+- `fitness-platform/PRIVACY.md`;
+- `fitness-platform/TESTING.md`;
+- `fitness-platform/INTEGRATIONS.md`;
+- accepted ADRs;
+- `fitness-platform/docs/STATUS.md`;
+- the newest active handoff;
+- generated Room schemas and `shared/openapi.json`.
+
+Use `CHANGELOG.md` for notable changes and Git history for detailed history.
+
+Do not append current status history to `docs/IMPLEMENTATION_REPORT.md`. That report is historical and should be archived. Older handoffs are historical and must not be used as current authority.
+
+When behavior changes, update only the canonical documents affected by that behavior. Avoid copying test counts or migration heads into many files.
+
+## Repository and artifact hygiene
+
+Never commit or intentionally distribute:
+
+- `.env`;
+- real credentials or tokens;
+- `local.properties`;
+- `.venv`;
+- `.gradle`;
+- build directories;
+- APKs unless explicitly requested as release artifacts;
+- local databases;
+- IDE state;
+- downloaded Gradle distributions;
+- coverage databases;
+- secret-bearing logs.
+
+Use a reproducible source-archive command based on tracked files or an explicit allowlist.
+
+Demo data must be visibly synthetic and carry provenance/license metadata. No third-party exercise text, image or video may enter the repository without verified reuse rights.
 
 ## Definition of done
 
-A slice is done only when behavior is real across affected layers, relevant tests pass, lint/static analysis passes, the affected build succeeds, migrations and Room schemas are handled where relevant, error states are covered, mocks are clearly named, documentation is current, and no secrets or local/generated artifacts remain.
+A slice is complete only when:
 
-Report exact commands and results. If a check cannot run, record its command, real error and whether the cause is code or environment. Do not claim unexecuted tests, builds, integrations or coverage.
+- behavior is implemented across every affected layer;
+- targeted and full relevant tests pass;
+- PostgreSQL-specific tests actually run;
+- lint, formatting and type checks pass;
+- Alembic and Room migrations are verified;
+- OpenAPI and schemas have no unintended drift;
+- Android builds succeed when affected;
+- errors, cancellation and recovery paths are covered;
+- source and built-image security results are reported honestly;
+- canonical documentation is current;
+- the logical unit is committed and pushed;
+- the final CI run is tied to the correct commit;
+- `git status --short` is empty.
 
-## Mocks, external blockers and documentation
-
-- Deterministic mocks must be visibly named `Mock`/`Fake`, covered by contracts and never described as production integrations.
-- Missing credentials, vendor approval, emulator/device access or Docker integration are external blockers; keep production seams intact and document activation steps.
-- Exercise/health data needs stable schemas, provenance, license and attribution before import. Use only marked technical demo data until the import pipeline is stable.
-- Update `README.md`, `ARCHITECTURE.md`, API/data/security/testing docs, ADRs, Room schemas, OpenAPI and `docs/IMPLEMENTATION_REPORT.md` whenever the corresponding contract or status changes.
+The final report must list exact commands, test counts, skipped tests, coverage, migration heads, Room version, APK hash when built, CI run ID, commits, push status and remaining risks.
