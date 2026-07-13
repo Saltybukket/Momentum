@@ -53,6 +53,7 @@ Read this file, the newest active status/handoff, applicable ADRs, relevant test
 - Completed and cancelled workouts are terminal.
 - Catalog manifest, canonical hash, active release and served content must never silently diverge.
 - Catalog hashes use one documented semantic canonicalization across importer, API and Android; unordered arrays are normalized before hashing.
+- Root navigation selection is derived from documented route families, not exact leaf-route equality.
 - Published catalog releases are immutable.
 - Migration downgrades must preserve representable active data or fail before destructive changes; schema-only success is not enough.
 - Server-authoritative rewards, commerce, anti-cheat and social-ranking values are never trusted from client counters.
@@ -208,6 +209,8 @@ A green filesystem scan must not be described as a green image scan. Record fixe
 - Test success, validation, conflict, cancellation, process interruption and retry paths.
 - For cross-platform hashes, test the exact serialized API response against the Android verifier; testing the source fixture alone is insufficient.
 - Migration round trips must assert domain data, counts and hashes, not only successful commands.
+- Validation tests assert stable error codes, field paths and state effects; they do not depend on
+  optional validator ordering or complete human-readable messages.
 - Measure combined, statement and branch coverage separately.
 - Coverage percentage alone does not replace adversarial state-transition tests.
 - Never claim unexecuted tests, integrations, migrations, scans or builds.
@@ -253,7 +256,8 @@ Never commit or intentionally distribute:
 - coverage databases;
 - secret-bearing logs.
 
-Use a reproducible source-archive command based on tracked files or an explicit allowlist.
+Use a reproducible source-archive command based on tracked files or an explicit allowlist. Generate
+final archive evidence only after the referenced Git head exists, and identify that head explicitly.
 
 Demo data must be visibly synthetic and carry provenance/license metadata. No third-party exercise text, image or video may enter the repository without verified reuse rights.
 

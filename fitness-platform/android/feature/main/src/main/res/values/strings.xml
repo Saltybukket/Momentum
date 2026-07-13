@@ -97,12 +97,16 @@
     <string name="catalog_equipment">Equipment</string>
     <string name="catalog_all">All</string>
     <string name="catalog_loading">Loading exercise catalog</string>
+    <string name="catalog_open_exercise">Open %1$s</string>
     <string name="catalog_empty">No catalog exercises match these filters.</string>
     <string name="catalog_refresh_failed">Showing saved catalog. Refresh failed.</string>
     <string name="catalog_seed_failed">The bundled catalog could not be loaded. Retry to use saved data.</string>
     <string name="catalog_refresh">Refresh</string>
     <string name="back">Back</string>
     <string name="catalog_detail_loading">Loading exercise details</string>
+    <string name="catalog_detail_muscles">Muscles: %1$s</string>
+    <string name="catalog_detail_equipment">Equipment: %1$s</string>
+    <string name="catalog_detail_source">Source: %1$s · %2$s</string>
     <string name="catalog_not_found">Catalog exercise not found.</string>
     <string name="catalog_detail_error">Exercise details could not be loaded.</string>
     <string name="catalog_back">Back to catalog</string>

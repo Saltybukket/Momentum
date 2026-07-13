@@ -6,6 +6,7 @@ import json
 import re
 from copy import deepcopy
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -28,8 +29,24 @@ from fitness_platform.domain.text import normalize_multiline, normalize_single_l
 from fitness_platform.infrastructure.uow import SqlAlchemyUnitOfWork
 
 
+class CatalogImportErrorCode(StrEnum):
+    IMPORT_VALIDATION = "IMPORT_VALIDATION"
+    INVALID_LICENSE_URL = "INVALID_LICENSE_URL"
+    INVALID_TEXT = "INVALID_TEXT"
+    SCHEMA_VALIDATION = "SCHEMA_VALIDATION"
+
+
 class CatalogImportError(ValueError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: CatalogImportErrorCode = CatalogImportErrorCode.IMPORT_VALIDATION,
+        field_path: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.field_path = field_path
 
 
 SCHEMA_PATH = (
@@ -66,14 +83,22 @@ def _single_line(value: object, field: str) -> str:
     try:
         return normalize_single_line(str(value), field=field)
     except ValueError as exc:
-        raise CatalogImportError(f"Invalid single-line {field}: {exc}") from exc
+        raise CatalogImportError(
+            f"Invalid single-line {field}: {exc}",
+            code=CatalogImportErrorCode.INVALID_TEXT,
+            field_path=field,
+        ) from exc
 
 
 def _multiline(value: object, field: str) -> str:
     try:
         return normalize_multiline(str(value))
     except ValueError as exc:
-        raise CatalogImportError(f"Invalid multiline {field}: {exc}") from exc
+        raise CatalogImportError(
+            f"Invalid multiline {field}: {exc}",
+            code=CatalogImportErrorCode.INVALID_TEXT,
+            field_path=field,
+        ) from exc
 
 
 def _absolute_https(value: object, field: str) -> str:
@@ -82,7 +107,11 @@ def _absolute_https(value: object, field: str) -> str:
         parsed = urlsplit(url)
         port = parsed.port
     except ValueError as exc:
-        raise CatalogImportError(f"{field} must be an absolute https URL.") from exc
+        raise CatalogImportError(
+            f"{field} must be an absolute https URL.",
+            code=CatalogImportErrorCode.INVALID_LICENSE_URL,
+            field_path=field,
+        ) from exc
     hostname = parsed.hostname or ""
     if (
         parsed.scheme != "https"
@@ -92,7 +121,11 @@ def _absolute_https(value: object, field: str) -> str:
         or (port is not None and not 1 <= port <= 65535)
         or not _valid_hostname(hostname)
     ):
-        raise CatalogImportError(f"{field} must be an absolute https URL.")
+        raise CatalogImportError(
+            f"{field} must be an absolute https URL.",
+            code=CatalogImportErrorCode.INVALID_LICENSE_URL,
+            field_path=field,
+        )
     return url
 
 
@@ -168,15 +201,28 @@ def _required(record: dict[str, Any], *fields: str) -> None:
         raise CatalogImportError(f"Missing required fields: {', '.join(missing)}")
 
 
-async def import_catalog(container: AppContainer, path: Path) -> dict[str, Any]:
+async def import_catalog(
+    container: AppContainer,
+    path: Path,
+    *,
+    check_schema_formats: bool = True,
+) -> dict[str, Any]:
     document = _read_document(path)
     if not isinstance(document, dict):
         raise CatalogImportError("Catalog document must be an object.")
     try:
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-        Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)
+        format_checker = FormatChecker() if check_schema_formats else None
+        Draft202012Validator(schema, format_checker=format_checker).validate(document)
     except (OSError, json.JSONDecodeError, ValidationError) as exc:
-        raise CatalogImportError(f"Catalog schema validation failed: {exc}") from exc
+        field_path = None
+        if isinstance(exc, ValidationError):
+            field_path = ".".join(str(segment) for segment in exc.absolute_path) or None
+        raise CatalogImportError(
+            f"Catalog schema validation failed: {exc}",
+            code=CatalogImportErrorCode.SCHEMA_VALIDATION,
+            field_path=field_path,
+        ) from exc
     document = _normalize_document(document)
     declared_hash = document.get("content_hash")
     computed_hash = canonical_release_hash(document)

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 
 from fitness_platform.catalog_import import (
     CatalogImportError,
+    CatalogImportErrorCode,
     activate_catalog_release,
     canonical_release_hash,
     import_catalog,
@@ -262,24 +263,39 @@ async def test_unsafe_exercise_text_is_rejected_on_sqlite(app_client, tmp_path, 
 
 
 @pytest.mark.parametrize(
-    "url",
+    ("url", "check_schema_formats"),
     [
-        "https:foo",
-        "https:/foo",
-        "https://",
-        "https://user:pass@example.com/",
-        "https://example.com:invalid/",
-        "https://exa mple.com/",
+        ("https:foo", True),
+        ("https:/foo", True),
+        ("https://", True),
+        ("https://user:pass@example.com/", True),
+        ("https://example.com:invalid/", True),
+        ("https://example.com:invalid/", False),
+        ("https://exa mple.com/", True),
     ],
 )
 async def test_non_absolute_or_credentialed_https_url_is_rejected(
-    app_client, tmp_path, url
+    app_client, tmp_path, url, check_schema_formats
 ) -> None:
     _client, container = app_client
     document = demo_document()
     document["exercises"][0]["license_url"] = url  # type: ignore[index]
-    with pytest.raises(CatalogImportError, match="absolute https"):
-        await import_catalog(container, write_untrusted_document(tmp_path, document))
+    with pytest.raises(CatalogImportError) as captured:
+        await import_catalog(
+            container,
+            write_untrusted_document(tmp_path, document),
+            check_schema_formats=check_schema_formats,
+        )
+
+    assert captured.value.code in {
+        CatalogImportErrorCode.INVALID_LICENSE_URL,
+        CatalogImportErrorCode.SCHEMA_VALIDATION,
+    }
+    assert captured.value.field_path is not None
+    assert captured.value.field_path.endswith("license_url")
+    async with container.database.session_factory() as session:
+        assert await session.scalar(select(func.count()).select_from(CatalogReleaseRow)) == 0
+        assert await session.scalar(select(func.count()).select_from(CatalogActivationRow)) == 0
 
 
 @pytest.mark.parametrize(

@@ -13,6 +13,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.font.FontWeight
@@ -53,16 +55,28 @@ private object Routes {
 private data class RootDestination(
     val route: String,
     val label: Int,
+    val icon: Int,
 )
 
 private val rootDestinations = listOf(
-    RootDestination(Routes.HOME, R.string.nav_home),
-    RootDestination(Routes.WORKOUTS, R.string.nav_workouts),
-    RootDestination(Routes.EXERCISES, R.string.nav_exercises),
-    RootDestination(Routes.PROFILE, R.string.nav_profile),
+    RootDestination(Routes.HOME, R.string.nav_home, R.drawable.ic_home),
+    RootDestination(Routes.WORKOUTS, R.string.nav_workouts, R.drawable.ic_workouts),
+    RootDestination(Routes.EXERCISES, R.string.nav_exercises, R.drawable.ic_exercises),
+    RootDestination(Routes.PROFILE, R.string.nav_profile, R.drawable.ic_profile),
 )
 
 internal fun usesNavigationRail(width: Dp): Boolean = width >= 840.dp
+
+internal fun rootRouteFor(route: String?): String? =
+    when (route?.substringBefore('/')) {
+        "home" -> Routes.HOME
+        "workouts", "workout-detail", "active-workout", "workout-summary" -> Routes.WORKOUTS
+        "exercises", "exercise", "catalog", "catalog-detail", "custom-exercise",
+        "custom-exercise-edit", "conflicts", "conflict",
+        -> Routes.EXERCISES
+        "profile", "privacy", "guest-recovery", "settings" -> Routes.PROFILE
+        else -> null
+    }
 
 private val MomentumLightColors = lightColorScheme(
     primary = Color(0xFF006C4C),
@@ -269,14 +283,21 @@ private fun androidx.navigation.NavHostController.navigateRoot(route: String) {
 
 @Composable
 private fun RootNavigationBar(currentRoute: String?, onSelect: (RootDestination) -> Unit) {
+    val selectedRoot = rootRouteFor(currentRoute)
     NavigationBar {
         rootDestinations.forEach { destination ->
             NavigationBarItem(
-                selected = currentRoute == destination.route,
+                selected = selectedRoot == destination.route,
                 onClick = { onSelect(destination) },
-                icon = { Box(Modifier.size(1.dp)) },
+                icon = {
+                    Icon(
+                        painter = painterResource(destination.icon),
+                        contentDescription = stringResource(destination.label),
+                    )
+                },
                 label = { Text(stringResource(destination.label)) },
                 alwaysShowLabel = true,
+                modifier = Modifier.testTag("root-nav-${destination.route}"),
             )
         }
     }
@@ -284,14 +305,21 @@ private fun RootNavigationBar(currentRoute: String?, onSelect: (RootDestination)
 
 @Composable
 private fun RootNavigationRail(currentRoute: String?, onSelect: (RootDestination) -> Unit) {
+    val selectedRoot = rootRouteFor(currentRoute)
     NavigationRail {
         Spacer(Modifier.height(12.dp))
         rootDestinations.forEach { destination ->
             NavigationRailItem(
-                selected = currentRoute == destination.route,
+                selected = selectedRoot == destination.route,
                 onClick = { onSelect(destination) },
-                icon = { Box(Modifier.size(1.dp)) },
+                icon = {
+                    Icon(
+                        painter = painterResource(destination.icon),
+                        contentDescription = stringResource(destination.label),
+                    )
+                },
                 label = { Text(stringResource(destination.label)) },
+                modifier = Modifier.testTag("root-nav-${destination.route}"),
             )
         }
     }

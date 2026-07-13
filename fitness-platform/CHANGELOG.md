@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Gate Q quality hardening
+
+- Added structured catalog-import error codes and field paths so validation tests assert controlled
+  rejection and no-write behavior independently of optional JSON Schema format-check ordering.
+- Upgraded the locked backend test runner to the patched pytest 9 line.
+- Replaced invisible root-navigation placeholders with self-authored vector icons, mapped nested
+  routes to stable root families and moved remaining catalog labels and semantics into resources.
+
 ### Momentum App Shell V1
 
 - Replaced scaffold-facing navigation with a resource-backed four-root Momentum shell for Home,

@@ -3,6 +3,7 @@
 Date: 2026-07-13  
 Branch: `codex/fix-scaffold-reproducibility`  
 Implementation checkpoint: `6e2e5bcfec80921bc457758bf985bdc93a425720`
+Final documentation checkpoint: `8dfc6bcb2de3f2f6cfe8e4c21acda4d05d1b85ed`
 
 ## Delivered contracts
 
@@ -34,11 +35,15 @@ Implementation checkpoint: `6e2e5bcfec80921bc457758bf985bdc93a425720`
 - Docker Compose configuration passed; PostgreSQL, Redis and backend were healthy; container
   migration and the HTTP smoke flow passed.
 - Repository policy check passed. Local Docker Gitleaks scanned 44 commits with no leak. The
-  source archive contained 238 files and SHA-256
-  `c2c709453987446666e00b8c9b8eef70da11158e3ebf7b4b890dce7206e34893`.
+  implementation-checkpoint source archive contained 238 files and SHA-256
+  `c2c709453987446666e00b8c9b8eef70da11158e3ebf7b4b890dce7206e34893`. The reproducible archive
+  generated after final checkpoint `8dfc6bc` contained 239 files and SHA-256
+  `92dc9006588b24ae0d569875768050f647071c423542e3597ba3df25f0ab5a9a`.
 - GitHub Actions [run 29244974289](https://github.com/Saltybukket/Momentum/actions/runs/29244974289)
   passed backend, Android and repository-security jobs for the implementation checkpoint. The
   security job passed repository policy, Gitleaks, filesystem Trivy and runtime-image Trivy policy.
+- Final repetition [run 29245915692](https://github.com/Saltybukket/Momentum/actions/runs/29245915692)
+  passed the same three jobs for final head `8dfc6bcb2de3f2f6cfe8e4c21acda4d05d1b85ed`.
 
 ## External blocker
 
@@ -54,5 +59,6 @@ the exact Windows setup and runner procedure in `TESTING.md` once the image is a
 - `27037a5` `fix(android): expose credential recovery and bind sync finalization`
 - `53d8ec2` `docs: align catalog and android recovery contracts`
 - `6e2e5bc` `feat(android): introduce the Momentum app shell`
+- `8dfc6bc` `docs: record verified app shell checkpoint`
 
-All listed implementation commits are pushed to `origin/codex/fix-scaffold-reproducibility`.
+All listed commits are pushed to `origin/codex/fix-scaffold-reproducibility`.

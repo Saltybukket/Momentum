@@ -52,11 +52,17 @@ fun CatalogRoute(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Catalo
         CatalogFilterMenu(stringResource(R.string.catalog_muscle), state.filter.muscle, state.muscles.map { it.slug to it.name }, viewModel::setMuscle)
         CatalogFilterMenu(stringResource(R.string.catalog_equipment), state.filter.equipment, state.equipment.map { it.slug to it.name }, viewModel::setEquipment)
         when {
-            state.loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading exercise catalog" })
+            state.loading -> {
+                val loadingDescription = stringResource(R.string.catalog_loading)
+                CircularProgressIndicator(
+                    Modifier.semantics { contentDescription = loadingDescription },
+                )
+            }
             state.exercises.isEmpty() -> Text(stringResource(R.string.catalog_empty))
             else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.exercises, key = { it.id }) { exercise ->
-                    Card(onClick = { onOpen(exercise.id) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Open ${exercise.name}" }) {
+                    val openDescription = stringResource(R.string.catalog_open_exercise, exercise.name)
+                    Card(onClick = { onOpen(exercise.id) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = openDescription }) {
                         Column(Modifier.padding(12.dp)) {
                             Text(exercise.name, style = MaterialTheme.typography.titleMedium)
                             val muscleNames = exercise.muscles.joinToString { muscle ->
@@ -108,15 +114,25 @@ fun CatalogDetailRoute(id: String, onBack: () -> Unit, viewModel: CatalogViewMod
 private fun CatalogDetail(detail: CatalogDetailState, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when (detail) {
-            CatalogDetailState.Loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading exercise details" })
+            CatalogDetailState.Loading -> {
+                val loadingDescription = stringResource(R.string.catalog_detail_loading)
+                CircularProgressIndicator(
+                    Modifier.semantics { contentDescription = loadingDescription },
+                )
+            }
             CatalogDetailState.NotFound -> Text(stringResource(R.string.catalog_not_found))
             is CatalogDetailState.Error -> Text(stringResource(R.string.catalog_detail_error))
             is CatalogDetailState.Loaded -> with(detail.exercise) {
                 Text(name, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Text(description)
-                Text("Muscles: ${muscles.joinToString { "${it.slug} (${it.role.name.lowercase()})" }}")
-                Text("Equipment: ${equipment.joinToString()}")
-                Text("Source: $source · $licenseName")
+                Text(
+                    stringResource(
+                        R.string.catalog_detail_muscles,
+                        muscles.joinToString { "${it.slug} (${it.role.name.lowercase()})" },
+                    ),
+                )
+                Text(stringResource(R.string.catalog_detail_equipment, equipment.joinToString()))
+                Text(stringResource(R.string.catalog_detail_source, source, licenseName))
                 Text(provenance, style = MaterialTheme.typography.bodySmall)
             }
         }

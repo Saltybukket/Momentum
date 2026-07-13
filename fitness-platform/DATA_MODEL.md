@@ -29,7 +29,9 @@ Display name, unit system and optional-onboarding state. Sensitive body/health a
 
 ### `exercises`
 
-Private user-created exercises for this slice. Includes tracking type, muscle/equipment text and soft-delete timestamp. A future curated catalog is a separate content-owned aggregate.
+Private user-created exercises for this slice. Includes tracking type, muscle/equipment text and
+soft-delete timestamp. The curated public catalog is a separate content-owned aggregate described
+below and never reads these owner-scoped rows.
 
 ### `workouts` and `workout_exercises`
 
