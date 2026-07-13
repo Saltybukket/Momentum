@@ -68,6 +68,9 @@ checkpoint `62945a7` plus locally verified Phase 2B.1 training plans.
   attempt 1, passed all three jobs for `9b9325e` without reruns.
 - Premium implementation CI [run 29265287902](https://github.com/Saltybukket/Momentum/actions/runs/29265287902),
   attempt 1, passed backend, Android and repository-security for exact head `07aa0bf` without rerun.
+- Phase 2B.1 CI [run 29290254292](https://github.com/Saltybukket/Momentum/actions/runs/29290254292),
+  attempt 1, passed Android, backend and repository-security for exact implementation head
+  `5f6fc73` without reruns.
 
 ## Active risks
 
@@ -87,5 +90,5 @@ Phase 2B.1 editable offline training plans are locally complete. The next explic
 Phase 2B.2, the local training calendar and occurrence materialization. Optional location
 synchronization remains separate and is not a prerequisite for local use.
 
-Latest operational handoff: [Premium UI checkpoint](HANDOFF_2026-07-13_PREMIUM_UI.md). Historical
+Latest operational handoff: [Phase 2B.1 checkpoint](HANDOFF_2026-07-13_PHASE_2B1.md). Historical
 reports and handoffs are under [archive](archive/README.md).
