@@ -42,13 +42,16 @@ sealed interface CatalogDetailState {
     data object Loading : CatalogDetailState
     data class Loaded(
         val exercise: CatalogExercise,
-        val compatible: Boolean,
-        val missingEquipment: List<String>,
+        val compatibility: CatalogCompatibility,
+        val missingEquipment: List<MissingEquipment>,
         val alternatives: List<CatalogExercise>,
     ) : CatalogDetailState
     data object NotFound : CatalogDetailState
     data class Error(val message: String) : CatalogDetailState
 }
+
+enum class CatalogCompatibility { COMPATIBLE, LOCATION_REQUIRED, MISSING_EQUIPMENT }
+data class MissingEquipment(val slug: String, val label: String?)
 
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -109,20 +112,28 @@ class CatalogViewModel @Inject constructor(
     fun detailState(id: String): Flow<CatalogDetailState> = combine(
         repository.observeExercise(id),
         compatibleCatalog(showAll = true),
-    ) { exercise, compatibleState ->
+        repository.observeEquipment(),
+    ) { exercise, compatibleState, equipmentLabels ->
         if (exercise == null) {
             CatalogDetailState.NotFound
         } else {
             val location = compatibleState.activeLocation
-            val compatible = location?.let(exercise::isCompatibleWith) == true
+            val missing = if (location == null) emptyList() else {
+                exercise.equipment.filterNot { it in location.availableEquipment }
+            }
+            val compatibility = when {
+                location == null -> CatalogCompatibility.LOCATION_REQUIRED
+                missing.isEmpty() -> CatalogCompatibility.COMPATIBLE
+                else -> CatalogCompatibility.MISSING_EQUIPMENT
+            }
             CatalogDetailState.Loaded(
                 exercise = exercise,
-                compatible = compatible,
-                missingEquipment = if (location == null) exercise.equipment else {
-                    exercise.equipment.filterNot { it in location.availableEquipment }
+                compatibility = compatibility,
+                missingEquipment = missing.map { slug ->
+                    MissingEquipment(slug, equipmentLabels.firstOrNull { it.slug == slug }?.name)
                 },
-                alternatives = if (location == null || compatible) emptyList() else {
-                    findAlternatives(exercise, compatibleState.exercises, location)
+                alternatives = if (compatibility != CatalogCompatibility.MISSING_EQUIPMENT) emptyList() else {
+                    findAlternatives(exercise, compatibleState.exercises, checkNotNull(location))
                 },
             )
         }

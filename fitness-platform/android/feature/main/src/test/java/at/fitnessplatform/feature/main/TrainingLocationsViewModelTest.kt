@@ -65,7 +65,21 @@ class TrainingLocationsViewModelTest {
         job.cancel()
     }
 
-    private fun viewModel(repository: MutableLocationRepository) = TrainingLocationsViewModel(
+    @Test fun `operation failure is safe and does not report completion`() = runTest {
+        val repository = MutableLocationRepository().apply { failCreate = true }
+        val viewModel = viewModel(repository)
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
+
+        viewModel.create("Home", LocationType.HOME, LocationPreset.EMPTY_CUSTOM)
+        advanceUntilIdle()
+
+        assertEquals("LOCATION_OPERATION_FAILED", viewModel.state.value.error)
+        assertEquals(null, viewModel.state.value.completedOperation)
+        assertTrue(viewModel.state.value.locations.isEmpty())
+        job.cancel()
+    }
+
+    private fun viewModel(repository: TrainingLocationRepository) = TrainingLocationsViewModel(
         ObserveTrainingLocationsUseCase(repository),
         CreateTrainingLocationUseCase(repository),
         UpdateTrainingLocationUseCase(repository),
@@ -76,11 +90,13 @@ class TrainingLocationsViewModelTest {
 }
 
 private class MutableLocationRepository : TrainingLocationRepository {
+    var failCreate = false
     private val state = MutableStateFlow<List<TrainingLocation>>(emptyList())
     override fun observeLocations(): Flow<List<TrainingLocation>> = state
     override fun observeActiveLocation(): Flow<TrainingLocation?> = state.map { rows -> rows.firstOrNull { it.isActive } }
     override suspend fun getLocation(id: String) = state.value.firstOrNull { it.id == id }
     override suspend fun create(name: String, type: LocationType, equipmentSlugs: Set<String>): TrainingLocation {
+        if (failCreate) error("database path and internals")
         val row = TrainingLocation("id-${state.value.size}", name, type, equipmentSlugs, state.value.isEmpty(), 1, 1)
         state.value += row
         return row

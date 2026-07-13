@@ -22,6 +22,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +70,14 @@ fun TrainingLocationsRoute(
     var editingEquipment by remember { mutableStateOf<TrainingLocation?>(null) }
     var renaming by remember { mutableStateOf<TrainingLocation?>(null) }
     var deleting by remember { mutableStateOf<TrainingLocation?>(null) }
+    CompletionEffect(
+        state.completedOperation,
+        onCreate = { creating = false },
+        onUpdate = { renaming = null },
+        onEquipment = { editingEquipment = null },
+        onDelete = { deleting = null },
+        onAcknowledged = viewModel::acknowledgeCompletion,
+    )
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             stringResource(R.string.locations_title),
@@ -104,7 +113,12 @@ fun TrainingLocationsRoute(
                 }
             }
         }
-        state.error?.let { Text(stringResource(R.string.locations_error), color = MaterialTheme.colorScheme.error) }
+        state.error?.let {
+            Row {
+                Text(stringResource(R.string.locations_error), color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = viewModel::retry, enabled = !state.busy) { Text(stringResource(R.string.retry)) }
+            }
+        }
         TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
     }
     if (creating) LocationEditorDialog(
@@ -113,7 +127,9 @@ fun TrainingLocationsRoute(
         initialType = LocationType.HOME,
         showPresets = true,
         onDismiss = { creating = false },
-        onSave = { name, type, preset -> viewModel.create(name, type, preset); creating = false },
+        saving = state.saving == LocationOperation.CREATE,
+        error = state.error,
+        onSave = viewModel::create,
     )
     renaming?.let { location ->
         LocationEditorDialog(
@@ -122,14 +138,18 @@ fun TrainingLocationsRoute(
             initialType = location.type,
             showPresets = false,
             onDismiss = { renaming = null },
-            onSave = { name, type, _ -> viewModel.rename(location, name, type); renaming = null },
+            saving = state.saving == LocationOperation.UPDATE,
+            error = state.error,
+            onSave = { name, type, _ -> viewModel.rename(location, name, type) },
         )
     }
     editingEquipment?.let { location ->
         EquipmentEditorDialog(
             location = location,
             onDismiss = { editingEquipment = null },
-            onSave = { viewModel.saveEquipment(location.id, it); editingEquipment = null },
+            saving = state.saving == LocationOperation.EQUIPMENT,
+            error = state.error,
+            onSave = { viewModel.saveEquipment(location.id, it) },
         )
     }
     deleting?.let { location ->
@@ -137,10 +157,29 @@ fun TrainingLocationsRoute(
             onDismissRequest = { deleting = null },
             title = { Text(stringResource(R.string.locations_delete_title)) },
             text = { Text(stringResource(R.string.locations_delete_message, location.name)) },
-            confirmButton = { TextButton(onClick = { viewModel.delete(location.id); deleting = null }) { Text(stringResource(R.string.delete)) } },
+            confirmButton = { TextButton(onClick = { viewModel.delete(location.id) }, enabled = !state.busy) { Text(stringResource(if (state.saving == LocationOperation.DELETE) R.string.saving else R.string.delete)) } },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
+}
+
+@Composable
+private fun CompletionEffect(
+    operation: LocationOperation?,
+    onCreate: () -> Unit,
+    onUpdate: () -> Unit,
+    onEquipment: () -> Unit,
+    onDelete: () -> Unit,
+    onAcknowledged: () -> Unit,
+) = LaunchedEffect(operation) {
+    when (operation) {
+        LocationOperation.CREATE -> onCreate()
+        LocationOperation.UPDATE -> onUpdate()
+        LocationOperation.EQUIPMENT -> onEquipment()
+        LocationOperation.DELETE -> onDelete()
+        LocationOperation.ACTIVATE, null -> Unit
+    }
+    if (operation != null) onAcknowledged()
 }
 
 @Composable
@@ -149,6 +188,8 @@ private fun LocationEditorDialog(
     initialName: String,
     initialType: LocationType,
     showPresets: Boolean,
+    saving: Boolean,
+    error: String?,
     onDismiss: () -> Unit,
     onSave: (String, LocationType, LocationPreset) -> Unit,
 ) {
@@ -171,9 +212,10 @@ private fun LocationEditorDialog(
                         Row { RadioButton(preset == option, { preset = option }); Text(locationPresetLabel(option)) }
                     }
                 }
+                if (error != null) item { Text(stringResource(R.string.locations_error), color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name, type, preset) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
+        confirmButton = { TextButton(onClick = { onSave(name, type, preset) }, enabled = name.isNotBlank() && !saving) { Text(stringResource(if (saving) R.string.saving else R.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
@@ -181,14 +223,24 @@ private fun LocationEditorDialog(
 @Composable
 private fun EquipmentEditorDialog(
     location: TrainingLocation,
+    saving: Boolean,
+    error: String?,
     onDismiss: () -> Unit,
     onSave: (Set<String>) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var selected by remember(location.id) { mutableStateOf(location.equipmentSlugs) }
+    val localizedLabels = EquipmentDefinitions.all.associateWith { equipmentLabel(it) }
+    val localizedCategories = EquipmentDefinitions.all.map(EquipmentDefinition::category).distinct()
+        .associateWith { equipmentCategoryLabel(it) }
     val matches = EquipmentDefinitions.all.filter { definition ->
         definition.slug != EquipmentDefinitions.NONE &&
-            (query.isBlank() || definition.slug.contains(query, ignoreCase = true) || definition.aliases.any { it.contains(query, true) })
+            matchesEquipmentQuery(
+                definition,
+                localizedLabels.getValue(definition),
+                localizedCategories.getValue(definition.category),
+                query,
+            )
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -222,9 +274,10 @@ private fun EquipmentEditorDialog(
                         }
                     }
                 }
+                if (error != null) item { Text(stringResource(R.string.locations_error), color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(selected) }) { Text(stringResource(R.string.save)) } },
+        confirmButton = { TextButton(onClick = { onSave(selected) }, enabled = !saving) { Text(stringResource(if (saving) R.string.saving else R.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
@@ -267,39 +320,58 @@ private fun equipmentCategoryLabel(category: String) = stringResource(
 
 @Composable
 private fun equipmentLabel(definition: EquipmentDefinition) =
-    stringResource(equipmentLabelResources[definition.slug] ?: R.string.equipment_none)
+    stringResource(equipmentLabelResource(definition))
+
+internal fun matchesEquipmentQuery(
+    definition: EquipmentDefinition,
+    localizedLabel: String,
+    localizedCategory: String,
+    query: String,
+): Boolean {
+    val needle = query.trim()
+    return needle.isEmpty() || sequenceOf(
+        localizedLabel,
+        definition.slug,
+        definition.category,
+        localizedCategory,
+    ).plus(definition.aliases.asSequence()).any { it.contains(needle, ignoreCase = true) }
+}
+
+internal fun equipmentLabelResource(definition: EquipmentDefinition): Int =
+    equipmentLabelResources[definition.displayNameKey] ?: R.string.equipment_unknown_generic
 
 private val equipmentLabelResources = mapOf(
-    "mat" to R.string.equipment_mat,
-    "resistance-bands" to R.string.equipment_resistance_bands,
-    "dumbbells" to R.string.equipment_dumbbells,
-    "adjustable-dumbbells" to R.string.equipment_adjustable_dumbbells,
-    "barbell" to R.string.equipment_barbell,
-    "plates" to R.string.equipment_plates,
-    "bench" to R.string.equipment_bench,
-    "squat-rack" to R.string.equipment_squat_rack,
-    "power-rack" to R.string.equipment_power_rack,
-    "smith-machine" to R.string.equipment_smith_machine,
-    "cable-machine" to R.string.equipment_cable_machine,
-    "pull-up-bar" to R.string.equipment_pull_up_bar,
-    "dip-bars" to R.string.equipment_dip_bars,
-    "kettlebell" to R.string.equipment_kettlebell,
-    "suspension-trainer" to R.string.equipment_suspension_trainer,
-    "chest-press" to R.string.equipment_chest_press,
-    "shoulder-press" to R.string.equipment_shoulder_press,
-    "lat-pulldown" to R.string.equipment_lat_pulldown,
-    "row-machine" to R.string.equipment_row_machine,
-    "leg-press" to R.string.equipment_leg_press,
-    "hack-squat" to R.string.equipment_hack_squat,
-    "leg-extension" to R.string.equipment_leg_extension,
-    "leg-curl" to R.string.equipment_leg_curl,
-    "calf-machine" to R.string.equipment_calf_machine,
-    "adductor-machine" to R.string.equipment_adductor_machine,
-    "abductor-machine" to R.string.equipment_abductor_machine,
-    "treadmill" to R.string.equipment_treadmill,
-    "exercise-bike" to R.string.equipment_exercise_bike,
-    "cross-trainer" to R.string.equipment_cross_trainer,
-    "rowing-ergometer" to R.string.equipment_rowing_ergometer,
-    "stair-climber" to R.string.equipment_stair_climber,
-    "open-floor" to R.string.equipment_open_floor,
+    "equipment_none" to R.string.equipment_none,
+    "equipment_mat" to R.string.equipment_mat,
+    "equipment_resistance_bands" to R.string.equipment_resistance_bands,
+    "equipment_dumbbells" to R.string.equipment_dumbbells,
+    "equipment_adjustable_dumbbells" to R.string.equipment_adjustable_dumbbells,
+    "equipment_barbell" to R.string.equipment_barbell,
+    "equipment_plates" to R.string.equipment_plates,
+    "equipment_bench" to R.string.equipment_bench,
+    "equipment_squat_rack" to R.string.equipment_squat_rack,
+    "equipment_power_rack" to R.string.equipment_power_rack,
+    "equipment_smith_machine" to R.string.equipment_smith_machine,
+    "equipment_cable_machine" to R.string.equipment_cable_machine,
+    "equipment_pull_up_bar" to R.string.equipment_pull_up_bar,
+    "equipment_dip_bars" to R.string.equipment_dip_bars,
+    "equipment_kettlebell" to R.string.equipment_kettlebell,
+    "equipment_suspension_trainer" to R.string.equipment_suspension_trainer,
+    "equipment_chest_press" to R.string.equipment_chest_press,
+    "equipment_shoulder_press" to R.string.equipment_shoulder_press,
+    "equipment_lat_pulldown" to R.string.equipment_lat_pulldown,
+    "equipment_row_machine" to R.string.equipment_row_machine,
+    "equipment_leg_press" to R.string.equipment_leg_press,
+    "equipment_hack_squat" to R.string.equipment_hack_squat,
+    "equipment_leg_extension" to R.string.equipment_leg_extension,
+    "equipment_leg_curl" to R.string.equipment_leg_curl,
+    "equipment_calf_machine" to R.string.equipment_calf_machine,
+    "equipment_adductor_machine" to R.string.equipment_adductor_machine,
+    "equipment_abductor_machine" to R.string.equipment_abductor_machine,
+    "equipment_treadmill" to R.string.equipment_treadmill,
+    "equipment_exercise_bike" to R.string.equipment_exercise_bike,
+    "equipment_cross_trainer" to R.string.equipment_cross_trainer,
+    "equipment_rowing_ergometer" to R.string.equipment_rowing_ergometer,
+    "equipment_stair_climber" to R.string.equipment_stair_climber,
+    "equipment_open_floor" to R.string.equipment_open_floor,
 )

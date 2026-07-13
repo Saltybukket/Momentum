@@ -177,8 +177,12 @@ class AppDatabaseTest {
 
         dao.setActive("gym", 3)
         assertEquals("gym", dao.active()?.location?.id)
+        assertEquals(1, dao.get("home")?.location?.revision)
+        assertEquals(3, dao.get("home")?.location?.updatedAtEpochMs)
+        assertEquals(1, dao.get("gym")?.location?.revision)
         dao.softDelete("gym", 4)
         assertEquals("home", dao.active()?.location?.id)
+        assertEquals(2, dao.get("home")?.location?.revision)
         assertEquals(1, dao.countActiveRows())
     }
 

@@ -31,6 +31,8 @@
     <string name="home_manage_privacy">Manage privacy and sync</string>
     <string name="profile_title">Guest profile</string>
     <string name="save">Save</string>
+    <string name="saving">Saving…</string>
+    <string name="retry">Retry</string>
     <string name="add">Add</string>
     <string name="custom_exercises_title">Custom exercises</string>
     <string name="sync_conflict">Sync conflict</string>
@@ -116,6 +118,10 @@
     <string name="catalog_active_location">Available at %1$s</string>
     <string name="catalog_missing_equipment">Missing equipment: %1$s</string>
     <string name="catalog_alternatives">Compatible alternatives</string>
+    <string name="catalog_compatibility_compatible">Compatible with your active location</string>
+    <string name="catalog_compatibility_location_required">Choose a training location to evaluate equipment compatibility.</string>
+    <string name="equipment_unknown">Unknown equipment (%1$s)</string>
+    <string name="equipment_unknown_generic">Unknown equipment</string>
     <string name="privacy_title">Privacy and sync</string>
     <string name="privacy_local_default">Your profile, custom exercises and workouts stay on this device unless you explicitly enable private-data sync.</string>
     <string name="privacy_catalog_independent">Public catalog updates never upload private data.</string>

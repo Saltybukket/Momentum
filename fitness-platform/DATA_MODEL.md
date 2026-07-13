@@ -26,6 +26,10 @@ location is removed. The stable equipment registry is domain code rather than a 
 table. `none` is implicit, always available and never persisted as physical inventory;
 `open-floor` is an explicit capability.
 
+An active switch updates the old and new rows atomically, including timestamp and revision. This
+is not yet a multi-device synchronization contract. Room downgrades have no destructive fallback;
+without an explicit downgrade migration the open fails and leaves local data intact.
+
 ### `users`
 
 Internal identity root. `kind` distinguishes `GUEST` from future registered accounts. A future identity table can attach Google/email providers without changing content ownership.

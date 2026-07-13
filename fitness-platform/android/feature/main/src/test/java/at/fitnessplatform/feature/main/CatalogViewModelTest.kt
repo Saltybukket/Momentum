@@ -106,6 +106,53 @@ class CatalogViewModelTest {
         job.cancel()
     }
 
+    @Test fun `detail without location requires selection and never reports bodyweight as missing`() = runTest {
+        val repository = FakeCatalogRepository()
+        val viewModel = CatalogViewModel(
+            repository,
+            ObserveCompatibleCatalogUseCase(repository, FakeTrainingLocationRepository(null)),
+            FindCompatibleAlternativesUseCase(),
+        )
+        repository.seedIfEmpty()
+
+        viewModel.detailState("1").test {
+            assertEquals(CatalogDetailState.Loading, awaitItem())
+            val loaded = awaitItem() as CatalogDetailState.Loaded
+            assertEquals(CatalogCompatibility.LOCATION_REQUIRED, loaded.compatibility)
+            assertTrue(loaded.missingEquipment.isEmpty())
+            assertTrue(loaded.alternatives.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `detail exposes localized missing equipment only for an active incompatible location`() = runTest {
+        val repository = FakeCatalogRepository()
+        repository.seedIfEmpty()
+        val location = TrainingLocation("home", "Home", LocationType.HOME, emptySet(), true, 1, 1)
+        val viewModel = CatalogViewModel(
+            repository,
+            ObserveCompatibleCatalogUseCase(repository, FakeTrainingLocationRepository(location)),
+            FindCompatibleAlternativesUseCase(),
+        )
+
+        viewModel.detailState("2").test {
+            assertEquals(CatalogDetailState.Loading, awaitItem())
+            val loaded = awaitItem() as CatalogDetailState.Loaded
+            assertEquals(CatalogCompatibility.MISSING_EQUIPMENT, loaded.compatibility)
+            assertEquals(listOf(MissingEquipment("bench", "Bench")), loaded.missingEquipment)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `equipment label contract covers registry and localized search fields`() {
+        assertTrue(EquipmentDefinitions.all.all { equipmentLabelResource(it) != R.string.equipment_unknown_generic })
+        val dumbbells = EquipmentDefinitions.all.single { it.slug == "dumbbells" }
+        assertTrue(matchesEquipmentQuery(dumbbells, "Kurzhanteln", "Freie Gewichte", "kurz"))
+        assertTrue(matchesEquipmentQuery(dumbbells, "Kurzhanteln", "Freie Gewichte", "free_weights"))
+        assertTrue(matchesEquipmentQuery(dumbbells.copy(aliases = setOf("weights")), "Kurzhanteln", "Freie Gewichte", "weight"))
+        assertFalse(matchesEquipmentQuery(dumbbells, "Kurzhanteln", "Freie Gewichte", "kabel"))
+    }
+
     private fun catalogViewModel(repository: FakeCatalogRepository): CatalogViewModel {
         val location = TrainingLocation(
             "location", "Gym", LocationType.FITNESS_CENTER,

@@ -23,6 +23,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrainingLocationUseCasesTest {
+    @Test fun `location name policy normalizes spaces and rejects unsafe single line controls`() {
+        assertEquals("Home corner", normalizedLocationName("  Home   corner  "))
+        listOf("", " ", "a".repeat(81), "Home\u0000", "Home\nGym", "Home\rGym",
+            "Home\u202e", "Home\u202d", "Home\u202c", "Home\u2066", "Home\u2067",
+            "Home\u2068", "Home\u2069").forEach { candidate ->
+            assertTrue(runCatching { normalizedLocationName(candidate) }.exceptionOrNull() is ValidationException)
+        }
+    }
+
     @Test fun `create normalizes names presets and rejects unknown equipment`() = runTest {
         val repository = FakeLocationRepository()
         val created = CreateTrainingLocationUseCase(repository)(

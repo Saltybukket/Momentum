@@ -254,6 +254,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                         CatalogDetailRoute(
                             id = entry.arguments?.getString("catalogId").orEmpty(),
                             onOpen = { navController.navigate("catalog/$it") },
+                            onSelectLocation = { navController.navigate(Routes.LOCATIONS) },
                             onBack = { navController.popBackStack() },
                         )
                     }

@@ -13,6 +13,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+interface DatabaseStartupProbe {
+    fun verifyStartup()
+}
+
 @Database(
     entities = [
         GuestProfileEntity::class,
@@ -43,6 +47,12 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun catalogDao(): CatalogDao
     abstract fun syncStateDao(): SyncStateDao
     abstract fun trainingLocationDao(): TrainingLocationDao
+}
+
+private class RoomDatabaseStartupProbe(private val database: AppDatabase) : DatabaseStartupProbe {
+    override fun verifyStartup() {
+        database.openHelper.writableDatabase
+    }
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -156,7 +166,6 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "fitness-platform.db")
             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
-            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
     @Provides fun provideProfileDao(db: AppDatabase): GuestProfileDao = db.guestProfileDao()
@@ -167,4 +176,5 @@ object DatabaseModule {
     @Provides fun provideCatalogDao(db: AppDatabase): CatalogDao = db.catalogDao()
     @Provides fun provideSyncStateDao(db: AppDatabase): SyncStateDao = db.syncStateDao()
     @Provides fun provideTrainingLocationDao(db: AppDatabase): TrainingLocationDao = db.trainingLocationDao()
+    @Provides fun provideDatabaseStartupProbe(db: AppDatabase): DatabaseStartupProbe = RoomDatabaseStartupProbe(db)
 }

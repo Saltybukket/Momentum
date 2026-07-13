@@ -129,15 +129,21 @@ private fun CatalogFilterMenu(label: String, selected: String?, options: List<Pa
 fun CatalogDetailRoute(
     id: String,
     onOpen: (String) -> Unit,
+    onSelectLocation: () -> Unit,
     onBack: () -> Unit,
     viewModel: CatalogViewModel = hiltViewModel(),
 ) {
     val detail by viewModel.detailState(id).collectAsStateWithLifecycle(CatalogDetailState.Loading)
-    CatalogDetail(detail, onOpen, onBack)
+    CatalogDetail(detail, onOpen, onSelectLocation, onBack)
 }
 
 @Composable
-private fun CatalogDetail(detail: CatalogDetailState, onOpen: (String) -> Unit, onBack: () -> Unit) {
+private fun CatalogDetail(
+    detail: CatalogDetailState,
+    onOpen: (String) -> Unit,
+    onSelectLocation: () -> Unit,
+    onBack: () -> Unit,
+) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when (detail) {
             CatalogDetailState.Loading -> {
@@ -160,8 +166,21 @@ private fun CatalogDetail(detail: CatalogDetailState, onOpen: (String) -> Unit, 
                 Text(stringResource(R.string.catalog_detail_equipment, equipment.joinToString()))
                 Text(stringResource(R.string.catalog_detail_source, source, licenseName))
                 Text(provenance, style = MaterialTheme.typography.bodySmall)
-                if (!detail.compatible) {
-                    Text(stringResource(R.string.catalog_missing_equipment, detail.missingEquipment.joinToString()))
+                when (detail.compatibility) {
+                    CatalogCompatibility.COMPATIBLE -> Text(stringResource(R.string.catalog_compatibility_compatible))
+                    CatalogCompatibility.LOCATION_REQUIRED -> {
+                        Text(stringResource(R.string.catalog_compatibility_location_required))
+                        Button(onClick = onSelectLocation) { Text(stringResource(R.string.locations_switch)) }
+                    }
+                    CatalogCompatibility.MISSING_EQUIPMENT -> {
+                        val unknownEquipment = stringResource(R.string.equipment_unknown_generic)
+                        val missing = detail.missingEquipment.joinToString { item ->
+                            item.label ?: "$unknownEquipment (${item.slug})"
+                        }
+                        Text(stringResource(R.string.catalog_missing_equipment, missing))
+                    }
+                }
+                if (detail.compatibility == CatalogCompatibility.MISSING_EQUIPMENT) {
                     if (detail.alternatives.isNotEmpty()) {
                         Text(stringResource(R.string.catalog_alternatives), style = MaterialTheme.typography.titleMedium)
                         detail.alternatives.forEach { alternative ->

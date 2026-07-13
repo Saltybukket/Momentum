@@ -241,8 +241,9 @@ interface TrainingLocationDao {
     @Query("DELETE FROM training_location_equipment WHERE locationId = :id")
     suspend fun deleteEquipment(id: String)
 
-    @Query("UPDATE training_locations SET isActive = 0, activeSlot = NULL WHERE activeSlot = 1")
-    suspend fun clearActive()
+    @Query("""UPDATE training_locations SET isActive = 0, activeSlot = NULL,
+        updatedAtEpochMs = :now, revision = revision + 1 WHERE activeSlot = 1 AND id != :nextId""")
+    suspend fun clearActive(nextId: String, now: Long)
 
     @Query("UPDATE training_locations SET isActive = 1, activeSlot = 1, updatedAtEpochMs = :now, revision = revision + 1 WHERE id = :id AND deletedAtEpochMs IS NULL")
     suspend fun activate(id: String, now: Long): Int
@@ -270,7 +271,7 @@ interface TrainingLocationDao {
     @Transaction
     suspend fun setActive(id: String, now: Long) {
         checkNotNull(get(id)?.takeIf { it.location.deletedAtEpochMs == null }) { "Training location does not exist." }
-        clearActive()
+        clearActive(id, now)
         check(activate(id, now) == 1) { "Training location could not be activated." }
     }
 

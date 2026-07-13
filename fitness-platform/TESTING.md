@@ -192,8 +192,11 @@ stable API-36 AVD described below.
 Training-location JVM coverage verifies name/equipment validation, presets, the no-location
 compatibility state and deterministic compatible alternatives. ViewModel coverage exercises
 empty, create, activate, equipment replacement, validation failure and active-location deletion.
+The validation matrix rejects C0/C1, NUL, line breaks and Unicode bidi override/isolate controls.
+Catalog detail tests distinguish compatible, location-required and genuinely missing-equipment
+states, and label/search tests enforce registry coverage plus localized search.
 Room/data AndroidTest sources verify migration 5→6 data preservation, the unique active invariant,
-atomic switch/replacement, deterministic replacement activation, duplicate relation rejection,
+atomic revision-bound switch/replacement, deterministic replacement activation, duplicate relation rejection,
 foreign-key cascade and repository persistence. These sources compile in the normal gate;
 execution is reported only when a real device/AVD runs them.
 

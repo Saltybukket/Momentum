@@ -10,10 +10,18 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
 private const val MAX_LOCATION_NAME_LENGTH = 80
+private val disallowedSingleLineCharacters = Regex(
+    "[\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]",
+)
 
-private fun normalizedLocationName(name: String): String = name.trim().replace(Regex("\\s+"), " ").also {
-    if (it.isBlank() || it.length > MAX_LOCATION_NAME_LENGTH) {
-        throw ValidationException("Training location name must contain 1 to 80 characters.")
+internal fun normalizedLocationName(name: String): String {
+    if (disallowedSingleLineCharacters.containsMatchIn(name)) {
+        throw ValidationException("Training location name contains unsupported characters.")
+    }
+    return name.trim().replace(Regex("[ \\t]+"), " ").also {
+        if (it.isBlank() || it.length > MAX_LOCATION_NAME_LENGTH) {
+            throw ValidationException("Training location name must contain 1 to 80 characters.")
+        }
     }
 }
 
