@@ -8,7 +8,7 @@ Interactive OpenAPI is available at `/docs` only when `FITNESS_ENABLE_DOCS=true`
 
 ## Authentication foundation
 
-`POST /api/v1/guest-sessions` returns a random bearer token. Only a SHA-256-derived token hash is stored. This mechanism is explicitly **development-only**: it has no production identity proof, rotation UI, device binding or recovery. Future Google Credential Manager and email identities map to the same internal user/profile ownership model.
+`POST /api/v1/guest-sessions` returns a random bearer token. Only a SHA-256-derived token hash is stored. A stable installation ID plus recovery secret can renew a rejected/expired bearer without replacing ownership; a rejected proof enters an explicit blocked state instead of looping or deleting local data. This is still **development-only**: it has no production identity proof, account-link UI or revocation/session-management surface. Future Google Credential Manager and email identities map to the same internal user/profile ownership model.
 
 Authenticated request:
 

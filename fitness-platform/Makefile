@@ -7,9 +7,9 @@ ANDROID_SDK_ROOT ?= $(ANDROID_HOME)
 export ANDROID_HOME ANDROID_SDK_ROOT
 endif
 
-.PHONY: help doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup outbox-process clean openapi smoke
+.PHONY: help doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup outbox-process clean openapi smoke source-archive
 help:
-	@printf '%s\n' "doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup outbox-process clean openapi smoke"
+	@printf '%s\n' "doctor doctor-connected setup dev backend backend-test backend-lint android-test android-build android-connected-test test lint migrate seed catalog-import idempotency-cleanup sync-operation-cleanup outbox-process clean openapi smoke source-archive"
 
 doctor:
 	./scripts/doctor.sh
@@ -70,6 +70,9 @@ openapi:
 
 smoke:
 	cd backend && uv run python ../scripts/smoke_test.py
+
+source-archive:
+	python3 scripts/source_archive.py
 
 clean:
 	rm -rf backend/.venv backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache backend/.coverage backend/htmlcov

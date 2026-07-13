@@ -93,11 +93,53 @@ jobs:
         with:
           context: fitness-platform/backend
           push: false
+          load: true
           tags: fitness-platform-backend:ci
-      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+      - name: Fail on fixed high/critical filesystem findings
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           scan-type: fs
           scan-ref: fitness-platform
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: 1
+      - name: Report all high/critical filesystem findings
+        if: always()
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          scan-type: fs
+          scan-ref: fitness-platform
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 0
+          format: sarif
+          output: trivy-filesystem.sarif
+      - name: Fail on fixed high/critical runtime-image findings
+        if: always()
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          scan-type: image
+          image-ref: fitness-platform-backend:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Report all high/critical runtime-image findings
+        if: always()
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          scan-type: image
+          image-ref: fitness-platform-backend:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 0
+          format: sarif
+          output: trivy-image.sarif
+      - name: Preserve vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-high-critical-reports
+          path: |
+            trivy-filesystem.sarif
+            trivy-image.sarif
+          if-no-files-found: warn

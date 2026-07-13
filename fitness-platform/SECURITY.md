@@ -84,6 +84,20 @@ Feature flags and a kill switch must disable abused reward paths without disabli
 - Certificate pinning, if adopted, requires backup pins and remote rotation; a brittle single pin is worse than platform trust.
 - Credential Manager performs Google credential acquisition; backend validates the Google token and issues platform sessions.
 
+## Build and container scanning
+
+The backend Dockerfile uses a digest-pinned Python 3.13 slim base and separate build/runtime
+stages. The runtime contains the locked production virtual environment and Alembic files, but no
+tests, dev extras, compiler, uv binary or build cache, and runs as the non-root `fitness` user.
+
+CI scans two distinct targets: the checked-out filesystem/dependencies and the loaded
+`fitness-platform-backend:ci` runtime image. Fixed HIGH/CRITICAL findings fail. All findings,
+including unfixed/deferred ones, are retained as SARIF artifacts without a permanent ignorelist.
+On 2026-07-13 Trivy 0.66.0 reported zero fixed HIGH/CRITICAL findings and 20 Debian 13.5
+HIGH/CRITICAL findings without an available fixed version (including Perl, util-linux, ncurses,
+gzip and ACL packages). This is a visible upstream base-image blocker, not a green all-findings
+claim; the pinned digest must be reviewed when Debian/Python publish fixes.
+
 ## Password architecture (prepared, not implemented)
 
 Future email login uses a modern password hash such as Argon2id, per-user salt, optional server-side pepper, email verification, reset-token hashing, rate limits and account-enumeration-resistant responses. Passwords never transit to logs or provider adapters.
@@ -95,7 +109,7 @@ Future email login uses a modern password hash such as Argon2id, per-user salt, 
 - Enforce HTTPS and strict staging CORS.
 - Add production PostgreSQL/Redis TLS and least-privilege credentials.
 - Add session rotation/revocation and secure Android storage.
-- Add SAST, DAST, container/image and SBOM review.
+- Add SAST, DAST and SBOM review; keep the implemented filesystem/image Trivy gates current.
 - Threat-model each new health, social, purchase, reward and AI slice.
 - Add audit retention and privileged-action approval rules.
 - Run abuse, rate-limit, fuzz and restore tests.

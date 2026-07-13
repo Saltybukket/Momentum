@@ -1,19 +1,24 @@
-FROM python:3.13-slim AS runtime
+FROM python:3.13-slim@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280 AS build
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH"
 WORKDIR /app
-RUN pip install --no-cache-dir uv==0.10.0 \
-    && groupadd --system fitness \
-    && useradd --system --gid fitness --create-home fitness
+RUN pip install --no-cache-dir uv==0.10.0
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-COPY tests ./tests
+RUN uv sync --frozen --no-dev --no-editable
+
+FROM python:3.13-slim@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280 AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+RUN groupadd --system fitness \
+    && useradd --system --gid fitness --create-home fitness
+COPY --from=build --chown=fitness:fitness /app/.venv ./.venv
 COPY alembic.ini ./
-COPY alembic ./alembic
-RUN uv sync --frozen --extra dev \
-    && chown -R fitness:fitness /app
+COPY --chown=fitness:fitness alembic ./alembic
 USER fitness
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

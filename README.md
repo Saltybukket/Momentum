@@ -1,6 +1,6 @@
 # Momentum
 
-Momentum is an offline-first fitness platform scaffold. The implementation lives in
+Momentum is an offline-first fitness platform under active development. The implementation lives in
 [`fitness-platform/`](fitness-platform/): a FastAPI/PostgreSQL/Redis backend and a modular
 Kotlin/Compose Android client.
 
@@ -26,9 +26,9 @@ cd fitness-platform/android
 
 - [Platform README](fitness-platform/README.md) — setup and verification commands
 - [Architecture](fitness-platform/ARCHITECTURE.md) — boundaries and module direction
-- [Implementation report](fitness-platform/docs/IMPLEMENTATION_REPORT.md) — delivered scaffold and constraints
+- [Current status](fitness-platform/docs/STATUS.md) — implemented scope, schema heads and risks
 - [Research reference](Research/FITNESS_RESEARCH_REFERENCE.md) — product research source material
 
-The first implemented synchronization slice covers private custom exercises: outbox push,
-optimistic server revisions, cursor-based pull, tombstones and local conflict state. Workouts and
-profiles retain their existing push-only scaffold semantics.
+Private custom exercises support owner-scoped push/pull, tombstones and durable conflict choices;
+workouts and profiles retain narrower synchronization semantics. The anonymous public exercise
+catalog uses immutable backend releases and a hash-verified atomic Room cache.

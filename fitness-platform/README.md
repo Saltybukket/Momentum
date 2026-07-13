@@ -1,8 +1,11 @@
-# Fitness Platform — Architecture Scaffold
+# Momentum Fitness Platform
 
-A reproducible monorepository foundation for a future offline-first Android fitness, nutrition and gamification platform. This repository intentionally implements only the architecture assignment and one small vertical slice: local guest profile, private custom exercises, minimal workout lifecycle and idempotent backend synchronization.
+A reproducible monorepository for an offline-first Android fitness platform. The implemented scope
+includes local guest/profile/workout foundations, private-exercise synchronization and an immutable
+public exercise catalog; broader product domains remain planned.
 
-> **Status:** architecture scaffold, not a complete fitness application. XP, quests, streaks, social, production health integrations, commerce, ads, AI, Play Integrity and the admin portal are extension contracts only.
+> **Status:** working foundation, not a complete fitness application. See
+> [`docs/STATUS.md`](docs/STATUS.md) for the canonical checkpoint and risks.
 
 ## What is implemented
 
@@ -12,7 +15,8 @@ A reproducible monorepository foundation for a future offline-first Android fitn
 - Minimal workout create/start/complete flow; local `WorkoutCompleted` domain event.
 - Room outbox with retry/error/sync states and a WorkManager sync worker.
 - FastAPI modular-monolith backend with clean domain/application/infrastructure/presentation separation.
-- Development guest tokens, profile/exercise/workout endpoints, push sync, request IDs, structured errors and idempotency.
+- Development guest recovery, profile/exercise/workout endpoints, private push/pull sync, request IDs, structured errors and idempotency.
+- Immutable public catalog release import/activation, complete snapshot API and hash-verified Android Room refresh.
 - PostgreSQL schema and Alembic migration; Redis health and future distributed rate-limit foundation.
 - Deterministic provider mocks, module-boundary catalog and event dispatcher.
 - Backend tests, Android unit/instrumentation/UI test foundations, CI and Docker Compose.
@@ -87,7 +91,10 @@ For a Windows emulator used from WSL, run `scripts/android-connected-tests.sh`. 
 installs test APKs with ADB directly, records raw output and intentionally targets only modules
 with instrumentation sources. See [`android/README.md`](android/README.md).
 
-The included Gradle bootstrap downloads and verifies Gradle 8.13 on first use. The full Android unit-test, formatting, static-analysis, lint and debug-build command has been verified in WSL with Android SDK Platform 36; see `docs/IMPLEMENTATION_REPORT.md` for the exact command and remaining instrumentation limitation.
+The included Gradle bootstrap downloads and verifies Gradle 8.13 on first use. The full Android
+unit-test, formatting, static-analysis, lint and debug-build command is verified in WSL with SDK
+Platform 36; connected execution additionally needs the stable Windows API-36 AVD documented in
+[`TESTING.md`](TESTING.md).
 
 ## Windows PowerShell
 
@@ -124,7 +131,7 @@ make backend-test
 make android-test
 ```
 
-Actual executed results from this generation environment are in [docs/IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md).
+Current verification authority is [docs/STATUS.md](docs/STATUS.md) and [TESTING.md](TESTING.md).
 
 ## Security and privacy warning
 
@@ -141,10 +148,12 @@ The temporary guest-token mechanism is a development foundation, not production 
 
 ## Next steps
 
-Follow [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). The next three recommended vertical slices are also expressed as concrete Codex assignments in `docs/IMPLEMENTATION_REPORT.md`.
+Follow [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md); current scope and the next bounded phase
+are summarized in [docs/STATUS.md](docs/STATUS.md).
 
 ## Offline exercise catalog
 
-Android ships three self-authored CC0 technical demo exercises and keeps the public catalog in Room as its source of truth. List, detail, muscle/equipment filters and offline/error states remain separate from user-owned custom exercises. `make catalog-import` validates and atomically imports the matching backend dataset, with an idempotent `(source, external_id)` upsert and JSON report under `data/licenses/`.
+Android ships three self-authored CC0 technical demo exercises and keeps the public catalog in Room as its source of truth. List, detail, muscle/equipment filters and offline/error states remain separate from user-owned custom exercises. `make catalog-import` validates and stages an immutable full release, atomically activates eligible newer content and emits a JSON report under `data/licenses/`; identical version/hash imports are true no-ops.
 
-Public endpoints are `GET /api/v1/catalog/exercises`, `/api/v1/catalog/exercises/{id}`, `/api/v1/catalog/muscles` and `/api/v1/catalog/equipment`.
+Public endpoints are `GET /api/v1/catalog/exercises`, `/api/v1/catalog/exercises/{id}`,
+`/api/v1/catalog/snapshot`, `/api/v1/catalog/muscles` and `/api/v1/catalog/equipment`.

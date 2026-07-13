@@ -7,7 +7,7 @@ The executable source of truth is `backend/src/fitness_platform/modules/catalog.
 | identity | guest/registered identity and sessions | none | basis implemented |
 | user_profile | preferences and optional profile | identity | basis implemented |
 | onboarding | optional setup progress | user_profile | contract only |
-| exercises | curated/private exercises | identity | private slice implemented |
+| exercises | immutable public catalog and owner-scoped private exercises | identity | catalog and private sync slices implemented |
 | equipment | equipment taxonomy | none | data contract only |
 | training_locations | location equipment inventory | equipment | contract only |
 | workout_planning | plans/schedules | exercises, training_locations | contract only |

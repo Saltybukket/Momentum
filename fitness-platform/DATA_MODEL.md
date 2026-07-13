@@ -37,7 +37,7 @@ Minimal workout lifecycle and ordered links to exercises. Future sets/results be
 
 ### `outbox_events`
 
-Durable backend event records with unique event IDs, type, aggregate ID and JSON payload. Delivery state is `PENDING`, `PROCESSING`, `FAILED`, `PROCESSED` or `DEAD_LETTER`; `claim_owner`, unique `claim_token`, `lease_expires_at`, `next_attempt_at`, `attempts`, `max_attempts`, `processed_at` and bounded `last_error` support competing workers and crash recovery. Alembic head `f26c8d0e531a` adds token-bound lease ownership.
+Durable backend event records with unique event IDs, type, aggregate ID and JSON payload. Delivery state is `PENDING`, `PROCESSING`, `FAILED`, `PROCESSED` or `DEAD_LETTER`; `claim_owner`, unique `claim_token`, `lease_expires_at`, `next_attempt_at`, `attempts`, `max_attempts`, `processed_at` and bounded `last_error` support competing workers and crash recovery. Revision `f26c8d0e531a` added token-bound lease ownership; current head is `0d4f6a8b2c17`.
 
 ### `idempotency_records`
 

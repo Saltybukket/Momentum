@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased - Gate F immutable catalog releases
+## [Unreleased]
+
+### Gate H-lite project authority and container delivery
+
+- Established `docs/STATUS.md` as the concise current authority and archived superseded reports.
+- Added a reproducible allowlisted source archive with safe paths and SHA-256 output.
+- Split filesystem and loaded runtime-image vulnerability scans while retaining unfixed reports.
+- Changed the backend image to a digest-pinned multi-stage non-root runtime without tests or dev
+  dependencies.
+
+### Gate F immutable catalog releases
 
 - Stage complete catalog content in immutable release-scoped tables and atomically select one
   active release, with retained history and explicit rollback.
@@ -12,7 +22,7 @@
   cache; preserve the prior cache on rejection.
 - Advance the Alembic head to `0d4f6a8b2c17`.
 
-## Unreleased - Gate R/D reliability hardening
+### Gate R/D reliability hardening
 
 - Bound sync replay identity to contract version, entity, action and canonical typed payload; expired operation IDs are atomically reusable.
 - Made `CANCELLED` workouts terminal and unified CRUD/sync text-control validation.
@@ -21,7 +31,7 @@
 - Bounded request IDs and standardized redacted unexpected-error responses.
 - Advanced the Alembic head to `e15b7c9d420f`.
 
-## Unreleased - Gate D.1/E Android security
+### Gate D.1/E Android security
 
 - Hardened outbox ownership with unique claim tokens, just-in-time claims, async lease heartbeats and explicit lost-claim reporting.
 - Advanced the Alembic head to `f26c8d0e531a`.
@@ -31,7 +41,7 @@
 - Added recoverable Catalog seed/refresh/detail and Privacy consent states with visible strings in resources.
 - Separated bearer renewal from recovery-proof reset, blocked rejected/corrupt recovery safely, released owner-scoped Android outbox claims on consent cancellation and made catalog detail failures reachable.
 
-## Unreleased
+### Exercise conflict synchronization
 
 - Added persisted private-exercise conflict records with local and remote snapshots, explicit
   keep-local, take-server and manual-merge resolution paths, and confirmation after push success.
@@ -46,7 +56,7 @@
 
 All notable scaffold changes are documented here. The project follows semantic versioning once public releases begin.
 
-## [Unreleased]
+### Scaffold reproducibility
 
 ### Fixed
 

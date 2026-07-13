@@ -2,7 +2,7 @@
 
 Each phase is delivered as small vertical slices that leave the system runnable. Features listed in the product master specification remain mandatory future product scope; they are not reclassified as optional merely because this architecture assignment stops at the scaffold.
 
-## Phase 1 — Basis architecture (current)
+## Phase 1 — Basis architecture (delivered foundation)
 
 Slices:
 
@@ -19,7 +19,7 @@ Definition of done: backend checks pass, migration works, Android project/build/
 Slices:
 
 - Licensed exercise/muscle/equipment import pipeline with provenance and schema validation.
-- Curated catalog versus private custom-exercise ownership.
+- Curated catalog versus private custom-exercise ownership. **Delivered with immutable releases.**
 - Training locations/equipment inventory and compatible alternative query.
 - Plan aggregate: days, blocks, ordered exercises, sets/reps/RPE/RIR/rest/tempo.
 - Initial editable demo plans and time/equipment adaptation rules.

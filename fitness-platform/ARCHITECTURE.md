@@ -124,7 +124,8 @@ sequenceDiagram
 
 Supported states are `LOCAL_ONLY`, `PENDING`, `SYNCING`, `SYNCED`, `FAILED`, `CONFLICT`.
 
-Current behavior is push-only UUID upsert. Planned conflict rules:
+Private exercises implement UUID push/pull, a Room-owned cursor, tombstones and durable conflict
+snapshots. Profile and workout synchronization remain narrower push-oriented foundations. Rules:
 
 - Server timestamps and monotonic conflict versions determine whether an aggregate changed remotely.
 - Append-only workout facts are merged by stable child UUID where possible.

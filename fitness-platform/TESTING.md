@@ -150,7 +150,17 @@ Current automation covers both sides up to the network boundary and provides `sc
 
 ## CI behavior
 
-CI fails on formatting, lint, type errors, test failures, migration drift, Android lint/build failure, secret findings, dependency audit failure or Docker build failure. No check is documented as successful unless it actually ran in the relevant environment.
+CI fails on formatting, lint, type errors, test failures, migration drift, Android lint/build failure, secret findings, dependency audit failure, Docker build failure or fixed HIGH/CRITICAL Trivy findings. Filesystem/dependency and loaded runtime-image scans are separate. Unfixed HIGH/CRITICAL findings do not silently disappear: SARIF reports are uploaded for review. No check is documented as successful unless it actually ran in the relevant environment.
+
+Source handoff archives are produced from Git-tracked, explicitly filtered paths:
+
+```bash
+make source-archive
+```
+
+The command validates sorted safe ZIP entries and prints the file count and SHA-256. Repeated runs
+from the same index must produce the same digest. Secret/local/generated paths and Gradle
+distributions are rejected; the verified wrapper JAR is the sole binary allowlist entry.
 
 ## Catalog verification
 
