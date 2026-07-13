@@ -20,7 +20,8 @@ interface GuestSecretStore {
     suspend fun saveToken(value: String)
     suspend fun recoverySecretOrCreate(): String
     suspend fun saveRecoverySecret(value: String)
-    suspend fun clear()
+    suspend fun clearToken()
+    suspend fun clearAll()
 }
 
 class GuestCredentialInvalidatedException : IllegalStateException("Encrypted guest credentials are unavailable")
@@ -44,7 +45,19 @@ class KeystoreGuestSecretStore @Inject constructor(
         putEncrypted(RECOVERY, value)
     }
 
-    override suspend fun clear() = mutex.withLock { preferences.edit().clear().commit().let { Unit } }
+    override suspend fun clearToken() = mutex.withLock {
+        check(
+            preferences.edit()
+                .remove("${TOKEN}_ciphertext")
+                .remove("${TOKEN}_iv")
+                .commit(),
+        ) { "Unable to clear rejected guest token" }
+    }
+
+    override suspend fun clearAll() = mutex.withLock {
+        clearEncryptedState()
+        deleteKeyAlias()
+    }
 
     private fun putEncrypted(name: String, value: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -60,27 +73,29 @@ class KeystoreGuestSecretStore @Inject constructor(
 
     @Suppress("ReturnCount")
     private fun decryptOrReset(name: String): String? {
-        val ciphertext = preferences.getString("${name}_ciphertext", null) ?: return null
-        val iv = preferences.getString("${name}_iv", null) ?: return null
+        val ciphertext = preferences.getString("${name}_ciphertext", null)
+        val iv = preferences.getString("${name}_iv", null)
+        if (ciphertext == null && iv == null) return null
+        if (ciphertext == null || iv == null) invalidateEncryptedState()
         return try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
                 Cipher.DECRYPT_MODE,
-                secretKey(),
+                secretKey(createIfMissing = false),
                 GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)),
             )
             String(cipher.doFinal(Base64.decode(ciphertext, Base64.NO_WRAP)), Charsets.UTF_8)
         } catch (_: Exception) {
             // A missing/invalidated key must never silently create a credential that
             // differs from a secret already sent to the server.
-            preferences.edit().clear().commit()
-            throw GuestCredentialInvalidatedException()
+            invalidateEncryptedState()
         }
     }
 
-    private fun secretKey(): SecretKey {
+    private fun secretKey(createIfMissing: Boolean = true): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        if (!createIfMissing) throw GuestCredentialInvalidatedException()
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE).run {
             init(
                 KeyGenParameterSpec.Builder(
@@ -92,6 +107,21 @@ class KeystoreGuestSecretStore @Inject constructor(
             )
             generateKey()
         }
+    }
+
+    private fun invalidateEncryptedState(): Nothing {
+        clearEncryptedState()
+        deleteKeyAlias()
+        throw GuestCredentialInvalidatedException()
+    }
+
+    private fun clearEncryptedState() {
+        check(preferences.edit().clear().commit()) { "Unable to clear invalid guest credentials" }
+    }
+
+    private fun deleteKeyAlias() {
+        val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+        if (keyStore.containsAlias(KEY_ALIAS)) keyStore.deleteEntry(KEY_ALIAS)
     }
 
     private companion object {
@@ -117,5 +147,6 @@ class FakeGuestSecretStore : GuestSecretStore {
         recovery ?: "fake-recovery-secret".also { recovery = it }
     }
     override suspend fun saveRecoverySecret(value: String) = mutex.withLock { recovery = value }
-    override suspend fun clear() = mutex.withLock { token = null; recovery = null }
+    override suspend fun clearToken() = mutex.withLock { token = null }
+    override suspend fun clearAll() = mutex.withLock { token = null; recovery = null }
 }

@@ -36,7 +36,7 @@ The Android client, local Room database, imported provider payloads and all requ
 - Durable outbox delivery uses token-bound renewable leases, bounded retries and dead letters; stale workers cannot mutate a newer claim and handler failures cannot rewrite committed HTTP success.
 - Dependency/secret scans in CI.
 - Android release architecture expects R8/ProGuard and no embedded provider secrets.
-- Android guest tokens and recovery secrets are random-IV AES/GCM ciphertext under a non-exportable Android Keystore key. Migration verifies encrypted reads before removing legacy plaintext preferences. Invalidated credentials are discarded, the non-secret installation identity rotates and local Room data remains intact.
+- Android guest tokens and recovery secrets are random-IV AES/GCM ciphertext under a non-exportable Android Keystore key. Migration verifies encrypted reads before removing legacy plaintext preferences. Bearer rejection clears only the token. Rejected recovery proofs and missing, invalid or partial cipher/key state block recovery until an explicit identity reset; they never silently replace a server-known proof, expose secrets or delete Room data.
 - Private-sync failures persisted in the outbox are bounded codes, never raw exception text that could contain credentials.
 
 ## Threat table
@@ -77,8 +77,8 @@ Feature flags and a kill switch must disable abused reward paths without disabli
 
 ## Android token and transport plan
 
-- Guest token currently resides in DataStore to keep the scaffold simple.
-- Before production, refresh/access credentials move to Android Keystore-backed encrypted storage and are rotated.
+- Guest bearer and recovery credentials use Android Keystore-backed encrypted storage; DataStore retains only non-secret installation, consent and credential-state metadata.
+- Before production, add user-visible session/reset UX, revocation and account-link recovery around the current blocked-credential contract.
 - Production traffic is HTTPS only.
 - The manifest permits cleartext solely for emulator `10.0.2.2`/localhost local development.
 - Certificate pinning, if adopted, requires backup pins and remote rotation; a brittle single pin is worse than platform trust.

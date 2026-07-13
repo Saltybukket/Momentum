@@ -143,6 +143,25 @@ class AppDatabaseTest {
         assertEquals("worker-b", reclaimed.single().claimOwner)
     }
 
+    @Test fun releaseClaimsOnlyReturnsCurrentOwnersRowsToPending() = runTest {
+        database.outboxDao().insert(
+            OutboxEntity("own", "a", "UPSERT_PROFILE", "{}", 1, "PENDING", 2, "old"),
+        )
+        database.outboxDao().insert(
+            OutboxEntity("foreign", "b", "UPSERT_PROFILE", "{}", 2, "PENDING", 3, "old"),
+        )
+        database.outboxDao().claimBatch("worker-a", 10, 100, limit = 1)
+        database.outboxDao().claimBatch("worker-b", 10, 100, limit = 1)
+
+        assertEquals(1, database.outboxDao().releaseClaims("worker-a"))
+
+        val own = database.outboxDao().pending().single { it.id == "own" }
+        assertEquals("PENDING", own.status)
+        assertEquals(2, own.retryCount)
+        assertNull(own.claimOwner)
+        assertEquals("worker-b", database.outboxDao().claimedBy("worker-b").single().claimOwner)
+    }
+
     @Test fun syncCursorCommitsWithPageAndRollsBackWithPage() = runTest {
         database.guestProfileDao().insert(GuestProfile("p1", "Guest", 1).toEntity())
         runCatching {

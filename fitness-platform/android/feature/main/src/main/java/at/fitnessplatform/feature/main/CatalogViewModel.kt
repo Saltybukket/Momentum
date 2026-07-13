@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -85,5 +86,6 @@ class CatalogViewModel @Inject constructor(private val repository: CatalogReposi
         .map<CatalogExercise?, CatalogDetailState> { exercise ->
             exercise?.let(CatalogDetailState::Loaded) ?: CatalogDetailState.NotFound
         }
+        .catch { emit(CatalogDetailState.Error("CATALOG_DETAIL_FAILED")) }
         .onStart { emit(CatalogDetailState.Loading) }
 }

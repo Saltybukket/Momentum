@@ -18,7 +18,7 @@ This is a technical privacy foundation, not legal advice. The scaffold currently
 
 ## Current data flow
 
-Private synchronization is disabled by default. Opt-in commits consent before enqueuing unique work; opt-out commits consent before cancelling it. A running HTTP request is cancellable only best-effort, so the worker also checks consent before authentication, push and every pull page and starts no new private request after observing opt-out. Public catalog seed and refresh require no guest credential, upload no private data and never change consent.
+Private synchronization is disabled by default. Opt-in commits consent before enqueuing unique work; opt-out commits consent before cancelling it. A running HTTP request is cancellable only best-effort, so the worker also checks consent before authentication, push and every pull page and starts no new private request after observing opt-out. Already claimed rows owned by that worker return immediately to `PENDING` without a retry penalty. Public catalog seed and refresh require no guest credential, upload no private data and never change consent.
 
 ```mermaid
 flowchart LR
@@ -87,7 +87,7 @@ A user export is an asynchronous, authenticated job producing machine-readable J
 7. propagate deletion to processors/adapters and record completion/failures;
 8. provide user-visible status and retry failed downstream deletions.
 
-Local guest deletion can clear Room/DataStore immediately because no account recovery exists.
+An explicit local guest reset can clear Room and non-secret settings. Credential recovery is separate: bearer renewal preserves the existing installation/recovery proof, while rejected or invalid recovery material remains blocked until an explicit identity-reset decision that does not silently delete Room data.
 
 ## Retention baseline
 

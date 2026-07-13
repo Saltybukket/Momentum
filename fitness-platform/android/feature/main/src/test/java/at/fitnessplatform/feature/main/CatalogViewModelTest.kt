@@ -7,6 +7,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -70,16 +71,33 @@ class CatalogViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `detail maps repository failure to safe error state`() = runTest {
+        val repository = FakeCatalogRepository().apply { failDetail = true }
+        val viewModel = CatalogViewModel(repository)
+
+        viewModel.detailState("broken").test {
+            assertEquals(CatalogDetailState.Loading, awaitItem())
+            assertEquals(CatalogDetailState.Error("CATALOG_DETAIL_FAILED"), awaitItem())
+            awaitComplete()
+        }
+    }
 }
 
 private class FakeCatalogRepository : CatalogRepository {
     private val rows = MutableStateFlow<List<CatalogExercise>>(emptyList())
     var failRefresh = false
     var failSeed = false
+    var failDetail = false
     override fun observeCatalog(filter: CatalogFilter): Flow<List<CatalogExercise>> = rows.map { list ->
         list.filter { row -> (filter.muscle == null || row.muscles.any { it.slug == filter.muscle }) && (filter.equipment == null || filter.equipment in row.equipment) }
     }
-    override fun observeExercise(id: String) = rows.map { list -> list.firstOrNull { it.id == id } }
+    override fun observeExercise(id: String): Flow<CatalogExercise?> = if (failDetail) {
+        flow { error("database internals must not reach the UI") }
+    } else {
+        rows.map { list -> list.firstOrNull { it.id == id } }
+    }
     override fun observeMuscles() = MutableStateFlow(listOf(Muscle("core", "Core"), Muscle("legs", "Legs")))
     override fun observeEquipment() = MutableStateFlow(listOf(Equipment("bodyweight", "Bodyweight"), Equipment("bench", "Bench")))
     override suspend fun seedIfEmpty() {

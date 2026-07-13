@@ -119,6 +119,11 @@ interface OutboxDao {
     @Query("SELECT * FROM sync_outbox WHERE claimOwner = :owner AND status = 'SYNCING' ORDER BY createdAtEpochMs")
     suspend fun claimedBy(owner: String): List<OutboxEntity>
 
+    @Query("""UPDATE sync_outbox SET status = 'PENDING', lastError = NULL,
+        claimOwner = NULL, claimExpiresAtEpochMs = NULL
+        WHERE status = 'SYNCING' AND claimOwner = :owner""")
+    suspend fun releaseClaims(owner: String): Int
+
     @Transaction
     suspend fun claimBatch(owner: String, now: Long, expiresAt: Long, limit: Int = 100): List<OutboxEntity> {
         val ids = claimableIds(now, limit)

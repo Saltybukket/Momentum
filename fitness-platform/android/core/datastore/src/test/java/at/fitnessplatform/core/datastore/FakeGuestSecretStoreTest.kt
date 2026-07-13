@@ -24,7 +24,10 @@ class FakeGuestSecretStoreTest {
         store.saveToken("second")
 
         assertEquals("second", store.tokenOrNull())
-        store.clear()
+        store.clearToken()
         assertNull(store.tokenOrNull())
+        assertEquals("fake-recovery-secret", store.recoverySecretOrCreate())
+        store.clearAll()
+        assertEquals("fake-recovery-secret", store.recoverySecretOrCreate())
     }
 }

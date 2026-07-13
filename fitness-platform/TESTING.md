@@ -52,7 +52,7 @@ Fast tests use isolated SQLite. CI additionally applies the Alembic migration to
 
 ## Android tests
 
-Gate E adds JVM coverage for secret-store concurrency/rotation/clear and Catalog/Privacy view-model failure transitions. Room instrumentation sources cover schema 4→5 cursor initialization and transaction rollback/commit boundaries. The emulator-independent gate compiles database, sync, data and app Android-test sources; execution still requires a suitable API-36 device/AVD.
+Gate E/E.1 adds JVM coverage for secret-store concurrency and token/all-clear separation, bearer recovery policy, terminal recovery rejection, owner-scoped consent claim release and Catalog/Privacy/detail failure transitions. Room instrumentation sources cover schema 4→5 cursor initialization, transaction rollback/commit boundaries and claim release. Keystore instrumentation sources cover missing aliases, partial cipher pairs, corrupt ciphertext, alias deletion and repeatable reset. The emulator-independent gate compiles database, datastore, sync, data and app Android-test sources; execution still requires a suitable API-36 device/AVD.
 
 Test layers:
 
@@ -62,7 +62,7 @@ Test layers:
 - **Repository instrumentation tests:** conflict snapshots and atomic keep-local/take-server/manual-merge transactions.
 - **Repository/event tests:** atomic write/outbox behavior and domain-event idempotence.
 - **Compose instrumentation:** guest creation and navigation smoke path.
-- **WorkManager tests:** worker retry and status transitions are the next sync slice.
+- **WorkManager tests:** Robolectric worker tests cover bearer renewal, recovery rejection/no-loop behavior and consent release; Android runtime remains required for platform adapter execution.
 
 Commands:
 

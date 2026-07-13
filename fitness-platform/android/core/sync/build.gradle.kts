@@ -34,5 +34,12 @@ dependencies {
     ksp(libs.hilt.compiler)
     ksp(libs.androidx.hilt.compiler)
     testImplementation(libs.junit)
+    testImplementation(project(":core:testing"))
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.kotlinx.serialization.json)
+    testImplementation(libs.mockk)
+    testImplementation(libs.retrofit.core)
+    testImplementation(libs.robolectric)
 }

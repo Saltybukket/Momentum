@@ -19,6 +19,8 @@ import at.fitnessplatform.core.database.SyncStateEntity
 import at.fitnessplatform.core.database.WorkoutDao
 import at.fitnessplatform.core.database.toConflictSnapshot
 import at.fitnessplatform.core.datastore.GuestSessionStore
+import at.fitnessplatform.core.datastore.GuestCredentialBlockedException
+import at.fitnessplatform.core.datastore.GuestCredentialInvalidatedException
 import at.fitnessplatform.core.model.OutboxOperationType
 import at.fitnessplatform.core.model.Clock
 import at.fitnessplatform.core.model.ConflictResolutionStatus
@@ -37,6 +39,9 @@ import kotlinx.serialization.encodeToString
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
+
+private class GuestRecoveryRejectedException : IllegalStateException("Guest recovery proof was rejected")
 
 @HiltWorker
 @Suppress("LongParameterList", "TooGenericExceptionCaught", "SwallowedException")
@@ -58,18 +63,24 @@ class SyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         if (!sessionStore.isSyncEnabled()) return Result.success()
         val claimOwner = id.toString()
-        val now = clock.nowEpochMs()
-        val pending = outboxDao.claimBatch(claimOwner, now, now + LEASE_DURATION_MS)
-        return when {
-            pending.isEmpty() -> pullOnly()
-            else -> {
-                val profile = profileDao.get()
-                if (profile == null) {
-                    Result.failure()
-                } else {
-                    synchronize(profile, pending, pending.map { it.id })
+        return try {
+            val now = clock.nowEpochMs()
+            val pending = outboxDao.claimBatch(claimOwner, now, now + LEASE_DURATION_MS)
+            when {
+                pending.isEmpty() -> pullOnly()
+                else -> {
+                    val profile = profileDao.get()
+                    if (profile == null) {
+                        outboxDao.releaseClaims(claimOwner)
+                        Result.failure()
+                    } else {
+                        synchronize(profile, pending, pending.map { it.id }, claimOwner)
+                    }
                 }
             }
+        } catch (exception: CancellationException) {
+            outboxDao.releaseClaims(claimOwner)
+            throw exception
         }
     }
 
@@ -78,10 +89,11 @@ class SyncWorker @AssistedInject constructor(
         profile: GuestProfileEntity,
         pending: List<OutboxEntity>,
         ids: List<String>,
+        claimOwner: String,
     ): Result = try {
-        if (!sessionStore.isSyncEnabled()) return Result.success()
+        if (!sessionStore.isSyncEnabled()) return releaseForConsent(claimOwner)
         val token = tokenFor(profile)
-        if (!sessionStore.isSyncEnabled()) return Result.success()
+        if (!sessionStore.isSyncEnabled()) return releaseForConsent(claimOwner)
         val operations = pending.map(::toSyncOperation)
         val batchKey = UUID.nameUUIDFromBytes(
             pending.joinToString("|") { it.id }.toByteArray(StandardCharsets.UTF_8),
@@ -90,12 +102,28 @@ class SyncWorker @AssistedInject constructor(
         markSuccessful(pending, response.results.filter { it.status == "SYNCED" }.map { it.operationId }.toSet())
         val conflicts = response.results.filter { it.status == "CONFLICT" }
         if (conflicts.isNotEmpty()) recordConflicts(conflicts)
-        if (sessionStore.isSyncEnabled()) pullExercises(token)
+        if (sessionStore.isSyncEnabled()) {
+            pullExercises(token, claimOwner)
+        } else {
+            outboxDao.releaseClaims(claimOwner)
+        }
         Result.success()
+    } catch (exception: CancellationException) {
+        outboxDao.releaseClaims(claimOwner)
+        throw exception
     } catch (exception: Exception) {
+        if (safeErrorCode(exception) == "PRIVATE_SYNC_DISABLED") {
+            return releaseForConsent(claimOwner)
+        }
         resetRejectedCredential(exception)
         outboxDao.markFailed(ids, safeErrorCode(exception))
-        if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
+        when (exception) {
+            is GuestRecoveryRejectedException,
+            is GuestCredentialBlockedException,
+            is GuestCredentialInvalidatedException,
+            -> Result.failure()
+            else -> if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
+        }
     }
 
     private suspend fun pullOnly(): Result = try {
@@ -105,16 +133,29 @@ class SyncWorker @AssistedInject constructor(
         if (sessionStore.isSyncEnabled()) pullExercises(token)
         Result.success()
     } catch (exception: Exception) {
+        if (safeErrorCode(exception) == "PRIVATE_SYNC_DISABLED") return Result.success()
         resetRejectedCredential(exception)
-        if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
+        when (exception) {
+            is GuestRecoveryRejectedException,
+            is GuestCredentialBlockedException,
+            is GuestCredentialInvalidatedException,
+            -> Result.failure()
+            else -> if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
+        }
     }
 
-    private suspend fun pullExercises(token: String) {
+    private suspend fun pullExercises(token: String, claimOwner: String? = null) {
         var cursor = syncStateDao.exerciseCursor()
         do {
-            if (!sessionStore.isSyncEnabled()) return
+            if (!sessionStore.isSyncEnabled()) {
+                claimOwner?.let { outboxDao.releaseClaims(it) }
+                return
+            }
             val page = api.pullExercises("Bearer $token", cursor)
-            if (!sessionStore.isSyncEnabled()) return
+            if (!sessionStore.isSyncEnabled()) {
+                claimOwner?.let { outboxDao.releaseClaims(it) }
+                return
+            }
             database.withTransaction {
                 for (change in page.changes) applyRemoteChange(change)
                 syncStateDao.put(
@@ -158,9 +199,14 @@ class SyncWorker @AssistedInject constructor(
         return sessionStore.tokenOrNull()
         ?: sessionStore.bootstrapCredentials().let { (installationId, recoverySecret) ->
             check(sessionStore.isSyncEnabled()) { "PRIVATE_SYNC_DISABLED" }
-            api.createGuestSession(
-                request = GuestSessionRequest(profile.displayName, installationId, recoverySecret),
-            )
+            try {
+                api.createGuestSession(
+                    request = GuestSessionRequest(profile.displayName, installationId, recoverySecret),
+                )
+            } catch (exception: retrofit2.HttpException) {
+                if (exception.code() in setOf(401, 403)) throw GuestRecoveryRejectedException()
+                throw exception
+            }
         }.let { session ->
             sessionStore.saveToken(session.guestToken)
             profileDao.markSynced(profile.id, session.profile.userId)
@@ -170,15 +216,26 @@ class SyncWorker @AssistedInject constructor(
 
     private fun safeErrorCode(exception: Exception): String = when {
         exception.message == "PRIVATE_SYNC_DISABLED" -> "PRIVATE_SYNC_DISABLED"
+        exception is GuestRecoveryRejectedException -> "RECOVERY_REJECTED"
+        exception is GuestCredentialBlockedException -> exception.state.name
+        exception is GuestCredentialInvalidatedException -> "CREDENTIAL_INVALIDATED"
         exception is retrofit2.HttpException && exception.code() in setOf(401, 403) -> "AUTH_REJECTED"
         exception is java.io.IOException -> "NETWORK_TRANSIENT"
         else -> "SYNC_FAILED"
     }
 
     private suspend fun resetRejectedCredential(exception: Exception) {
-        if (exception is retrofit2.HttpException && exception.code() in setOf(401, 403)) {
-            sessionStore.clearCredentials()
+        when {
+            exception is GuestRecoveryRejectedException -> sessionStore.markRecoveryRejected()
+            exception is retrofit2.HttpException && exception.code() in setOf(401, 403) -> {
+                sessionStore.clearToken()
+            }
         }
+    }
+
+    private suspend fun releaseForConsent(claimOwner: String): Result {
+        outboxDao.releaseClaims(claimOwner)
+        return Result.success()
     }
 
     private fun toSyncOperation(row: OutboxEntity): SyncOperationDto {

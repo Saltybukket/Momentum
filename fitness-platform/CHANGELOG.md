@@ -17,6 +17,7 @@
 - Protected guest bearer/recovery credentials with Android Keystore AES/GCM and repeatable plaintext migration.
 - Made private-sync consent enqueue or cancel unique work and added worker consent checks at private network boundaries.
 - Added recoverable Catalog seed/refresh/detail and Privacy consent states with visible strings in resources.
+- Separated bearer renewal from recovery-proof reset, blocked rejected/corrupt recovery safely, released owner-scoped Android outbox claims on consent cancellation and made catalog detail failures reachable.
 
 ## Unreleased
 
