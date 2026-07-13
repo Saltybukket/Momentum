@@ -16,6 +16,7 @@ abstract class RepositoryBindings {
     @Binds @Singleton abstract fun bindWorkoutRepository(impl: RoomWorkoutRepository): WorkoutRepository
     @Binds @Singleton abstract fun bindCatalogRepository(impl: RoomCatalogRepository): CatalogRepository
     @Binds @Singleton abstract fun bindTrainingLocationRepository(impl: RoomTrainingLocationRepository): TrainingLocationRepository
+    @Binds @Singleton abstract fun bindTrainingPlanRepository(impl: RoomTrainingPlanRepository): TrainingPlanRepository
     @Binds @Singleton abstract fun bindSyncPreferencesRepository(impl: RoomSyncPreferencesRepository): SyncPreferencesRepository
     @Binds @Singleton abstract fun bindEventDispatcher(impl: LocalEventDispatcher): DomainEventDispatcher
 }
@@ -50,4 +51,18 @@ object TrainingLocationUseCaseModule {
     @Provides fun observeCompatibleCatalog(catalog: CatalogRepository, locations: TrainingLocationRepository) =
         ObserveCompatibleCatalogUseCase(catalog, locations)
     @Provides fun findCompatibleAlternatives() = FindCompatibleAlternativesUseCase()
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object TrainingPlanUseCaseModule {
+    @Provides fun observeTrainingPlans(repository: TrainingPlanRepository) = ObserveTrainingPlansUseCase(repository)
+    @Provides fun observeTrainingPlan(repository: TrainingPlanRepository) = ObserveTrainingPlanUseCase(repository)
+    @Provides fun observeActiveTrainingPlan(repository: TrainingPlanRepository) = ObserveActiveTrainingPlanUseCase(repository)
+    @Provides fun saveTrainingPlan(repository: TrainingPlanRepository) = SaveTrainingPlanUseCase(repository)
+    @Provides fun copyTrainingPlan(repository: TrainingPlanRepository) = CopyTrainingPlanUseCase(repository)
+    @Provides fun setActiveTrainingPlan(repository: TrainingPlanRepository) = SetActiveTrainingPlanUseCase(repository)
+    @Provides fun archiveTrainingPlan(repository: TrainingPlanRepository) = ArchiveTrainingPlanUseCase(repository)
+    @Provides fun deleteTrainingPlan(repository: TrainingPlanRepository) = DeleteTrainingPlanUseCase(repository)
+    @Provides fun seedStarterTrainingPlans(repository: TrainingPlanRepository) = SeedStarterTrainingPlansUseCase(repository)
 }

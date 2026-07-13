@@ -166,6 +166,76 @@ class AppDatabaseTest {
         context.deleteDatabase(migrationName)
     }
 
+    @Test fun migrationSixToSevenPreservesExistingDataAndAddsPlanAggregate() {
+        val migrationName = "training-plan-migration.db"
+        val original = migrationHelper.createDatabase(migrationName, 6)
+        original.execSQL(
+            "INSERT INTO guest_profile VALUES ('profile', 'Guest', 1, 'METRIC', 'COMPLETED', 'LOCAL_ONLY', NULL, NULL)",
+        )
+        original.execSQL(
+            "INSERT INTO training_locations VALUES ('home', 'Home', 'HOME', 1, 1, 1, 1, 0, NULL)",
+        )
+        original.close()
+        val migrated = migrationHelper.runMigrationsAndValidate(migrationName, 7, true, MIGRATION_6_7)
+        migrated.query("SELECT name FROM training_locations WHERE id = 'home'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Home", cursor.getString(0))
+        }
+        migrated.execSQL(
+            """INSERT INTO training_plans VALUES (
+                'plan', 'profile', 'Strength', '', 'STRENGTH', 1, 'profile', 0, NULL,
+                1, 1, 0, NULL)""",
+        )
+        migrated.query("SELECT COUNT(*) FROM training_plans").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(1, cursor.getInt(0))
+        }
+        migrated.close()
+        context.deleteDatabase(migrationName)
+    }
+
+    @Test fun trainingPlanRelationsPersistOrderCascadeAndOneActivePlan() = runTest {
+        database.guestProfileDao().insert(GuestProfile("profile", "Guest", 1).toEntity())
+        val dao = database.trainingPlanDao()
+        val first = TrainingPlanEntity(
+            "plan-1", "profile", "First", "", "STRENGTH", true, "profile", false, null, 1, 1, 0, null,
+        )
+        dao.insertPlan(first)
+        dao.insertPlan(
+            TrainingPlanEntity(
+                "plan-2", "profile", "Second", "", "MOBILITY", false, null, false, null, 1, 1, 0, null,
+            ),
+        )
+        dao.insertWeeks(listOf(PlanWeekEntity("week", "plan-1", 0, "Week", 0)))
+        dao.insertDays(listOf(PlanDayEntity("day", "week", 0, "Day", 0, 45, "")))
+        dao.insertBlocks(listOf(PlanBlockEntity("block", "day", 0, "MAIN", "Main", null)))
+        dao.insertExercises(
+            listOf(
+                PlanExerciseEntity(
+                    "exercise", "block", 0, "CUSTOM", "custom", null, null, null,
+                    "Squat", "REPS", "none", "legs", "RESOLVED", false, "",
+                ),
+            ),
+        )
+        dao.insertSets(
+            listOf(
+                PlanSetPrescriptionEntity(
+                    "set", "exercise", 0, "WORK", 8, 10, null, null, null,
+                    8.0, null, 90, "3", "1", "X", "1",
+                ),
+            ),
+        )
+
+        assertEquals(8, dao.get("plan-1", "profile")?.toModel()?.weeks?.single()
+            ?.days?.single()?.blocks?.single()?.exercises?.single()?.sets?.single()?.repsMin)
+        dao.setActive("plan-2", "profile", 2)
+        assertEquals(1, dao.activeCount("profile"))
+        assertEquals("plan-2", dao.observeAll("profile").first().first().plan.id)
+
+        database.openHelper.writableDatabase.execSQL("DELETE FROM training_plans WHERE id = 'plan-1'")
+        assertEquals(0, dao.weekCount("plan-1"))
+    }
+
     @Test fun trainingLocationsSwitchReplaceEquipmentAndDeleteActiveAtomically() = runTest {
         val dao = database.trainingLocationDao()
         dao.insert(TrainingLocationEntity("home", "Home", "HOME", true, 1, 1, 1, 0, null))

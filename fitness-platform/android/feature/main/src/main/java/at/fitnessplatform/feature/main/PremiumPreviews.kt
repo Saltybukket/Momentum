@@ -42,14 +42,14 @@ private val previewPlatformState = PlatformUiState(isLoading = false, profile = 
 @Preview(name = "Home 200 percent", widthDp = 411, heightDp = 891, fontScale = 2f)
 @Composable
 private fun HomePreview() = MomentumTheme {
-    HomeScreen(previewPlatformState, {}, {}, {}, {}, {})
+    HomeScreen(previewPlatformState, {}, {}, {}, {}, {}, {})
 }
 
 @Preview(name = "Workouts empty", widthDp = 411, heightDp = 891)
 @Preview(name = "Workouts expanded", widthDp = 840, heightDp = 600)
 @Composable
 private fun WorkoutsPreview() = MomentumTheme {
-    WorkoutScreen(previewPlatformState, { _, _ -> }, {}, {})
+    WorkoutScreen(previewPlatformState, { _, _ -> }, {}, {}, {})
 }
 
 @Preview(name = "Exercises empty", widthDp = 360, heightDp = 800)

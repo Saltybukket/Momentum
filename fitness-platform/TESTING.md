@@ -200,6 +200,14 @@ atomic revision-bound switch/replacement, deterministic replacement activation, 
 foreign-key cascade and repository persistence. These sources compile in the normal gate;
 execution is reported only when a real device/AVD runs them.
 
+Training-plan domain tests cover aggregate bounds, unique ordering/index contracts, exercise
+reference discrimination, set/tracking compatibility, text hardening, save normalization and
+immutable workout snapshots. ViewModel JVM tests cover editing, public/private picker separation
+and finite persistence errors. Room/data AndroidTest sources cover migration 6→7, normalized
+relation ordering and cascade behavior, one-active-plan enforcement, atomic replacement rollback,
+deep copy, deleted-private snapshots and non-resurrecting idempotent starter seeding. These sources
+compile in the normal gate; their runtime execution remains a connected-test claim only.
+
 `make doctor` warns for a missing Windows stable API-36 AVD; `make doctor-connected` is strict. Install with `sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, then `avdmanager.bat create avd -n Momentum_API_36 -k "system-images;android-36;google_apis;x86_64"`.
 
 ## Presentation verification

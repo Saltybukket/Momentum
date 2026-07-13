@@ -1,7 +1,7 @@
 # Project status
 
-Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified premium UI
-checkpoint `e8a889e` plus locally verified Gate UI.1 corrections.
+Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified Gate UI.1
+checkpoint `62945a7` plus locally verified Phase 2B.1 training plans.
 
 ## Implemented
 
@@ -33,12 +33,16 @@ checkpoint `e8a889e` plus locally verified Gate UI.1 corrections.
 - Gate UI.1 completes explicit Material 3 roles and contrast assertions, production-composable
   previews, root/subpage navigation semantics, scroll-safe critical screens and API-28 splash
   branding. Room startup now fails closed before feature UI and sync, with a data-preserving retry.
+- Phase 2B.1 adds editable owner-scoped offline training plans, typed public/private exercise
+  references with durable snapshots, atomic copy/activation/archive/delete operations, Room-backed
+  plan editing and idempotent self-authored starter plans. The immutable workout snapshot boundary
+  is defined without beginning workout execution or plan synchronization.
 - Repository, migration, static-analysis, JVM/build and container verification workflows.
 
 ## Schema and verification authority
 
 - Alembic head: `0d4f6a8b2c17`.
-- Android Room version: 6; exported schemas 1–6 are committed.
+- Android Room version: 7; exported schemas 1–7 are committed.
 - The canonical command matrix and connected-test limitation are in [TESTING.md](../TESTING.md).
   Phase 2A.1 passed the complete 128-test PostgreSQL backend suite on pytest 9.1.1 at
   79.27% combined coverage, fresh SQLite/PostgreSQL migration checks, 43 distinct Android JVM
@@ -51,6 +55,11 @@ checkpoint `e8a889e` plus locally verified Gate UI.1 corrections.
 - Gate UI.1 local verification passed 128 PostgreSQL backend tests at 79.20% combined coverage,
   56 distinct Android JVM tests (106 debug/release and pure-JVM executions), the 656-task Android
   gate and 208-task AndroidTest compile gate. Room remains version 6.
+- Phase 2B.1 local verification passed 128 PostgreSQL backend tests at 79.37% combined coverage,
+  fresh PostgreSQL and SQLite Alembic upgrade/check at `0d4f6a8b2c17`, Android JVM/domain tests,
+  the complete Android lint/static-analysis/build matrix and compilation of Room/data AndroidTest
+  sources. Connected Room migration execution is not claimed because the stable API-36 AVD remains
+  unavailable. Room is version 7.
 - Gate Q CI [run 29253072791](https://github.com/Saltybukket/Momentum/actions/runs/29253072791),
   attempt 1, passed all backend, Android and repository-security jobs for `ed34e4f`.
 - Phase 2A.1 implementation CI [run 29256173819](https://github.com/Saltybukket/Momentum/actions/runs/29256173819),
@@ -74,9 +83,9 @@ checkpoint `e8a889e` plus locally verified Gate UI.1 corrections.
 
 ## Next phase
 
-The premium App Shell and local Phase 2A.1 training locations are complete. The next product slice is Phase
-2B (`ExerciseReference` and editable training plans); optional location synchronization remains a
-separate explicitly gated slice and is not a prerequisite for local use.
+Phase 2B.1 editable offline training plans are locally complete. The next explicitly gated slice is
+Phase 2B.2, the local training calendar and occurrence materialization. Optional location
+synchronization remains separate and is not a prerequisite for local use.
 
 Latest operational handoff: [Premium UI checkpoint](HANDOFF_2026-07-13_PREMIUM_UI.md). Historical
 reports and handoffs are under [archive](archive/README.md).

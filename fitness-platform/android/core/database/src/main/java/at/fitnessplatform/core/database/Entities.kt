@@ -224,3 +224,150 @@ data class TrainingLocationEntity(
     indices = [Index("locationId"), Index("equipmentSlug")],
 )
 data class TrainingLocationEquipmentEntity(val locationId: String, val equipmentSlug: String)
+
+@Entity(
+    tableName = "training_plans",
+    foreignKeys = [ForeignKey(
+        entity = GuestProfileEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["ownerProfileId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [
+        Index("ownerProfileId"),
+        Index(value = ["activeSlot"], unique = true),
+        Index(value = ["ownerProfileId", "isArchived", "deletedAtEpochMs"]),
+    ],
+)
+data class TrainingPlanEntity(
+    @PrimaryKey val id: String,
+    val ownerProfileId: String,
+    val name: String,
+    val description: String,
+    val goal: String,
+    val isActive: Boolean,
+    val activeSlot: String?,
+    val isArchived: Boolean,
+    val sourceTemplateId: String?,
+    val createdAtEpochMs: Long,
+    val updatedAtEpochMs: Long,
+    val revision: Long,
+    val deletedAtEpochMs: Long?,
+)
+
+@Entity(
+    tableName = "plan_weeks",
+    foreignKeys = [ForeignKey(
+        entity = TrainingPlanEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["planId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("planId"), Index(value = ["planId", "position"], unique = true)],
+)
+data class PlanWeekEntity(
+    @PrimaryKey val id: String,
+    val planId: String,
+    val position: Int,
+    val title: String,
+    val weekIndex: Int,
+)
+
+@Entity(
+    tableName = "plan_days",
+    foreignKeys = [ForeignKey(
+        entity = PlanWeekEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["weekId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("weekId"), Index(value = ["weekId", "position"], unique = true)],
+)
+data class PlanDayEntity(
+    @PrimaryKey val id: String,
+    val weekId: String,
+    val position: Int,
+    val title: String,
+    val relativeDayIndex: Int,
+    val estimatedDurationMinutes: Int?,
+    val notes: String,
+)
+
+@Entity(
+    tableName = "plan_blocks",
+    foreignKeys = [ForeignKey(
+        entity = PlanDayEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["dayId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("dayId"), Index(value = ["dayId", "position"], unique = true)],
+)
+data class PlanBlockEntity(
+    @PrimaryKey val id: String,
+    val dayId: String,
+    val position: Int,
+    val type: String,
+    val title: String,
+    val rounds: Int?,
+)
+
+@Entity(
+    tableName = "plan_exercises",
+    foreignKeys = [ForeignKey(
+        entity = PlanBlockEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["blockId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [Index("blockId"), Index(value = ["blockId", "position"], unique = true)],
+)
+data class PlanExerciseEntity(
+    @PrimaryKey val id: String,
+    val blockId: String,
+    val position: Int,
+    val referenceKind: String,
+    val customExerciseId: String?,
+    val catalogSource: String?,
+    val catalogExternalId: String?,
+    val catalogExerciseId: String?,
+    val snapshotName: String,
+    val snapshotTrackingType: String,
+    val snapshotEquipment: String,
+    val snapshotPrimaryMuscle: String?,
+    val resolutionStatus: String,
+    val optional: Boolean,
+    val notes: String,
+)
+
+@Entity(
+    tableName = "plan_set_prescriptions",
+    foreignKeys = [ForeignKey(
+        entity = PlanExerciseEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["planExerciseId"],
+        onDelete = ForeignKey.CASCADE,
+    )],
+    indices = [
+        Index("planExerciseId"),
+        Index(value = ["planExerciseId", "position"], unique = true),
+    ],
+)
+data class PlanSetPrescriptionEntity(
+    @PrimaryKey val id: String,
+    val planExerciseId: String,
+    val position: Int,
+    val setType: String,
+    val repsMin: Int?,
+    val repsMax: Int?,
+    val durationSeconds: Int?,
+    val distanceMeters: Double?,
+    val targetWeightKg: Double?,
+    val targetRpe: Double?,
+    val targetRir: Int?,
+    val restSeconds: Int?,
+    val tempoEccentric: String?,
+    val tempoBottomPause: String?,
+    val tempoConcentric: String?,
+    val tempoTopPause: String?,
+)

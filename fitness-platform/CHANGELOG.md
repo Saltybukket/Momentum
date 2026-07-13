@@ -82,6 +82,17 @@
   cache; preserve the prior cache on rejection.
 - Advance the Alembic head to `0d4f6a8b2c17`.
 
+### Phase 2B.1 editable offline training plans
+
+- Added typed custom/catalog exercise references with durable snapshots and explicit unavailable,
+  deprecated and deleted-private resolution states.
+- Added Room schema 7 for owner-scoped plan/week/day/block/exercise/set aggregates, atomic copy and
+  reorder, soft delete, archive/restore and one active plan per profile.
+- Added idempotent self-authored CC0 starter plans plus offline plan list, detail, editor, exercise
+  picker, set editor, location compatibility and adapt-as-copy UI.
+- Defined and tested the immutable `WorkoutPlanSnapshot` boundary without beginning workout
+  execution or plan synchronization.
+
 ### Gate R/D reliability hardening
 
 - Bound sync replay identity to contract version, entity, action and canonical typed payload; expired operation IDs are atomically reusable.

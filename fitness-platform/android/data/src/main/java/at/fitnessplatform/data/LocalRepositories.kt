@@ -16,6 +16,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -201,6 +203,310 @@ class RoomTrainingLocationRepository @Inject constructor(
         require(EquipmentDefinitions.NONE !in slugs) { "The none marker is implicit and must not be persisted." }
     }
 }
+
+@Singleton
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class RoomTrainingPlanRepository @Inject constructor(
+    private val database: AppDatabase,
+    private val profileDao: GuestProfileDao,
+    private val exerciseDao: ExerciseDao,
+    private val catalogDao: CatalogDao,
+    private val dao: TrainingPlanDao,
+    private val ids: UuidProvider,
+    private val clock: Clock,
+) : TrainingPlanRepository {
+    override fun observePlans(): Flow<List<TrainingPlan>> = profileDao.observe().flatMapLatest { profile ->
+        if (profile == null) flowOf(emptyList()) else dao.observeAll(profile.id).map { rows -> rows.map { it.toModel() } }
+    }
+
+    override fun observeActivePlan(): Flow<TrainingPlan?> = profileDao.observe().flatMapLatest { profile ->
+        if (profile == null) flowOf(null) else dao.observeActive(profile.id).map { it?.toModel() }
+    }
+
+    override fun observePlan(id: String): Flow<TrainingPlan?> = profileDao.observe().flatMapLatest { profile ->
+        if (profile == null) flowOf(null) else dao.observe(id, profile.id).map { it?.toModel() }
+    }
+
+    override suspend fun getPlan(id: String): TrainingPlan? {
+        val owner = profileDao.get() ?: return null
+        return dao.get(id, owner.id)?.toModel()?.takeIf { it.deletedAtEpochMs == null }
+    }
+
+    override suspend fun create(plan: TrainingPlan): TrainingPlan {
+        val owner = requireNotNull(profileDao.get()) { "Create a guest profile before adding a plan." }
+        require(plan.ownerProfileId == owner.id) { "Training plans must belong to the current profile." }
+        require(dao.get(plan.id, owner.id) == null) { "Training plan already exists." }
+        val now = clock.nowEpochMs()
+        val created = resolveReferences(
+            plan.copy(
+                isActive = false,
+                isArchived = false,
+                createdAtEpochMs = now,
+                updatedAtEpochMs = now,
+                revision = 0,
+                deletedAtEpochMs = null,
+            ),
+        )
+        validateTrainingPlan(created)
+        database.withTransaction { insertAggregate(created) }
+        return created
+    }
+
+    override suspend fun update(plan: TrainingPlan): TrainingPlan {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        require(plan.ownerProfileId == owner.id) { "Training plans must belong to the current profile." }
+        return database.withTransaction {
+            val current = requireNotNull(dao.get(plan.id, owner.id)?.toModel()) { "Training plan does not exist." }
+            check(current.deletedAtEpochMs == null) { "Deleted training plans cannot be updated." }
+            val updated = resolveReferences(
+                plan.copy(
+                    ownerProfileId = owner.id,
+                    isActive = current.isActive,
+                    isArchived = current.isArchived,
+                    sourceTemplateId = current.sourceTemplateId,
+                    createdAtEpochMs = current.createdAtEpochMs,
+                    updatedAtEpochMs = clock.nowEpochMs(),
+                    revision = current.revision + 1,
+                    deletedAtEpochMs = null,
+                ),
+            )
+            validateTrainingPlan(updated)
+            check(dao.updatePlan(updated.toEntity()) == 1)
+            dao.deletePlanContents(updated.id)
+            insertContents(updated)
+            updated
+        }
+    }
+
+    override suspend fun copy(id: String): TrainingPlan {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        val source = requireNotNull(dao.get(id, owner.id)?.toModel()) { "Training plan does not exist." }
+        check(source.deletedAtEpochMs == null) { "Deleted training plans cannot be copied." }
+        val now = clock.nowEpochMs()
+        val copied = source.deepCopy(
+            id = ids.newUuid(),
+            name = "${source.name} (Copy)",
+            sourceTemplateId = source.sourceTemplateId ?: source.id,
+            now = now,
+            ids = ids,
+        )
+        validateTrainingPlan(copied)
+        database.withTransaction { insertAggregate(copied) }
+        return copied
+    }
+
+    override suspend fun setActive(id: String) {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        dao.setActive(id, owner.id, clock.nowEpochMs())
+    }
+
+    override suspend fun setArchived(id: String, archived: Boolean) {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        check(dao.archive(id, owner.id, archived, clock.nowEpochMs()) == 1) { "Training plan does not exist." }
+    }
+
+    override suspend fun delete(id: String) {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        dao.softDelete(id, owner.id, clock.nowEpochMs())
+    }
+
+    override suspend fun seedStarterPlans() {
+        val owner = profileDao.get() ?: return
+        database.withTransaction {
+            if (dao.count(owner.id) != 0) return@withTransaction
+            val now = clock.nowEpochMs()
+            listOf(
+                starterPlan(
+                    owner.id,
+                    "Simple strength starter",
+                    TrainingPlanGoal.STRENGTH,
+                    listOf(
+                        starterReference("bodyweight-squat", "Bodyweight Squat", TrackingType.REPS, "none", "quadriceps"),
+                        starterReference("incline-push-up", "Incline Push-up", TrackingType.REPS, "none", "chest"),
+                    ),
+                    now,
+                ),
+                starterPlan(
+                    owner.id,
+                    "Simple core starter",
+                    TrainingPlanGoal.GENERAL_FITNESS,
+                    listOf(starterReference("front-plank", "Front Plank", TrackingType.DURATION, "mat", "core")),
+                    now,
+                ),
+            ).forEach { plan ->
+                val resolved = resolveReferences(plan)
+                validateTrainingPlan(resolved)
+                insertAggregate(resolved)
+            }
+        }
+    }
+
+    private suspend fun resolveReferences(plan: TrainingPlan): TrainingPlan = plan.copy(
+        weeks = plan.weeks.map { week ->
+            week.copy(days = week.days.map { day ->
+                day.copy(blocks = day.blocks.map { block ->
+                    block.copy(exercises = block.exercises.map { exercise ->
+                        exercise.copy(reference = resolveReference(exercise.reference))
+                    })
+                })
+            })
+        },
+    )
+
+    private suspend fun resolveReference(reference: ExerciseReference): ExerciseReference = when (reference.kind) {
+        ExerciseReferenceKind.CUSTOM -> {
+            val custom = reference.customExerciseId?.let { exerciseDao.get(it) }
+            reference.copy(
+                resolutionStatus = if (custom == null || custom.deletedAtEpochMs != null) {
+                    ExerciseResolutionStatus.DELETED_CUSTOM
+                } else {
+                    ExerciseResolutionStatus.RESOLVED
+                },
+            )
+        }
+        ExerciseReferenceKind.CATALOG -> {
+            val source = reference.catalogSource
+            val externalId = reference.catalogExternalId
+            val catalog = if (source != null && externalId != null) {
+                catalogDao.findByIdentity(source, externalId)
+            } else {
+                null
+            }
+            reference.copy(
+                catalogExerciseId = catalog?.exercise?.id ?: reference.catalogExerciseId,
+                resolutionStatus = when (catalog?.exercise?.status) {
+                    CatalogStatus.PUBLISHED.name -> ExerciseResolutionStatus.RESOLVED
+                    CatalogStatus.DEPRECATED.name -> ExerciseResolutionStatus.DEPRECATED
+                    else -> ExerciseResolutionStatus.UNAVAILABLE
+                },
+            )
+        }
+    }
+
+    private suspend fun insertAggregate(plan: TrainingPlan) {
+        dao.insertPlan(plan.toEntity())
+        insertContents(plan)
+    }
+
+    private suspend fun insertContents(plan: TrainingPlan) {
+        val rows = plan.toRows()
+        if (rows.weeks.isNotEmpty()) dao.insertWeeks(rows.weeks)
+        if (rows.days.isNotEmpty()) dao.insertDays(rows.days)
+        if (rows.blocks.isNotEmpty()) dao.insertBlocks(rows.blocks)
+        if (rows.exercises.isNotEmpty()) dao.insertExercises(rows.exercises)
+        if (rows.sets.isNotEmpty()) dao.insertSets(rows.sets)
+    }
+
+    private fun starterPlan(
+        ownerProfileId: String,
+        name: String,
+        goal: TrainingPlanGoal,
+        references: List<ExerciseReference>,
+        now: Long,
+    ) = TrainingPlan(
+        id = ids.newUuid(),
+        ownerProfileId = ownerProfileId,
+        name = name,
+        description = "Editable offline starter built from Momentum's self-authored CC0 demo catalog.",
+        goal = goal,
+        createdAtEpochMs = now,
+        updatedAtEpochMs = now,
+        weeks = listOf(
+            PlanWeek(
+                ids.newUuid(),
+                0,
+                "Week 1",
+                listOf(
+                    PlanDay(
+                        ids.newUuid(),
+                        0,
+                        "Day 1",
+                        listOf(
+                            PlanBlock(
+                                ids.newUuid(),
+                                0,
+                                PlanBlockType.MAIN,
+                                "Main",
+                                references.mapIndexed { position, reference ->
+                                    PlanExercise(
+                                        ids.newUuid(),
+                                        position,
+                                        reference,
+                                        sets = listOf(
+                                            SetPrescription(
+                                                ids.newUuid(),
+                                                0,
+                                                repsMin = 8.takeIf {
+                                                    reference.snapshot.trackingType == TrackingType.REPS
+                                                },
+                                                durationSeconds = 30.takeIf {
+                                                    reference.snapshot.trackingType == TrackingType.DURATION
+                                                },
+                                                restSeconds = 90,
+                                            ),
+                                        ),
+                                    )
+                                },
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    private fun starterReference(
+        externalId: String,
+        name: String,
+        trackingType: TrackingType,
+        equipment: String,
+        primaryMuscle: String,
+    ) = ExerciseReference(
+        kind = ExerciseReferenceKind.CATALOG,
+        catalogSource = "momentum-self-authored-demo",
+        catalogExternalId = externalId,
+        snapshot = ExerciseSnapshot(name, trackingType, equipment, primaryMuscle),
+    )
+}
+
+private fun TrainingPlan.deepCopy(
+    id: String,
+    name: String,
+    sourceTemplateId: String,
+    now: Long,
+    ids: UuidProvider,
+) = copy(
+    id = id,
+    name = name,
+    isActive = false,
+    isArchived = false,
+    sourceTemplateId = sourceTemplateId,
+    createdAtEpochMs = now,
+    updatedAtEpochMs = now,
+    revision = 0,
+    deletedAtEpochMs = null,
+    weeks = weeks.map { week ->
+        week.copy(
+            id = ids.newUuid(),
+            days = week.days.map { day ->
+                day.copy(
+                    id = ids.newUuid(),
+                    blocks = day.blocks.map { block ->
+                        block.copy(
+                            id = ids.newUuid(),
+                            exercises = block.exercises.map { exercise ->
+                                exercise.copy(
+                                    id = ids.newUuid(),
+                                    sets = exercise.sets.map { set -> set.copy(id = ids.newUuid()) },
+                                )
+                            },
+                        )
+                    },
+                )
+            },
+        )
+    },
+)
 
 @Singleton
 class RoomGuestProfileRepository @Inject constructor(

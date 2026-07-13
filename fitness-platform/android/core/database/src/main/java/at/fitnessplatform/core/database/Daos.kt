@@ -174,6 +174,10 @@ interface CatalogDao {
     @Transaction @Query("SELECT * FROM catalog_exercises WHERE id = :id LIMIT 1")
     fun observeOne(id: String): Flow<CatalogExerciseWithRelations?>
 
+    @Transaction
+    @Query("SELECT * FROM catalog_exercises WHERE source = :source AND externalId = :externalId LIMIT 1")
+    suspend fun findByIdentity(source: String, externalId: String): CatalogExerciseWithRelations?
+
     @Query("SELECT * FROM catalog_muscles ORDER BY name") fun observeMuscles(): Flow<List<CatalogMuscleEntity>>
     @Query("SELECT * FROM catalog_equipment ORDER BY name") fun observeEquipment(): Flow<List<CatalogEquipmentEntity>>
     @Query("SELECT COUNT(*) FROM catalog_exercises") suspend fun count(): Int
@@ -282,5 +286,150 @@ interface TrainingLocationDao {
         val wasActive = current.location.isActive
         check(softDeleteRow(id, now) == 1)
         if (wasActive) replacementId(id)?.let { activate(it, now) }
+    }
+}
+
+data class PlanExerciseWithSets(
+    @androidx.room.Embedded val exercise: PlanExerciseEntity,
+    @androidx.room.Relation(parentColumn = "id", entityColumn = "planExerciseId")
+    val sets: List<PlanSetPrescriptionEntity>,
+)
+
+data class PlanBlockWithExercises(
+    @androidx.room.Embedded val block: PlanBlockEntity,
+    @androidx.room.Relation(
+        entity = PlanExerciseEntity::class,
+        parentColumn = "id",
+        entityColumn = "blockId",
+    )
+    val exercises: List<PlanExerciseWithSets>,
+)
+
+data class PlanDayWithBlocks(
+    @androidx.room.Embedded val day: PlanDayEntity,
+    @androidx.room.Relation(
+        entity = PlanBlockEntity::class,
+        parentColumn = "id",
+        entityColumn = "dayId",
+    )
+    val blocks: List<PlanBlockWithExercises>,
+)
+
+data class PlanWeekWithDays(
+    @androidx.room.Embedded val week: PlanWeekEntity,
+    @androidx.room.Relation(
+        entity = PlanDayEntity::class,
+        parentColumn = "id",
+        entityColumn = "weekId",
+    )
+    val days: List<PlanDayWithBlocks>,
+)
+
+data class TrainingPlanWithWeeks(
+    @androidx.room.Embedded val plan: TrainingPlanEntity,
+    @androidx.room.Relation(
+        entity = PlanWeekEntity::class,
+        parentColumn = "id",
+        entityColumn = "planId",
+    )
+    val weeks: List<PlanWeekWithDays>,
+)
+
+@Dao
+@Suppress("TooManyFunctions")
+interface TrainingPlanDao {
+    @Transaction
+    @Query(
+        "SELECT * FROM training_plans WHERE ownerProfileId = :ownerProfileId " +
+            "AND deletedAtEpochMs IS NULL ORDER BY isActive DESC, name COLLATE NOCASE",
+    )
+    fun observeAll(ownerProfileId: String): Flow<List<TrainingPlanWithWeeks>>
+
+    @Transaction
+    @Query(
+        "SELECT * FROM training_plans WHERE ownerProfileId = :ownerProfileId " +
+            "AND activeSlot = :ownerProfileId AND deletedAtEpochMs IS NULL LIMIT 1",
+    )
+    fun observeActive(ownerProfileId: String): Flow<TrainingPlanWithWeeks?>
+
+    @Transaction
+    @Query(
+        "SELECT * FROM training_plans WHERE id = :id AND ownerProfileId = :ownerProfileId " +
+            "AND deletedAtEpochMs IS NULL LIMIT 1",
+    )
+    fun observe(id: String, ownerProfileId: String): Flow<TrainingPlanWithWeeks?>
+
+    @Transaction
+    @Query("SELECT * FROM training_plans WHERE id = :id AND ownerProfileId = :ownerProfileId LIMIT 1")
+    suspend fun get(id: String, ownerProfileId: String): TrainingPlanWithWeeks?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertPlan(entity: TrainingPlanEntity)
+
+    @Update
+    suspend fun updatePlan(entity: TrainingPlanEntity): Int
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertWeeks(rows: List<PlanWeekEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertDays(rows: List<PlanDayEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertBlocks(rows: List<PlanBlockEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertExercises(rows: List<PlanExerciseEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertSets(rows: List<PlanSetPrescriptionEntity>)
+
+    @Query("DELETE FROM plan_weeks WHERE planId = :planId")
+    suspend fun deletePlanContents(planId: String)
+
+    @Query(
+        "UPDATE training_plans SET isActive = 0, activeSlot = NULL, " +
+            "updatedAtEpochMs = :now, revision = revision + 1 " +
+            "WHERE ownerProfileId = :ownerProfileId AND activeSlot = :ownerProfileId AND id != :nextId",
+    )
+    suspend fun clearActive(ownerProfileId: String, nextId: String, now: Long)
+
+    @Query(
+        "UPDATE training_plans SET isActive = 1, activeSlot = :ownerProfileId, isArchived = 0, " +
+            "updatedAtEpochMs = :now, revision = revision + 1 " +
+            "WHERE id = :id AND ownerProfileId = :ownerProfileId AND deletedAtEpochMs IS NULL",
+    )
+    suspend fun activate(id: String, ownerProfileId: String, now: Long): Int
+
+    @Query(
+        "UPDATE training_plans SET isArchived = :archived, isActive = 0, activeSlot = NULL, " +
+            "updatedAtEpochMs = :now, revision = revision + 1 " +
+            "WHERE id = :id AND ownerProfileId = :ownerProfileId AND deletedAtEpochMs IS NULL",
+    )
+    suspend fun archive(id: String, ownerProfileId: String, archived: Boolean, now: Long): Int
+
+    @Query(
+        "UPDATE training_plans SET deletedAtEpochMs = :now, updatedAtEpochMs = :now, " +
+            "revision = revision + 1, isActive = 0, activeSlot = NULL " +
+            "WHERE id = :id AND ownerProfileId = :ownerProfileId AND deletedAtEpochMs IS NULL",
+    )
+    suspend fun softDelete(id: String, ownerProfileId: String, now: Long): Int
+
+    @Query("SELECT COUNT(*) FROM training_plans WHERE ownerProfileId = :ownerProfileId AND isActive = 1")
+    suspend fun activeCount(ownerProfileId: String): Int
+
+    @Query("SELECT COUNT(*) FROM training_plans WHERE ownerProfileId = :ownerProfileId")
+    suspend fun count(ownerProfileId: String): Int
+
+    @Query("SELECT COUNT(*) FROM plan_weeks WHERE planId = :planId")
+    suspend fun weekCount(planId: String): Int
+
+    @Transaction
+    suspend fun setActive(id: String, ownerProfileId: String, now: Long) {
+        checkNotNull(get(id, ownerProfileId)?.takeIf { it.plan.deletedAtEpochMs == null }) {
+            "Training plan does not exist."
+        }
+        clearActive(ownerProfileId, id, now)
+        check(activate(id, ownerProfileId, now) == 1) { "Training plan could not be activated." }
     }
 }

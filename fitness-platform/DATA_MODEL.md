@@ -193,4 +193,27 @@ downgrade existing installations; runtime repositories do not write them.
 
 Android Room schema 6 continues to store one validated local catalog snapshot and remains disjoint
 from owner-bound `custom_exercises`. Network content is hash-checked before the atomic Room
-replacement. Schemas 1–6 are exported under `android/core/database/schemas/`.
+replacement. Schemas 1–7 are exported under `android/core/database/schemas/`.
+
+## Offline training plans
+
+Room schema 7 adds the owner-scoped `training_plans` aggregate with normalized child tables
+`plan_weeks`, `plan_days`, `plan_blocks`, `plan_exercises` and `plan_set_prescriptions`. Child
+positions are unique within their parent and cascade only when aggregate content is intentionally
+replaced or the owning profile is removed. User deletion is a plan tombstone; archive remains a
+separate reversible state. A nullable unique `activeSlot` contains the owner profile ID and permits
+at most one active, non-archived plan per profile.
+
+`PlanExercise` stores either a private custom-exercise UUID or the stable public identity
+`(source, externalId)`, plus an immutable name/tracking/equipment/primary-muscle snapshot and an
+explicit resolution state. It intentionally has no foreign key to mutable exercise rows, so a
+deleted or unavailable source cannot destroy an editable plan. Set prescriptions use typed set
+kinds, bounded repetition ranges, duration/distance/weight/RPE/RIR/rest targets and four separate
+tempo phases rather than an opaque JSON value.
+
+Plan weeks and days are relative reusable template structure; they contain no absolute calendar
+date. Copy, reorder and aggregate replacement are Room transactions. Two optional starter plans
+reference only the existing self-authored CC0 demo catalog and are seeded idempotently. Workout
+execution is outside this slice; `WorkoutPlanSnapshot` defines the immutable handoff that a later
+execution aggregate must own, including planned duration, optional location, optional start instant
+and IANA time-zone identity.

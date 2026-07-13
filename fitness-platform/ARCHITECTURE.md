@@ -134,6 +134,20 @@ snapshots. Profile and workout synchronization remain narrower push-oriented fou
 - Server-authoritative rewards, purchases, entitlements and tournament/boss points are never merged from client values.
 - Conflicts remain durable until a deterministic policy or explicit user choice resolves them.
 
+### 4.5 Offline training-plan boundary
+
+Editable training plans are local-only Room aggregates behind domain repository ports. Compose
+renders plan flows and never writes Room entities directly. An exercise reference discriminates
+private UUIDs from stable public `(source, externalId)` identities and carries a durable display
+snapshot, allowing unavailable catalog rows or deleted private exercises to remain visible without
+silently changing plan meaning. Copy, activation, archive, reorder and full child replacement are
+atomic. Plans remain relative templates; absolute dates belong to the later calendar aggregate.
+
+The plan editor surfaces public and private exercises as visibly separate choices, evaluates the
+active training location, and adapts only a newly created copy when compatible alternatives exist.
+No plan synchronization, workout execution, rewards or health behavior is implied. ADR-017 records
+the aggregate, snapshot and future-boundary decisions.
+
 ## 5. Backend architecture
 
 ### 5.1 Modular monolith

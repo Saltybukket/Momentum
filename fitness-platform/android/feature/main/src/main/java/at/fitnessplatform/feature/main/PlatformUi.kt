@@ -59,6 +59,7 @@ private object Routes {
     const val CATALOG_EXERCISE = "catalog/{catalogId}"
     const val PRIVACY = "privacy"
     const val LOCATIONS = "locations"
+    const val PLANS = "plans"
 }
 
 private data class RootDestination(
@@ -79,7 +80,7 @@ internal fun usesNavigationRail(width: Dp): Boolean = width >= 840.dp
 internal fun rootRouteFor(route: String?): String? =
     when (route?.substringBefore('/')) {
         "home" -> Routes.HOME
-        "workouts", "workout-detail", "active-workout", "workout-summary" -> Routes.WORKOUTS
+        "workouts", "workout-detail", "active-workout", "workout-summary", "plans" -> Routes.WORKOUTS
         "exercises", "exercise", "catalog", "catalog-detail", "custom-exercise",
         "custom-exercise-edit", "conflicts", "conflict",
         -> Routes.EXERCISES
@@ -96,6 +97,7 @@ private fun routeTitle(route: String?): Int = when (route?.substringBefore('/'))
     "catalog" -> R.string.catalog_title
     "privacy" -> R.string.privacy_title
     "locations" -> R.string.locations_title
+    "plans" -> R.string.plans_title
     "profile" -> R.string.nav_profile
     else -> R.string.app_name
 }
@@ -195,6 +197,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onWorkouts = { navController.navigate(Routes.WORKOUTS) },
                             onConflicts = { navController.navigate(Routes.CONFLICTS) },
                             onLocations = { navController.navigate(Routes.LOCATIONS) },
+                            onPlans = { navController.navigate(Routes.PLANS) },
                         )
                     }
                     composable(Routes.PROFILE) {
@@ -256,6 +259,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onCreate = viewModel::createWorkout,
                             onStart = viewModel::startWorkout,
                             onComplete = viewModel::completeWorkout,
+                            onPlans = { navController.navigate(Routes.PLANS) },
                         )
                     }
                     composable(Routes.CATALOG) {
@@ -268,6 +272,9 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                     }
                     composable(Routes.LOCATIONS) {
                         TrainingLocationsRoute()
+                    }
+                    composable(Routes.PLANS) {
+                        TrainingPlansRoute(profile.id)
                     }
                     composable(
                         Routes.CATALOG_EXERCISE,
@@ -398,6 +405,7 @@ internal fun HomeScreen(
     onWorkouts: () -> Unit,
     onConflicts: () -> Unit,
     onLocations: () -> Unit,
+    onPlans: () -> Unit,
 ) = MomentumScreen(Modifier.fillMaxSize()) {
         item {
             Text(
@@ -442,6 +450,13 @@ internal fun HomeScreen(
             }
         }
         item { ActiveLocationCard(onManage = onLocations) }
+        item {
+            MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.plans_title), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.plans_description))
+                OutlinedButton(onClick = onPlans) { Text(stringResource(R.string.plans_create)) }
+            }
+        }
         item {
             MomentumSectionHeader(stringResource(R.string.home_recent_title))
         }
@@ -737,6 +752,7 @@ internal fun WorkoutScreen(
     onCreate: (String, List<String>) -> Unit,
     onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
+    onPlans: () -> Unit,
 ) {
     val defaultTitle = stringResource(R.string.workout_default_title)
     var title by rememberSaveable { mutableStateOf(defaultTitle) }
@@ -755,6 +771,9 @@ internal fun WorkoutScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        OutlinedButton(onClick = onPlans, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.plans_title))
+        }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             workoutSection(R.string.workouts_active, active, onStart, onComplete)
             workoutSection(R.string.workouts_planned, planned, onStart, onComplete)
