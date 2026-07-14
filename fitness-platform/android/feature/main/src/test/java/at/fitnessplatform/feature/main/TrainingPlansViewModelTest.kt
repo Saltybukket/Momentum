@@ -7,6 +7,11 @@ import at.fitnessplatform.core.model.CustomExercise
 import at.fitnessplatform.core.model.Equipment
 import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.Muscle
+import at.fitnessplatform.core.model.AvailabilityRule
+import at.fitnessplatform.core.model.PlanSchedule
+import at.fitnessplatform.core.model.ScheduleOverride
+import at.fitnessplatform.core.model.ScheduledWorkoutOccurrence
+import at.fitnessplatform.core.model.ScheduledWorkoutStatus
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.TrainingLocation
 import at.fitnessplatform.core.model.TrainingPlan
@@ -23,10 +28,12 @@ import at.fitnessplatform.domain.FindCompatibleAlternativesUseCase
 import at.fitnessplatform.domain.EditTrainingPlanUseCase
 import at.fitnessplatform.domain.ObserveTrainingPlansUseCase
 import at.fitnessplatform.domain.PlanStructureKind
+import at.fitnessplatform.domain.PlanScheduleActivationDecision
 import at.fitnessplatform.domain.SaveTrainingPlanUseCase
 import at.fitnessplatform.domain.SeedStarterTrainingPlansUseCase
 import at.fitnessplatform.domain.SetActiveTrainingPlanUseCase
 import at.fitnessplatform.domain.TrainingLocationRepository
+import at.fitnessplatform.domain.TrainingCalendarRepository
 import at.fitnessplatform.domain.TrainingPlanRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +52,7 @@ class TrainingPlansViewModelTest {
 
     @Test fun `view model creates edits reorders and separates private picker choices`() = runTest {
         val plans = MutablePlanRepository()
+        val calendar = EmptyPlanCalendarRepository()
         val ids = SequentialIds()
         val viewModel = TrainingPlansViewModel(
             ObserveTrainingPlansUseCase(plans),
@@ -52,9 +60,9 @@ class TrainingPlansViewModelTest {
             CopyTrainingPlanUseCase(plans),
             AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
             EditTrainingPlanUseCase(plans, ids),
-            SetActiveTrainingPlanUseCase(plans),
-            ArchiveTrainingPlanUseCase(plans),
-            DeleteTrainingPlanUseCase(plans),
+            SetActiveTrainingPlanUseCase(plans, calendar),
+            ArchiveTrainingPlanUseCase(plans, calendar),
+            DeleteTrainingPlanUseCase(plans, calendar),
             SeedStarterTrainingPlansUseCase(plans),
             EmptyCatalogRepository(),
             OneExerciseRepository(),
@@ -122,11 +130,14 @@ class TrainingPlansViewModelTest {
 
     @Test fun `view model surfaces failed save without replacing previous plan`() = runTest {
         val plans = MutablePlanRepository().apply { failSave = true }
+        val calendar = EmptyPlanCalendarRepository()
         val viewModel = TrainingPlansViewModel(
             ObserveTrainingPlansUseCase(plans), SaveTrainingPlanUseCase(plans), CopyTrainingPlanUseCase(plans),
             AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
             EditTrainingPlanUseCase(plans, SequentialIds()),
-            SetActiveTrainingPlanUseCase(plans), ArchiveTrainingPlanUseCase(plans), DeleteTrainingPlanUseCase(plans),
+            SetActiveTrainingPlanUseCase(plans, calendar),
+            ArchiveTrainingPlanUseCase(plans, calendar),
+            DeleteTrainingPlanUseCase(plans, calendar),
             SeedStarterTrainingPlansUseCase(plans),
             EmptyCatalogRepository(), OneExerciseRepository(), EmptyLocationRepository(),
             SequentialIds(), object : Clock { override fun nowEpochMs() = 1L },
@@ -136,6 +147,55 @@ class TrainingPlansViewModelTest {
         advanceUntilIdle()
         assertTrue(viewModel.state.value.error != null)
         assertTrue(viewModel.state.value.plans.isEmpty())
+    }
+
+    @Test fun `activation drift requires an explicit schedule decision`() = runTest {
+        val plans = MutablePlanRepository()
+        val calendar = EmptyPlanCalendarRepository()
+        val ids = SequentialIds()
+        val viewModel = TrainingPlansViewModel(
+            ObserveTrainingPlansUseCase(plans), SaveTrainingPlanUseCase(plans), CopyTrainingPlanUseCase(plans),
+            AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
+            EditTrainingPlanUseCase(plans, ids), SetActiveTrainingPlanUseCase(plans, calendar),
+            ArchiveTrainingPlanUseCase(plans, calendar), DeleteTrainingPlanUseCase(plans, calendar),
+            SeedStarterTrainingPlansUseCase(plans), EmptyCatalogRepository(), OneExerciseRepository(),
+            EmptyLocationRepository(), ids, object : Clock { override fun nowEpochMs() = 100L },
+        )
+        advanceUntilIdle()
+        viewModel.create("profile", "First", "", TrainingPlanGoal.STRENGTH)
+        advanceUntilIdle()
+        val first = requireNotNull(viewModel.state.value.selectedPlan)
+        viewModel.copy(first.id)
+        advanceUntilIdle()
+        val second = requireNotNull(viewModel.state.value.selectedPlan)
+        calendar.saveSchedule(
+            PlanSchedule(
+                id = "schedule",
+                ownerProfileId = "profile",
+                planId = first.id,
+                startDate = java.time.LocalDate.of(2026, 7, 14),
+                timeZoneId = "Europe/Berlin",
+                isActive = true,
+                createdAtEpochMs = 1,
+                updatedAtEpochMs = 1,
+            ),
+        )
+
+        viewModel.activate(second.id)
+        advanceUntilIdle()
+        assertEquals(second.id, viewModel.state.value.pendingActivationPlanId)
+        assertFalse(plans.state.value.single { it.id == second.id }.isActive)
+
+        viewModel.resolveActivation(PlanScheduleActivationDecision.CANCEL)
+        assertEquals(null, viewModel.state.value.pendingActivationPlanId)
+        viewModel.activate(second.id)
+        advanceUntilIdle()
+        viewModel.resolveActivation(PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP)
+        advanceUntilIdle()
+
+        assertTrue(plans.state.value.single { it.id == second.id }.isActive)
+        assertEquals(null, calendar.currentSchedule())
+        assertEquals(null, viewModel.state.value.pendingActivationPlanId)
     }
 }
 
@@ -176,6 +236,43 @@ private class MutablePlanRepository : TrainingPlanRepository {
     }
     override suspend fun delete(id: String) { state.value = state.value.filterNot { it.id == id } }
     override suspend fun seedStarterPlans() = Unit
+}
+
+private class EmptyPlanCalendarRepository : TrainingCalendarRepository {
+    private val activeSchedule = MutableStateFlow<PlanSchedule?>(null)
+    fun currentSchedule(): PlanSchedule? = activeSchedule.value
+    override fun observeOccurrences(from: java.time.LocalDate, to: java.time.LocalDate) =
+        MutableStateFlow<List<ScheduledWorkoutOccurrence>>(emptyList())
+    override fun observeActiveSchedule(): Flow<PlanSchedule?> = activeSchedule
+    override fun observeAvailability() = MutableStateFlow<List<AvailabilityRule>>(emptyList())
+    override fun observeOverrides() = MutableStateFlow<List<ScheduleOverride>>(emptyList())
+    override suspend fun saveSchedule(schedule: PlanSchedule): PlanSchedule = schedule.also {
+        activeSchedule.value = it.takeIf(PlanSchedule::isActive)
+    }
+    override suspend fun materialize(scheduleId: String, through: java.time.LocalDate) =
+        emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun ensureHorizon(
+        scheduleId: String,
+        from: java.time.LocalDate,
+        through: java.time.LocalDate,
+    ) = emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun generatedOccurrences(
+        scheduleId: String,
+        from: java.time.LocalDate,
+        through: java.time.LocalDate,
+    ) = emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun replaceFuturePlanned(
+        scheduleId: String,
+        from: java.time.LocalDate,
+        through: java.time.LocalDate,
+    ) = emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun saveOccurrence(occurrence: ScheduledWorkoutOccurrence) = occurrence
+    override suspend fun copyOccurrence(id: String) = error("unused")
+    override suspend fun changeStatus(id: String, status: ScheduledWorkoutStatus) = Unit
+    override suspend fun saveAvailability(rule: AvailabilityRule) = Unit
+    override suspend fun saveOverride(override: ScheduleOverride) = Unit
+    override suspend fun deleteAvailability(id: String) = Unit
+    override suspend fun deleteOverride(id: String) = Unit
 }
 
 private class EmptyCatalogRepository : CatalogRepository {

@@ -9,10 +9,16 @@ import at.fitnessplatform.core.model.PlanDay
 import at.fitnessplatform.core.model.PlanExercise
 import at.fitnessplatform.core.model.PlanSetType
 import at.fitnessplatform.core.model.PlanWeek
+import at.fitnessplatform.core.model.PlanSchedule
+import at.fitnessplatform.core.model.AvailabilityRule
+import at.fitnessplatform.core.model.ScheduleOverride
+import at.fitnessplatform.core.model.ScheduledWorkoutOccurrence
+import at.fitnessplatform.core.model.ScheduledWorkoutStatus
 import at.fitnessplatform.core.model.SetPrescription
 import at.fitnessplatform.core.model.TempoPrescription
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.TrainingPlan
+import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -98,6 +104,31 @@ class TrainingPlanUseCasesTest {
         assertEquals("Europe/Berlin", snapshot.timeZoneId)
     }
 
+    @Test fun `plan activation requires explicit schedule decision and destructive lifecycle deactivates schedule`() = runTest {
+        val plans = FakeTrainingPlanRepository()
+        val calendar = FakePlanCalendarRepository()
+        val activate = SetActiveTrainingPlanUseCase(plans, calendar)
+
+        assertTrue(runCatching { activate("new-plan") }.exceptionOrNull() is ValidationException)
+        assertEquals(null, plans.activatedId)
+        assertEquals(PlanActivationResult(false), activate("new-plan", PlanScheduleActivationDecision.CANCEL))
+
+        val result = activate("new-plan", PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP)
+        assertEquals(PlanActivationResult(true, scheduleSetupRequired = true), result)
+        assertEquals("new-plan", plans.activatedId)
+        assertEquals(false, calendar.savedSchedules.last().isActive)
+
+        calendar.active.value = calendar.schedule.copy(planId = "new-plan", isActive = true)
+        ArchiveTrainingPlanUseCase(plans, calendar)("new-plan", true)
+        assertEquals("new-plan", plans.archivedId)
+        assertEquals(false, calendar.savedSchedules.last().isActive)
+
+        calendar.active.value = calendar.schedule.copy(planId = "delete-plan", isActive = true)
+        DeleteTrainingPlanUseCase(plans, calendar)("delete-plan")
+        assertEquals("delete-plan", plans.deletedId)
+        assertEquals(false, calendar.savedSchedules.last().isActive)
+    }
+
     private fun plan() = TrainingPlan(
         id = "plan",
         ownerProfileId = "profile",
@@ -164,6 +195,9 @@ class TrainingPlanUseCasesTest {
 
 private class FakeTrainingPlanRepository : TrainingPlanRepository {
     private val plans = MutableStateFlow<List<TrainingPlan>>(emptyList())
+    var activatedId: String? = null
+    var archivedId: String? = null
+    var deletedId: String? = null
     override fun observePlans(): Flow<List<TrainingPlan>> = plans
     override fun observeActivePlan(): Flow<TrainingPlan?> = MutableStateFlow(plans.value.firstOrNull { it.isActive })
     override fun observePlan(id: String): Flow<TrainingPlan?> = MutableStateFlow(plans.value.firstOrNull { it.id == id })
@@ -177,8 +211,47 @@ private class FakeTrainingPlanRepository : TrainingPlanRepository {
         return transform(source.copy(id = "$id-copy", sourceTemplateId = source.sourceTemplateId ?: id))
             .also { plans.value += it }
     }
-    override suspend fun setActive(id: String) = Unit
-    override suspend fun setArchived(id: String, archived: Boolean) = Unit
-    override suspend fun delete(id: String) = Unit
+    override suspend fun setActive(id: String) { activatedId = id }
+    override suspend fun setArchived(id: String, archived: Boolean) { archivedId = id }
+    override suspend fun delete(id: String) { deletedId = id }
     override suspend fun seedStarterPlans() = Unit
+}
+
+private class FakePlanCalendarRepository : TrainingCalendarRepository {
+    val schedule = PlanSchedule(
+        id = "schedule",
+        ownerProfileId = "profile",
+        planId = "old-plan",
+        startDate = LocalDate.of(2026, 7, 13),
+        timeZoneId = "Europe/Berlin",
+        isActive = true,
+        createdAtEpochMs = 0,
+        updatedAtEpochMs = 0,
+    )
+    val active = MutableStateFlow<PlanSchedule?>(schedule)
+    val savedSchedules = mutableListOf<PlanSchedule>()
+    override fun observeOccurrences(from: LocalDate, to: LocalDate) =
+        MutableStateFlow<List<ScheduledWorkoutOccurrence>>(emptyList())
+    override fun observeActiveSchedule(): Flow<PlanSchedule?> = active
+    override fun observeAvailability() = MutableStateFlow<List<AvailabilityRule>>(emptyList())
+    override fun observeOverrides() = MutableStateFlow<List<ScheduleOverride>>(emptyList())
+    override suspend fun saveSchedule(schedule: PlanSchedule): PlanSchedule = schedule.also {
+        savedSchedules += it
+        active.value = it.takeIf(PlanSchedule::isActive)
+    }
+    override suspend fun materialize(scheduleId: String, through: LocalDate) =
+        emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun ensureHorizon(scheduleId: String, from: LocalDate, through: LocalDate) =
+        emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun generatedOccurrences(scheduleId: String, from: LocalDate, through: LocalDate) =
+        emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun replaceFuturePlanned(scheduleId: String, from: LocalDate, through: LocalDate) =
+        emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun saveOccurrence(occurrence: ScheduledWorkoutOccurrence) = occurrence
+    override suspend fun copyOccurrence(id: String) = error("unused")
+    override suspend fun changeStatus(id: String, status: ScheduledWorkoutStatus) = Unit
+    override suspend fun saveAvailability(rule: AvailabilityRule) = Unit
+    override suspend fun saveOverride(override: ScheduleOverride) = Unit
+    override suspend fun deleteAvailability(id: String) = Unit
+    override suspend fun deleteOverride(id: String) = Unit
 }

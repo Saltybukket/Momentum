@@ -2,6 +2,7 @@ package at.fitnessplatform.domain
 
 import at.fitnessplatform.core.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 private const val MAX_PLAN_NAME = 100
 private const val MAX_WEEKS = 12
@@ -408,16 +409,64 @@ private fun <T> List<T>.moveItem(id: String, delta: Int, identifier: (T) -> Stri
     return if (from == to) this else toMutableList().apply { add(to, removeAt(from)) }
 }
 
-class SetActiveTrainingPlanUseCase(private val repository: TrainingPlanRepository) {
-    suspend operator fun invoke(id: String) = repository.setActive(id)
+enum class PlanScheduleActivationDecision { KEEP_CURRENT_SCHEDULE, START_NEW_SCHEDULE_SETUP, CANCEL }
+
+data class PlanActivationResult(
+    val activated: Boolean,
+    val scheduleSetupRequired: Boolean = false,
+)
+
+class SetActiveTrainingPlanUseCase(
+    private val repository: TrainingPlanRepository,
+    private val calendarRepository: TrainingCalendarRepository,
+) {
+    suspend operator fun invoke(
+        id: String,
+        decision: PlanScheduleActivationDecision? = null,
+    ): PlanActivationResult {
+        val activeSchedule = calendarRepository.observeActiveSchedule().first()
+        if (activeSchedule != null && activeSchedule.planId != id) {
+            ensure(decision != null) { "PLAN_SCHEDULE_DECISION_REQUIRED" }
+            when (decision) {
+                PlanScheduleActivationDecision.CANCEL -> return PlanActivationResult(false)
+                PlanScheduleActivationDecision.KEEP_CURRENT_SCHEDULE -> Unit
+                PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP -> {
+                    calendarRepository.saveSchedule(activeSchedule.copy(isActive = false))
+                }
+                null -> error("Decision was validated above.")
+            }
+        }
+        repository.setActive(id)
+        return PlanActivationResult(
+            activated = true,
+            scheduleSetupRequired = decision == PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP,
+        )
+    }
 }
 
-class ArchiveTrainingPlanUseCase(private val repository: TrainingPlanRepository) {
-    suspend operator fun invoke(id: String, archived: Boolean) = repository.setArchived(id, archived)
+class ArchiveTrainingPlanUseCase(
+    private val repository: TrainingPlanRepository,
+    private val calendarRepository: TrainingCalendarRepository,
+) {
+    suspend operator fun invoke(id: String, archived: Boolean) {
+        if (archived) deactivateScheduleForPlan(calendarRepository, id)
+        repository.setArchived(id, archived)
+    }
 }
 
-class DeleteTrainingPlanUseCase(private val repository: TrainingPlanRepository) {
-    suspend operator fun invoke(id: String) = repository.delete(id)
+class DeleteTrainingPlanUseCase(
+    private val repository: TrainingPlanRepository,
+    private val calendarRepository: TrainingCalendarRepository,
+) {
+    suspend operator fun invoke(id: String) {
+        deactivateScheduleForPlan(calendarRepository, id)
+        repository.delete(id)
+    }
+}
+
+private suspend fun deactivateScheduleForPlan(repository: TrainingCalendarRepository, planId: String) {
+    val schedule = repository.observeActiveSchedule().first()
+    if (schedule?.planId == planId) repository.saveSchedule(schedule.copy(isActive = false))
 }
 
 class SeedStarterTrainingPlansUseCase(private val repository: TrainingPlanRepository) {

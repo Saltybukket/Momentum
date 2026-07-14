@@ -16,7 +16,7 @@ import at.fitnessplatform.core.model.ScheduledWorkoutOccurrence
 import at.fitnessplatform.core.model.ScheduledWorkoutStatus
 import at.fitnessplatform.core.model.UuidProvider
 import at.fitnessplatform.domain.TrainingCalendarRepository
-import at.fitnessplatform.domain.materializeSchedule
+import at.fitnessplatform.domain.materializeScheduleRange
 import at.fitnessplatform.domain.validateAvailability
 import at.fitnessplatform.domain.validateOccurrence
 import at.fitnessplatform.domain.validateOverride
@@ -90,7 +90,30 @@ class RoomTrainingCalendarRepository @Inject constructor(
         scheduleId: String,
         through: LocalDate,
     ): List<ScheduledWorkoutOccurrence> = database.withTransaction {
-        materializeInTransaction(scheduleId, through)
+        materializeInTransaction(scheduleId, null, through)
+    }
+
+    override suspend fun ensureHorizon(
+        scheduleId: String,
+        from: LocalDate,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence> = database.withTransaction {
+        require(through >= from) { "Calendar horizon end must not precede its start." }
+        materializeInTransaction(scheduleId, from, through)
+    }
+
+    override suspend fun generatedOccurrences(
+        scheduleId: String,
+        from: LocalDate,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence> {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        return calendarDao.getGeneratedOccurrences(
+            owner.id,
+            scheduleId,
+            from.toString(),
+            through.toString(),
+        ).map { it.toModel() }
     }
 
     override suspend fun replaceFuturePlanned(
@@ -100,7 +123,7 @@ class RoomTrainingCalendarRepository @Inject constructor(
     ): List<ScheduledWorkoutOccurrence> = database.withTransaction {
         val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
         calendarDao.deleteFuturePlanningRows(owner.id, scheduleId, from.toString(), through.toString())
-        materializeInTransaction(scheduleId, through)
+        materializeInTransaction(scheduleId, from, through)
     }
 
     override suspend fun saveOccurrence(
@@ -140,8 +163,8 @@ class RoomTrainingCalendarRepository @Inject constructor(
     override suspend fun copyOccurrence(id: String): ScheduledWorkoutOccurrence {
         val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
         val source = requireNotNull(calendarDao.getOccurrence(id, owner.id)?.toModel()) { "Occurrence does not exist." }
-        check(source.status !in setOf(ScheduledWorkoutStatus.IN_PROGRESS, ScheduledWorkoutStatus.COMPLETED)) {
-            "Running or completed occurrences cannot be copied."
+        check(source.status != ScheduledWorkoutStatus.IN_PROGRESS) {
+            "Running occurrences cannot be copied."
         }
         val now = clock.nowEpochMs()
         return saveOccurrence(
@@ -181,8 +204,19 @@ class RoomTrainingCalendarRepository @Inject constructor(
         calendarDao.upsertOverride(override.toEntity())
     }
 
+    override suspend fun deleteAvailability(id: String) {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        check(calendarDao.deleteAvailability(id, owner.id) == 1) { "Availability rule does not exist." }
+    }
+
+    override suspend fun deleteOverride(id: String) {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        check(calendarDao.deleteOverride(id, owner.id) == 1) { "Schedule override does not exist." }
+    }
+
     private suspend fun materializeInTransaction(
         scheduleId: String,
+        from: LocalDate?,
         through: LocalDate,
     ): List<ScheduledWorkoutOccurrence> {
         val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
@@ -190,12 +224,20 @@ class RoomTrainingCalendarRepository @Inject constructor(
             "Schedule does not exist."
         }
         val plan = requireNotNull(planDao.get(schedule.planId, owner.id)?.toModel()) { "Training plan does not exist." }
-        val rows = materializeSchedule(schedule, plan, through, clock.nowEpochMs(), ::stableOccurrenceId)
+        val firstDate = maxOf(schedule.startDate, from ?: schedule.startDate)
+        val rows = materializeScheduleRange(
+            schedule,
+            plan,
+            firstDate,
+            through,
+            clock.nowEpochMs(),
+            ::stableOccurrenceId,
+        )
         if (rows.isNotEmpty()) calendarDao.insertOccurrences(rows.map { it.toEntity() })
         return calendarDao.getScheduleOccurrences(
             owner.id,
             scheduleId,
-            schedule.startDate.toString(),
+            firstDate.toString(),
             through.toString(),
         ).map { it.toModel() }
     }

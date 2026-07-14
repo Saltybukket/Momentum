@@ -93,6 +93,7 @@ enum class CalendarConflictType {
     MISSING_EQUIPMENT,
     OVERLAP,
     UNAVAILABLE_EXERCISE,
+    INVALID_LOCAL_TIME,
 }
 
 data class CalendarConflict(

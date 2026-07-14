@@ -13,11 +13,34 @@ import at.fitnessplatform.core.model.PlanDayScheduleRule
 import at.fitnessplatform.core.model.OccurrenceOrigin
 import at.fitnessplatform.core.model.UuidProvider
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.text.Normalizer
 import kotlinx.coroutines.flow.Flow
 
 const val MATERIALIZATION_HORIZON_DAYS = 56L
+private val disallowedCalendarText =
+    Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]")
+private val horizontalWhitespace = Regex("[\\t ]+")
+
+enum class CalendarAction { EDIT, MOVE, COPY, SKIP, CANCEL, VIEW }
+
+fun allowedCalendarActions(status: ScheduledWorkoutStatus): Set<CalendarAction> = when (status) {
+    ScheduledWorkoutStatus.PLANNED, ScheduledWorkoutStatus.CONFLICT, ScheduledWorkoutStatus.MOVED -> setOf(
+        CalendarAction.EDIT,
+        CalendarAction.MOVE,
+        CalendarAction.COPY,
+        CalendarAction.SKIP,
+        CalendarAction.CANCEL,
+    )
+    ScheduledWorkoutStatus.IN_PROGRESS -> emptySet()
+    ScheduledWorkoutStatus.COMPLETED,
+    ScheduledWorkoutStatus.SKIPPED,
+    ScheduledWorkoutStatus.CANCELLED,
+    -> setOf(CalendarAction.VIEW, CalendarAction.COPY)
+}
 
 interface TrainingCalendarRepository {
     fun observeOccurrences(from: LocalDate, to: LocalDate): Flow<List<ScheduledWorkoutOccurrence>>
@@ -26,6 +49,16 @@ interface TrainingCalendarRepository {
     fun observeOverrides(): Flow<List<ScheduleOverride>>
     suspend fun saveSchedule(schedule: PlanSchedule): PlanSchedule
     suspend fun materialize(scheduleId: String, through: LocalDate): List<ScheduledWorkoutOccurrence>
+    suspend fun ensureHorizon(
+        scheduleId: String,
+        from: LocalDate,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence>
+    suspend fun generatedOccurrences(
+        scheduleId: String,
+        from: LocalDate,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence>
     suspend fun replaceFuturePlanned(
         scheduleId: String,
         from: LocalDate,
@@ -36,6 +69,8 @@ interface TrainingCalendarRepository {
     suspend fun changeStatus(id: String, status: ScheduledWorkoutStatus)
     suspend fun saveAvailability(rule: AvailabilityRule)
     suspend fun saveOverride(override: ScheduleOverride)
+    suspend fun deleteAvailability(id: String)
+    suspend fun deleteOverride(id: String)
 }
 
 fun validateSchedule(schedule: PlanSchedule) {
@@ -68,6 +103,19 @@ fun validateOccurrence(occurrence: ScheduledWorkoutOccurrence) {
     }
     validZone(occurrence.timeZoneId, "Occurrence")
     ensureCalendar(occurrence.notes.length <= 2_000) { "Occurrence notes are too long." }
+    ensureCalendar(occurrence.titleSnapshot == canonicalCalendarText(occurrence.titleSnapshot, singleLine = true)) {
+        "Occurrence title must use canonical safe text."
+    }
+    ensureCalendar(occurrence.notes == canonicalCalendarText(occurrence.notes, singleLine = false)) {
+        "Occurrence notes must use canonical safe text."
+    }
+}
+
+fun canonicalCalendarText(value: String, singleLine: Boolean): String {
+    require(!disallowedCalendarText.containsMatchIn(value)) { "Calendar text contains unsafe characters." }
+    val normalized = Normalizer.normalize(value, Normalizer.Form.NFC).replace("\r\n", "\n").replace('\r', '\n')
+    val lines = normalized.lines().map { horizontalWhitespace.replace(it.trim(), " ") }
+    return if (singleLine) lines.joinToString(" ").trim() else lines.joinToString("\n").trim()
 }
 
 fun validateAvailability(rule: AvailabilityRule) {
@@ -101,6 +149,22 @@ fun materializeSchedule(
     through: LocalDate,
     nowEpochMs: Long,
     idFor: (ruleId: String, localDate: LocalDate) -> String,
+): List<ScheduledWorkoutOccurrence> = materializeScheduleRange(
+    schedule = schedule,
+    plan = plan,
+    from = schedule.startDate,
+    through = through,
+    nowEpochMs = nowEpochMs,
+    idFor = idFor,
+)
+
+fun materializeScheduleRange(
+    schedule: PlanSchedule,
+    plan: TrainingPlan,
+    from: LocalDate,
+    through: LocalDate,
+    nowEpochMs: Long,
+    idFor: (ruleId: String, localDate: LocalDate) -> String,
 ): List<ScheduledWorkoutOccurrence> {
     validateSchedule(schedule)
     ensureCalendar(plan.id == schedule.planId && plan.ownerProfileId == schedule.ownerProfileId) {
@@ -113,7 +177,8 @@ fun materializeSchedule(
     schedule.rules.forEach { rule ->
         ensureCalendar(rule.planDayId in days) { "Schedule rule references an unknown plan day." }
     }
-    return generateSequence(schedule.startDate) { current -> current.plusDays(1) }
+    val firstDate = maxOf(schedule.startDate, from)
+    return generateSequence(firstDate) { current -> current.plusDays(1) }
         .takeWhile { it <= through }
         .flatMap { date ->
             val cycleWeek = (java.time.temporal.ChronoUnit.DAYS.between(schedule.startDate, date) / 7)
@@ -163,15 +228,16 @@ fun detectCalendarConflicts(
     occurrences: List<ScheduledWorkoutOccurrence>,
     availability: List<AvailabilityRule>,
     overrides: List<ScheduleOverride>,
-    requiredEquipmentByPlanDay: Map<String, Set<String>> = emptyMap(),
     equipmentByLocation: Map<String, Set<String>> = emptyMap(),
-    unavailablePlanDays: Set<String> = emptySet(),
 ): List<CalendarConflict> = buildList {
     val planningRows = occurrences.filter { it.status in setOf(ScheduledWorkoutStatus.PLANNED, ScheduledWorkoutStatus.CONFLICT) }
     planningRows.forEach { occurrence ->
-        val override = overrides.firstOrNull { it.localDate == occurrence.scheduledLocalDate }
+        val override = overrides.firstOrNull {
+            it.ownerProfileId == occurrence.ownerProfileId && it.localDate == occurrence.scheduledLocalDate
+        }
         val recurring = availability.firstOrNull {
-            it.enabled && it.dayOfWeek == occurrence.scheduledLocalDate.dayOfWeek
+            it.ownerProfileId == occurrence.ownerProfileId &&
+                it.enabled && it.dayOfWeek == occurrence.scheduledLocalDate.dayOfWeek
         }
         val earliest = override?.earliestLocalTime ?: recurring?.earliestLocalTime
         val latest = override?.latestLocalTime ?: recurring?.latestLocalTime
@@ -186,28 +252,39 @@ fun detectCalendarConflicts(
         if (requiredLocation != null && occurrence.trainingLocationId != requiredLocation) {
             add(CalendarConflict(occurrence.id, CalendarConflictType.LOCATION_REQUIRED, "calendar_location_required"))
         }
-        val requiredEquipment = occurrence.planDayId?.let(requiredEquipmentByPlanDay::get).orEmpty()
+        val requiredEquipment = occurrence.requiredEquipmentSnapshot
             .filterNotTo(mutableSetOf()) { it == at.fitnessplatform.core.model.EquipmentDefinitions.NONE }
-        val availableEquipment = occurrence.trainingLocationId?.let(equipmentByLocation::get)
-        if (requiredEquipment.isNotEmpty() && availableEquipment != null && !availableEquipment.containsAll(requiredEquipment)) {
+        val locationId = occurrence.trainingLocationId
+        if (requiredEquipment.isNotEmpty() && locationId == null) {
+            add(CalendarConflict(occurrence.id, CalendarConflictType.LOCATION_REQUIRED, "calendar_location_required"))
+        } else if (
+            requiredEquipment.isNotEmpty() &&
+            !equipmentByLocation[locationId].orEmpty().containsAll(requiredEquipment)
+        ) {
             add(CalendarConflict(occurrence.id, CalendarConflictType.MISSING_EQUIPMENT, "calendar_missing_equipment"))
         }
-        if (occurrence.planDayId in unavailablePlanDays) {
+        if (occurrence.hasUnavailableExerciseSnapshot) {
             add(CalendarConflict(occurrence.id, CalendarConflictType.UNAVAILABLE_EXERCISE, "calendar_unavailable_exercise"))
         }
+        if (occurrence.toInstantInterval() == null && occurrence.scheduledLocalStartTime != null) {
+            add(CalendarConflict(occurrence.id, CalendarConflictType.INVALID_LOCAL_TIME, "calendar_invalid_local_time"))
+        }
     }
-    planningRows.groupBy { it.scheduledLocalDate }.values.forEach { sameDay ->
-        sameDay.filter { it.scheduledLocalStartTime != null }
-            .sortedBy { it.scheduledLocalStartTime }
-            .zipWithNext()
-            .forEach { (first, second) ->
-                val end = first.scheduledLocalStartTime!!.plusMinutes(first.plannedDurationMinutes.toLong())
-                if (end > second.scheduledLocalStartTime) {
-                    add(CalendarConflict(second.id, CalendarConflictType.OVERLAP, "calendar_overlap"))
-                }
+    val intervals = planningRows.mapNotNull { occurrence ->
+        occurrence.toInstantInterval()?.let { occurrence to it }
+    }
+    intervals.forEachIndexed { index, (firstOccurrence, first) ->
+        intervals.drop(index + 1).forEach { (secondOccurrence, second) ->
+            if (
+                firstOccurrence.ownerProfileId == secondOccurrence.ownerProfileId &&
+                first.first < second.second && second.first < first.second
+            ) {
+                add(CalendarConflict(firstOccurrence.id, CalendarConflictType.OVERLAP, "calendar_overlap"))
+                add(CalendarConflict(secondOccurrence.id, CalendarConflictType.OVERLAP, "calendar_overlap"))
             }
+        }
     }
-}
+}.distinctBy { it.occurrenceId to it.type }
 
 private fun outsideWindow(
     occurrence: ScheduledWorkoutOccurrence,
@@ -215,8 +292,24 @@ private fun outsideWindow(
     latest: LocalTime?,
 ): Boolean {
     val start = occurrence.scheduledLocalStartTime ?: return false
-    val end = start.plusMinutes(occurrence.plannedDurationMinutes.toLong())
-    return earliest?.let { start < it } == true || latest?.let { end > it } == true
+    val startDateTime = occurrence.scheduledLocalDate.atTime(start)
+    val endDateTime = startDateTime.plusMinutes(occurrence.plannedDurationMinutes.toLong())
+    return earliest?.let { startDateTime < occurrence.scheduledLocalDate.atTime(it) } == true ||
+        latest?.let { endDateTime > occurrence.scheduledLocalDate.atTime(it) } == true
+}
+
+/** DST gaps are invalid; overlaps deterministically use the earlier valid offset. */
+private fun ScheduledWorkoutOccurrence.toInstantInterval(): Pair<java.time.Instant, java.time.Instant>? {
+    val time = scheduledLocalStartTime
+    val zone = ZoneId.of(timeZoneId)
+    val local = time?.let { LocalDateTime.of(scheduledLocalDate, it) }
+    val offset = local?.let(zone.rules::getValidOffsets)?.firstOrNull()
+    return if (local == null || offset == null) {
+        null
+    } else {
+        val start = ZonedDateTime.ofLocal(local, zone, offset).toInstant()
+        start to start.plusSeconds(plannedDurationMinutes * 60L)
+    }
 }
 
 class MaterializeScheduleUseCase(private val repository: TrainingCalendarRepository) {
@@ -225,6 +318,15 @@ class MaterializeScheduleUseCase(private val repository: TrainingCalendarReposit
         val saved = repository.saveSchedule(schedule)
         return repository.materialize(saved.id, saved.startDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1))
     }
+}
+
+class EnsureCalendarHorizonUseCase(private val repository: TrainingCalendarRepository) {
+    suspend operator fun invoke(scheduleId: String, today: LocalDate): List<ScheduledWorkoutOccurrence> =
+        repository.ensureHorizon(
+            scheduleId = scheduleId,
+            from = today,
+            through = today.plusDays(MATERIALIZATION_HORIZON_DAYS - 1),
+        )
 }
 
 class ReplaceFutureScheduleUseCase(private val repository: TrainingCalendarRepository) {
@@ -284,25 +386,13 @@ class DetectCalendarConflictsUseCase {
         occurrences: List<ScheduledWorkoutOccurrence>,
         availability: List<AvailabilityRule>,
         overrides: List<ScheduleOverride>,
-        plan: TrainingPlan? = null,
         locations: List<at.fitnessplatform.core.model.TrainingLocation> = emptyList(),
     ): List<CalendarConflict> {
-        val requirements = plan?.weeks.orEmpty().flatMap { it.days }.associate { day ->
-            day.id to day.blocks.flatMap { it.exercises }
-                .flatMapTo(mutableSetOf()) { it.reference.snapshot.equipment }
-        }
-        val unavailableDays = plan?.weeks.orEmpty().flatMap { it.days }.filter { day ->
-            day.blocks.flatMap { it.exercises }.any {
-                it.reference.resolutionStatus != at.fitnessplatform.core.model.ExerciseResolutionStatus.RESOLVED
-            }
-        }.mapTo(mutableSetOf()) { it.id }
         return detectCalendarConflicts(
             occurrences,
             availability,
             overrides,
-            requirements,
             locations.associate { it.id to it.availableEquipment },
-            unavailableDays,
         )
     }
 }
@@ -314,6 +404,56 @@ data class ScheduleRuleDraft(
     val durationMinutes: Int,
     val locationId: String?,
 )
+
+data class ScheduleSetupPreview(
+    val startDate: LocalDate,
+    val timeZoneId: String,
+    val drafts: List<ScheduleRuleDraft>,
+    val occurrences: List<ScheduledWorkoutOccurrence>,
+    val conflicts: List<CalendarConflict>,
+)
+
+class PreviewPlanScheduleUseCase(private val clock: Clock) {
+    operator fun invoke(
+        plan: TrainingPlan,
+        startDate: LocalDate,
+        timeZoneId: String,
+        drafts: List<ScheduleRuleDraft>,
+        availability: List<AvailabilityRule>,
+        overrides: List<ScheduleOverride>,
+        locations: List<at.fitnessplatform.core.model.TrainingLocation>,
+    ): ScheduleSetupPreview {
+        val schedule = buildPlanSchedule(
+            plan = plan,
+            startDate = startDate,
+            timeZoneId = timeZoneId,
+            drafts = drafts,
+            scheduleId = "schedule-preview",
+            nowEpochMs = clock.nowEpochMs(),
+            ruleId = { index -> "schedule-preview-rule-$index" },
+        )
+        val occurrences = materializeScheduleRange(
+            schedule = schedule,
+            plan = plan,
+            from = startDate,
+            through = startDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1),
+            nowEpochMs = clock.nowEpochMs(),
+            idFor = { ruleId, date -> "schedule-preview-occurrence-$ruleId-$date" },
+        )
+        return ScheduleSetupPreview(
+            startDate = startDate,
+            timeZoneId = timeZoneId,
+            drafts = drafts,
+            occurrences = occurrences,
+            conflicts = detectCalendarConflicts(
+                occurrences,
+                availability,
+                overrides,
+                locations.associate { it.id to it.availableEquipment },
+            ),
+        )
+    }
+}
 
 class CreatePlanScheduleUseCase(
     private val repository: TrainingCalendarRepository,
@@ -328,45 +468,70 @@ class CreatePlanScheduleUseCase(
     ): List<ScheduledWorkoutOccurrence> {
         val scheduleId = ids.newUuid()
         val now = clock.nowEpochMs()
-        val schedule = PlanSchedule(
-            id = scheduleId,
-            ownerProfileId = plan.ownerProfileId,
-            planId = plan.id,
+        val schedule = buildPlanSchedule(
+            plan = plan,
             startDate = startDate,
             timeZoneId = timeZoneId,
-            isActive = true,
-            createdAtEpochMs = now,
-            updatedAtEpochMs = now,
-            rules = drafts.mapIndexed { index, draft ->
-                PlanDayScheduleRule(
-                    id = ids.newUuid(),
-                    scheduleId = scheduleId,
-                    planDayId = draft.planDayId,
-                    dayOfWeek = draft.dayOfWeek,
-                    defaultStartTime = draft.startTime,
-                    defaultDurationMinutes = draft.durationMinutes,
-                    preferredLocationId = draft.locationId,
-                    position = index,
-                )
-            },
+            drafts = drafts,
+            scheduleId = scheduleId,
+            nowEpochMs = now,
+            ruleId = { ids.newUuid() },
         )
-        validateSchedule(schedule)
         val saved = repository.saveSchedule(schedule)
         return repository.materialize(saved.id, startDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1))
     }
 }
 
+private fun buildPlanSchedule(
+    plan: TrainingPlan,
+    startDate: LocalDate,
+    timeZoneId: String,
+    drafts: List<ScheduleRuleDraft>,
+    scheduleId: String,
+    nowEpochMs: Long,
+    ruleId: (Int) -> String,
+): PlanSchedule {
+    val planDayIds = plan.weeks.flatMap { it.days }.mapTo(linkedSetOf()) { it.id }
+    ensureCalendar(planDayIds.isNotEmpty()) { "A schedule requires at least one plan day." }
+    ensureCalendar(drafts.map { it.planDayId }.toSet() == planDayIds) {
+        "Schedule setup must explicitly configure every plan day exactly once."
+    }
+    ensureCalendar(drafts.size == planDayIds.size) { "Schedule setup contains duplicate plan-day rules." }
+    return PlanSchedule(
+        id = scheduleId,
+        ownerProfileId = plan.ownerProfileId,
+        planId = plan.id,
+        startDate = startDate,
+        timeZoneId = timeZoneId,
+        isActive = true,
+        createdAtEpochMs = nowEpochMs,
+        updatedAtEpochMs = nowEpochMs,
+        rules = drafts.mapIndexed { index, draft ->
+            PlanDayScheduleRule(
+                id = ruleId(index),
+                scheduleId = scheduleId,
+                planDayId = draft.planDayId,
+                dayOfWeek = draft.dayOfWeek,
+                defaultStartTime = draft.startTime,
+                defaultDurationMinutes = draft.durationMinutes,
+                preferredLocationId = draft.locationId,
+                position = index,
+            )
+        },
+    ).also(::validateSchedule)
+}
+
 class UpdateScheduleRuleUseCase(
     private val repository: TrainingCalendarRepository,
 ) {
-    suspend operator fun invoke(
+    suspend fun preview(
         schedule: PlanSchedule,
         planDayId: String,
         effectiveDate: LocalDate,
         time: LocalTime?,
         durationMinutes: Int,
         locationId: String?,
-    ): List<ScheduledWorkoutOccurrence> {
+    ): FutureScheduleChangePreview {
         val updated = schedule.copy(
             rules = schedule.rules.map { rule ->
                 if (rule.planDayId != planDayId) rule else rule.copy(
@@ -378,11 +543,32 @@ class UpdateScheduleRuleUseCase(
             },
         )
         validateSchedule(updated)
-        val saved = repository.saveSchedule(updated)
         val through = effectiveDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1)
-        return repository.replaceFuturePlanned(saved.id, effectiveDate, through)
+        return FutureScheduleChangePreview(
+            updatedSchedule = updated,
+            effectiveDate = effectiveDate,
+            through = through,
+            affectedOccurrenceIds = repository.generatedOccurrences(
+                schedule.id,
+                effectiveDate,
+                through,
+            ).map { it.id },
+        )
+    }
+
+    suspend fun confirm(preview: FutureScheduleChangePreview): List<ScheduledWorkoutOccurrence> {
+        validateSchedule(preview.updatedSchedule)
+        val saved = repository.saveSchedule(preview.updatedSchedule)
+        return repository.replaceFuturePlanned(saved.id, preview.effectiveDate, preview.through)
     }
 }
+
+data class FutureScheduleChangePreview(
+    val updatedSchedule: PlanSchedule,
+    val effectiveDate: LocalDate,
+    val through: LocalDate,
+    val affectedOccurrenceIds: List<String>,
+)
 
 private fun validZone(value: String, label: String) {
     runCatching { ZoneId.of(value) }

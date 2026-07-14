@@ -68,9 +68,18 @@ object TrainingPlanUseCaseModule {
     ) = AdaptTrainingPlanCopyUseCase(repository, alternatives)
     @Provides fun editTrainingPlan(repository: TrainingPlanRepository, ids: at.fitnessplatform.core.model.UuidProvider) =
         EditTrainingPlanUseCase(repository, ids)
-    @Provides fun setActiveTrainingPlan(repository: TrainingPlanRepository) = SetActiveTrainingPlanUseCase(repository)
-    @Provides fun archiveTrainingPlan(repository: TrainingPlanRepository) = ArchiveTrainingPlanUseCase(repository)
-    @Provides fun deleteTrainingPlan(repository: TrainingPlanRepository) = DeleteTrainingPlanUseCase(repository)
+    @Provides fun setActiveTrainingPlan(
+        repository: TrainingPlanRepository,
+        calendarRepository: TrainingCalendarRepository,
+    ) = SetActiveTrainingPlanUseCase(repository, calendarRepository)
+    @Provides fun archiveTrainingPlan(
+        repository: TrainingPlanRepository,
+        calendarRepository: TrainingCalendarRepository,
+    ) = ArchiveTrainingPlanUseCase(repository, calendarRepository)
+    @Provides fun deleteTrainingPlan(
+        repository: TrainingPlanRepository,
+        calendarRepository: TrainingCalendarRepository,
+    ) = DeleteTrainingPlanUseCase(repository, calendarRepository)
     @Provides fun seedStarterTrainingPlans(repository: TrainingPlanRepository) = SeedStarterTrainingPlansUseCase(repository)
 }
 
@@ -78,10 +87,13 @@ object TrainingPlanUseCaseModule {
 @InstallIn(SingletonComponent::class)
 object TrainingCalendarUseCaseModule {
     @Provides fun materializeSchedule(repository: TrainingCalendarRepository) = MaterializeScheduleUseCase(repository)
+    @Provides fun ensureCalendarHorizon(repository: TrainingCalendarRepository) = EnsureCalendarHorizonUseCase(repository)
     @Provides fun replaceFutureSchedule(repository: TrainingCalendarRepository) = ReplaceFutureScheduleUseCase(repository)
     @Provides fun moveOccurrence(repository: TrainingCalendarRepository) = MoveOccurrenceUseCase(repository)
     @Provides fun changeOccurrenceStatus(repository: TrainingCalendarRepository) = ChangeOccurrenceStatusUseCase(repository)
     @Provides fun detectCalendarConflicts() = DetectCalendarConflictsUseCase()
+    @Provides fun previewPlanSchedule(clock: at.fitnessplatform.core.model.Clock) =
+        at.fitnessplatform.domain.PreviewPlanScheduleUseCase(clock)
     @Provides fun createPlanSchedule(
         repository: TrainingCalendarRepository,
         ids: at.fitnessplatform.core.model.UuidProvider,

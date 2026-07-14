@@ -35,6 +35,7 @@ import at.fitnessplatform.domain.SeedStarterTrainingPlansUseCase
 import at.fitnessplatform.domain.SetActiveTrainingPlanUseCase
 import at.fitnessplatform.domain.TrainingLocationRepository
 import at.fitnessplatform.domain.PlanStructureKind
+import at.fitnessplatform.domain.PlanScheduleActivationDecision
 import at.fitnessplatform.domain.isCompatibleWith
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -59,6 +60,7 @@ data class TrainingPlansUiState(
     val selectedPlanId: String? = null,
     val choices: List<PlanExerciseChoice> = emptyList(),
     val activeLocation: TrainingLocation? = null,
+    val pendingActivationPlanId: String? = null,
     val saving: Boolean = false,
     val error: String? = null,
 ) {
@@ -106,6 +108,7 @@ class TrainingPlansViewModel @Inject constructor(
                     selectedPlanId = state.value.selectedPlanId?.takeIf { id -> plans.any { it.id == id } },
                     choices = choices(catalogRows, privateRows, location),
                     activeLocation = location,
+                    pendingActivationPlanId = state.value.pendingActivationPlanId,
                     saving = state.value.saving,
                     error = state.value.error,
                 )
@@ -222,7 +225,33 @@ class TrainingPlansViewModel @Inject constructor(
     }
 
     fun copy(id: String) = operation { state.update { it.copy(selectedPlanId = copyPlan(id).id) } }
-    fun activate(id: String) = operation { activatePlan(id) }
+    fun activate(id: String) = viewModelScope.launch {
+        if (state.value.saving) return@launch
+        state.update { it.copy(saving = true, error = null) }
+        runCatching { activatePlan(id) }
+            .onFailure { error ->
+                state.update {
+                    if (error.message == "PLAN_SCHEDULE_DECISION_REQUIRED") {
+                        it.copy(pendingActivationPlanId = id)
+                    } else {
+                        it.copy(error = error.message ?: "PLAN_OPERATION_FAILED")
+                    }
+                }
+            }
+        state.update { it.copy(saving = false) }
+    }
+
+    fun resolveActivation(decision: PlanScheduleActivationDecision) {
+        val id = state.value.pendingActivationPlanId ?: return
+        if (decision == PlanScheduleActivationDecision.CANCEL) {
+            state.update { it.copy(pendingActivationPlanId = null) }
+            return
+        }
+        operation {
+            activatePlan(id, decision)
+            state.update { it.copy(pendingActivationPlanId = null) }
+        }
+    }
     fun archive(id: String, archived: Boolean) = operation { archivePlan(id, archived) }
     fun delete(id: String) = operation { deletePlan(id); state.update { it.copy(selectedPlanId = null) } }
 

@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import at.fitnessplatform.core.database.*
 import at.fitnessplatform.core.model.*
+import at.fitnessplatform.domain.MoveOccurrenceUseCase
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -75,6 +76,49 @@ class RoomTrainingCalendarRepositoryTest {
         assertEquals(null, copied.scheduleId)
         assertEquals(ScheduledWorkoutStatus.PLANNED, copied.status)
         assertTrue(repository.observeOccurrences(LocalDate.of(2026, 7, 13), LocalDate.of(2026, 7, 20)).first().size > replaced.size)
+    }
+
+    @Test fun rollingHorizonRecoversGapsAndPreservesMovedCopiedAdHocAndHistory() = runTest {
+        val schedule = repository.saveSchedule(schedule())
+        val from = LocalDate.of(2026, 7, 13)
+        val initial = repository.ensureHorizon(schedule.id, from, from.plusDays(7))
+        val movedSource = initial.first()
+        val moved = MoveOccurrenceUseCase(repository)(
+            movedSource,
+            movedSource.scheduledLocalDate.plusDays(1),
+            movedSource.scheduledLocalStartTime,
+            movedSource.plannedDurationMinutes,
+            null,
+        )
+        val copied = repository.copyOccurrence(initial.last().id)
+        val adHoc = repository.saveOccurrence(
+            ScheduledWorkoutOccurrence(
+                id = "ad-hoc",
+                ownerProfileId = "profile",
+                titleSnapshot = "Ad hoc",
+                scheduledLocalDate = from.plusDays(2),
+                timeZoneId = "Europe/Berlin",
+                plannedDurationMinutes = 30,
+                createdAtEpochMs = 1,
+                updatedAtEpochMs = 1,
+            ),
+        )
+        database.calendarDao().changeStatus(initial[1].id, "profile", ScheduledWorkoutStatus.COMPLETED.name, 200)
+
+        val repeated = repository.ensureHorizon(schedule.id, from, from.plusDays(7))
+        assertEquals(6, repeated.size)
+        database.openHelper.writableDatabase.execSQL(
+            "DELETE FROM scheduled_workout_occurrences WHERE id = '${initial[2].id}'",
+        )
+        val recovered = repository.ensureHorizon(schedule.id, from, from.plusDays(14))
+        assertTrue(recovered.any { it.id == initial[2].id })
+
+        val replaced = repository.replaceFuturePlanned(schedule.id, from, from.plusDays(14))
+        assertTrue(replaced.any { it.id == moved.id && it.origin == OccurrenceOrigin.MOVED_ONCE })
+        assertTrue(replaced.any { it.id == copied.id && it.origin == OccurrenceOrigin.COPIED })
+        assertTrue(replaced.any { it.id == adHoc.id && it.origin == OccurrenceOrigin.AD_HOC })
+        assertTrue(replaced.any { it.id == initial[1].id && it.status == ScheduledWorkoutStatus.COMPLETED })
+        assertEquals(replaced.map { it.id }.toSet().size, replaced.size)
     }
 
     private fun schedule() = PlanSchedule(

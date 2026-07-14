@@ -65,6 +65,7 @@ import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.TrainingPlan
 import at.fitnessplatform.core.model.TrainingPlanGoal
 import at.fitnessplatform.domain.PlanStructureKind
+import at.fitnessplatform.domain.PlanScheduleActivationDecision
 
 @Composable
 fun TrainingPlansRoute(
@@ -93,6 +94,7 @@ fun TrainingPlansRoute(
         onCopy = viewModel::copy,
         onAdaptCopy = viewModel::adaptCopy,
         onActivate = viewModel::activate,
+        onResolveActivation = viewModel::resolveActivation,
         onArchive = viewModel::archive,
         onDelete = viewModel::delete,
         onClearError = viewModel::clearError,
@@ -122,6 +124,7 @@ internal fun TrainingPlansScreen(
     onCopy: (String) -> Unit,
     onAdaptCopy: (String) -> Unit,
     onActivate: (String) -> Unit,
+    onResolveActivation: (PlanScheduleActivationDecision) -> Unit,
     onArchive: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
     onClearError: () -> Unit,
@@ -215,6 +218,41 @@ internal fun TrainingPlansScreen(
             },
             dismissButton = {
                 TextButton(onClick = { adapting = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+    state.pendingActivationPlanId?.let {
+        AlertDialog(
+            onDismissRequest = { onResolveActivation(PlanScheduleActivationDecision.CANCEL) },
+            title = { Text(stringResource(R.string.plans_schedule_decision_title)) },
+            text = { Text(stringResource(R.string.plans_schedule_decision_message)) },
+            confirmButton = {
+                TextButton(
+                    enabled = !state.saving,
+                    onClick = {
+                        onResolveActivation(PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP)
+                    },
+                ) {
+                    Text(stringResource(R.string.plans_schedule_start_new))
+                }
+            },
+            dismissButton = {
+                Column {
+                    TextButton(
+                        enabled = !state.saving,
+                        onClick = {
+                            onResolveActivation(PlanScheduleActivationDecision.KEEP_CURRENT_SCHEDULE)
+                        },
+                    ) {
+                        Text(stringResource(R.string.plans_schedule_keep_current))
+                    }
+                    TextButton(
+                        enabled = !state.saving,
+                        onClick = { onResolveActivation(PlanScheduleActivationDecision.CANCEL) },
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
             },
         )
     }
@@ -787,6 +825,7 @@ private fun TrainingPlansPreview() = MomentumTheme {
         onCopy = {},
         onAdaptCopy = {},
         onActivate = {},
+        onResolveActivation = {},
         onArchive = { _, _ -> },
         onDelete = {},
         onClearError = {},

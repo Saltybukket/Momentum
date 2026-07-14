@@ -265,6 +265,10 @@
     <string name="plans_archived">Archived</string>
     <string name="plans_available">Available offline</string>
     <string name="plans_activate">Set active</string>
+    <string name="plans_schedule_decision_title">Choose what happens to the schedule</string>
+    <string name="plans_schedule_decision_message">This plan differs from the plan used by your active schedule. Keep that schedule, or deactivate it and set up a new schedule from the Calendar.</string>
+    <string name="plans_schedule_keep_current">Keep current schedule</string>
+    <string name="plans_schedule_start_new">Start new schedule setup</string>
     <string name="plans_copy">Copy</string>
     <string name="plans_adapt_copy">Adapt a copy to location</string>
     <string name="plans_adapt_confirm">Create a separate copy and apply available equipment-compatible alternatives? The original plan will not change.</string>
@@ -346,8 +350,12 @@
     <string name="calendar_only_selected_date">Only the selected date</string>
     <string name="calendar_empty_day">No workouts on this day</string>
     <string name="calendar_empty_day_message">Choose another day or add a one-off workout.</string>
+    <string name="calendar_next_workout">Next workout</string>
     <string name="calendar_time_flexible">Flexible start time</string>
-    <string name="calendar_duration">%1$d minutes</string>
+    <plurals name="calendar_duration_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
     <string name="calendar_move">Move or edit</string>
     <string name="calendar_copy">Copy</string>
     <string name="calendar_skip">Skip</string>
@@ -356,7 +364,10 @@
     <string name="calendar_date">Date (YYYY-MM-DD)</string>
     <string name="calendar_time">Local time (HH:MM, optional)</string>
     <string name="calendar_duration_label">Duration in minutes</string>
-    <string name="calendar_location_optional">Location ID (optional)</string>
+    <string name="calendar_location_optional">Training location</string>
+    <string name="calendar_location_name_and_type">%1$s · %2$s</string>
+    <string name="calendar_no_location">No location</string>
+    <string name="calendar_location_unavailable">Previous location unavailable</string>
     <string name="calendar_only_this">Only this workout</string>
     <string name="calendar_this_and_future">This and future workouts</string>
     <string name="calendar_future_confirmation">Changing future workouts replaces only planned/conflicted occurrences in the rolling horizon. Running, completed and historical workouts stay unchanged.</string>
@@ -371,4 +382,45 @@
     <string name="calendar_missing_equipment">Required equipment is missing</string>
     <string name="calendar_overlap">Overlaps another workout</string>
     <string name="calendar_unavailable_exercise">Contains an unavailable exercise</string>
+    <string name="calendar_invalid_local_time">Time does not exist in this time zone</string>
+    <string name="calendar_previous">Previous</string>
+    <string name="calendar_next">Next</string>
+    <string name="calendar_week_of">Week of %1$s</string>
+    <string name="calendar_next_fifty_six_days">Next 56 days</string>
+    <string name="calendar_availability_summary">Availability for this day</string>
+    <string name="calendar_availability_overview">Availability and date overrides</string>
+    <string name="calendar_availability_rule">%1$s: %2$s – %3$s</string>
+    <string name="calendar_availability_override">%1$s: %2$s</string>
+    <string name="calendar_no_availability_rules">No recurring availability rules are configured.</string>
+    <string name="calendar_recurring_window">Recurring window: %1$s – %2$s</string>
+    <string name="calendar_selected_date_unavailable">This date is marked unavailable</string>
+    <string name="calendar_selected_date_override">This date has a custom availability override</string>
+    <string name="calendar_reset">Reset</string>
+    <string name="calendar_schedule_setup">Set up training schedule</string>
+    <string name="calendar_start_date">Start date (YYYY-MM-DD)</string>
+    <string name="calendar_time_zone">IANA time zone</string>
+    <string name="calendar_time_optional">Start time (HH:MM, optional)</string>
+    <string name="calendar_setup_review_note">Review every proposed day, time, duration and named location. The next step previews conflicts before anything is saved.</string>
+    <string name="calendar_confirm_schedule">Preview schedule</string>
+    <string name="calendar_schedule_preview_title">Schedule preview</string>
+    <string name="calendar_materialize_schedule">Create schedule</string>
+    <string name="calendar_conflict_count">%1$s: %2$d</string>
+    <string name="calendar_confirm_future_change">Apply this change to future workouts?</string>
+    <string name="calendar_apply_change">Apply change</string>
+    <plurals name="calendar_setup_sessions">
+        <item quantity="one">Review %1$d recurring plan day before saving.</item>
+        <item quantity="other">Review all %1$d recurring plan days before saving.</item>
+    </plurals>
+    <plurals name="calendar_future_occurrences">
+        <item quantity="one">This replaces %1$d unchanged generated workout. Moved, copied and completed workouts remain untouched.</item>
+        <item quantity="other">This replaces %1$d unchanged generated workouts. Moved, copied and completed workouts remain untouched.</item>
+    </plurals>
+    <plurals name="calendar_preview_occurrences">
+        <item quantity="one">%1$d workout will be created in the rolling horizon.</item>
+        <item quantity="other">%1$d workouts will be created in the rolling horizon.</item>
+    </plurals>
+    <plurals name="calendar_preview_conflicts">
+        <item quantity="one">%1$d conflict needs your attention.</item>
+        <item quantity="other">%1$d conflicts need your attention.</item>
+    </plurals>
 </resources>

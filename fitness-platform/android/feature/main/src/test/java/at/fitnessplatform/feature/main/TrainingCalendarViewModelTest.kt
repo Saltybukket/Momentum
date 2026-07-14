@@ -5,6 +5,7 @@ import at.fitnessplatform.core.testing.MainDispatcherRule
 import at.fitnessplatform.domain.*
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,8 @@ class TrainingCalendarViewModelTest {
             calendar,
             ObserveActiveTrainingPlanUseCase(plan),
             CreatePlanScheduleUseCase(calendar, ids, clock),
+            PreviewPlanScheduleUseCase(clock),
+            EnsureCalendarHorizonUseCase(calendar),
             MoveOccurrenceUseCase(calendar),
             UpdateScheduleRuleUseCase(calendar),
             ChangeOccurrenceStatusUseCase(calendar),
@@ -50,6 +53,25 @@ class TrainingCalendarViewModelTest {
         assertEquals(CalendarDisplayMode.AGENDA, viewModel.state.value.mode)
         assertEquals(ScheduledWorkoutStatus.SKIPPED, calendar.rows.value.single().status)
         assertFalse(viewModel.state.value.saving)
+    }
+
+    @Test fun `calendar ranges and real month cells handle navigation and month lengths`() {
+        assertEquals(
+            LocalDate.of(2024, 2, 1) to LocalDate.of(2024, 2, 29),
+            calendarQueryRange(CalendarDisplayMode.MONTH, LocalDate.of(2024, 2, 10)),
+        )
+        assertEquals(29, calendarMonthCells(YearMonth.of(2024, 2)).filterNotNull().size)
+        assertEquals(28, calendarMonthCells(YearMonth.of(2025, 2)).filterNotNull().size)
+        assertEquals(30, calendarMonthCells(YearMonth.of(2026, 4)).filterNotNull().size)
+        assertEquals(31, calendarMonthCells(YearMonth.of(2026, 7)).filterNotNull().size)
+        assertEquals(
+            LocalDate.of(2026, 7, 13) to LocalDate.of(2026, 7, 19),
+            calendarQueryRange(CalendarDisplayMode.WEEK, LocalDate.of(2026, 7, 15)),
+        )
+        assertEquals(
+            LocalDate.of(2026, 7, 15) to LocalDate.of(2026, 9, 8),
+            calendarQueryRange(CalendarDisplayMode.AGENDA, LocalDate.of(2026, 7, 15)),
+        )
     }
 }
 
@@ -86,6 +108,8 @@ private class CalendarStateRepository : TrainingCalendarRepository {
     override fun observeOverrides(): Flow<List<ScheduleOverride>> = MutableStateFlow(emptyList())
     override suspend fun saveSchedule(schedule: PlanSchedule) = schedule
     override suspend fun materialize(scheduleId: String, through: LocalDate) = rows.value
+    override suspend fun ensureHorizon(scheduleId: String, from: LocalDate, through: LocalDate) = rows.value
+    override suspend fun generatedOccurrences(scheduleId: String, from: LocalDate, through: LocalDate) = rows.value
     override suspend fun replaceFuturePlanned(scheduleId: String, from: LocalDate, through: LocalDate) = rows.value
     override suspend fun saveOccurrence(occurrence: ScheduledWorkoutOccurrence) = occurrence.also { row ->
         rows.value = rows.value.filterNot { it.id == row.id } + row
@@ -96,6 +120,8 @@ private class CalendarStateRepository : TrainingCalendarRepository {
     }
     override suspend fun saveAvailability(rule: AvailabilityRule) = Unit
     override suspend fun saveOverride(override: ScheduleOverride) = Unit
+    override suspend fun deleteAvailability(id: String) = Unit
+    override suspend fun deleteOverride(id: String) = Unit
 }
 
 private class CalendarPlanRepository : TrainingPlanRepository {

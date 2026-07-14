@@ -70,6 +70,20 @@ interface CalendarDao {
         to: String,
     ): List<ScheduledWorkoutOccurrenceEntity>
 
+    @Query(
+        "SELECT * FROM scheduled_workout_occurrences WHERE ownerProfileId = :ownerProfileId " +
+            "AND scheduleId = :scheduleId AND scheduledLocalDate BETWEEN :from AND :to " +
+            "AND deletedAtEpochMs IS NULL AND status IN ('PLANNED', 'CONFLICT') " +
+            "AND originType = 'GENERATED' AND isDetachedOverride = 0 " +
+            "ORDER BY scheduledLocalDate, scheduledLocalStartTime, id",
+    )
+    suspend fun getGeneratedOccurrences(
+        ownerProfileId: String,
+        scheduleId: String,
+        from: String,
+        to: String,
+    ): List<ScheduledWorkoutOccurrenceEntity>
+
     @Query("SELECT * FROM availability_rules WHERE ownerProfileId = :ownerProfileId ORDER BY dayOfWeek")
     fun observeAvailability(ownerProfileId: String): Flow<List<AvailabilityRuleEntity>>
 
@@ -122,6 +136,12 @@ interface CalendarDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertOverride(override: ScheduleOverrideEntity)
+
+    @Query("DELETE FROM availability_rules WHERE id = :id AND ownerProfileId = :ownerProfileId")
+    suspend fun deleteAvailability(id: String, ownerProfileId: String): Int
+
+    @Query("DELETE FROM schedule_overrides WHERE id = :id AND ownerProfileId = :ownerProfileId")
+    suspend fun deleteOverride(id: String, ownerProfileId: String): Int
 
     @Transaction
     suspend fun saveSchedule(schedule: PlanScheduleEntity, rules: List<PlanDayScheduleRuleEntity>) {
