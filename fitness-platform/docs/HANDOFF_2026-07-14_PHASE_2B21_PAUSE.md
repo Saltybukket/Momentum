@@ -22,7 +22,7 @@ a3d1aa786acbc03c67bd41f660a0d9fa881dad4e feat(android): productize calendar sche
 80cce90e35ed1ba8119791dd091e4a6a3db98238 fix(android): preserve calendar integrity across plan changes
 ```
 
-Remote branch is current through `1b76d67`.
+The implementation branch is current through `1b76d67`; this handoff is committed immediately after that implementation checkpoint.
 
 CI evidence:
 
