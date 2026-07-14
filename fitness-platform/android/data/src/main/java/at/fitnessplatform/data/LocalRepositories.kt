@@ -272,8 +272,7 @@ class RoomTrainingPlanRepository @Inject constructor(
             )
             validateTrainingPlan(updated)
             check(dao.updatePlan(updated.toEntity()) == 1)
-            dao.deletePlanContents(updated.id)
-            insertContents(updated)
+            updateContentsDifferential(current, updated)
             updated
         }
     }
@@ -404,6 +403,59 @@ class RoomTrainingPlanRepository @Inject constructor(
         if (rows.blocks.isNotEmpty()) dao.insertBlocks(rows.blocks)
         if (rows.exercises.isNotEmpty()) dao.insertExercises(rows.exercises)
         if (rows.sets.isNotEmpty()) dao.insertSets(rows.sets)
+    }
+
+    private suspend fun updateContentsDifferential(current: TrainingPlan, updated: TrainingPlan) {
+        val currentRows = current.toRows()
+        val updatedRows = updated.toRows()
+        val removedDayIds = currentRows.days.mapTo(mutableSetOf()) { it.id } -
+            updatedRows.days.mapTo(mutableSetOf()) { it.id }
+        val removedBlockIds = currentRows.blocks.mapTo(mutableSetOf()) { it.id } -
+            updatedRows.blocks.mapTo(mutableSetOf()) { it.id }
+        val removedExerciseIds = currentRows.exercises.mapTo(mutableSetOf()) { it.id } -
+            updatedRows.exercises.mapTo(mutableSetOf()) { it.id }
+        val blockDayIds = currentRows.blocks.associate { it.id to it.dayId }
+        val affectedDayIds = buildSet {
+            addAll(removedDayIds)
+            addAll(currentRows.blocks.filter { it.id in removedBlockIds }.map { it.dayId })
+            addAll(
+                currentRows.exercises
+                    .filter { it.id in removedExerciseIds }
+                    .mapNotNull { blockDayIds[it.blockId] },
+            )
+        }
+        if (affectedDayIds.isNotEmpty()) {
+            val referenced = database.calendarDao().countRulesForPlanDays(affectedDayIds.toList()) > 0 ||
+                database.calendarDao().countOccurrencesForPlanDays(affectedDayIds.toList()) > 0
+            if (referenced) throw PlanRemovalDecisionRequiredException(affectedDayIds)
+        }
+
+        dao.reserveSetPositions(updated.id)
+        dao.reserveExercisePositions(updated.id)
+        dao.reserveBlockPositions(updated.id)
+        dao.reserveDayPositions(updated.id)
+        dao.reserveWeekPositions(updated.id)
+
+        if (updatedRows.weeks.isNotEmpty()) dao.upsertWeeks(updatedRows.weeks)
+        if (updatedRows.days.isNotEmpty()) dao.upsertDays(updatedRows.days)
+        if (updatedRows.blocks.isNotEmpty()) dao.upsertBlocks(updatedRows.blocks)
+        if (updatedRows.exercises.isNotEmpty()) dao.upsertExercises(updatedRows.exercises)
+        if (updatedRows.sets.isNotEmpty()) dao.upsertSets(updatedRows.sets)
+
+        deleteRemoved(currentRows.sets.map { it.id }, updatedRows.sets.map { it.id }, dao::deleteSets)
+        deleteRemoved(currentRows.exercises.map { it.id }, updatedRows.exercises.map { it.id }, dao::deleteExercises)
+        deleteRemoved(currentRows.blocks.map { it.id }, updatedRows.blocks.map { it.id }, dao::deleteBlocks)
+        deleteRemoved(currentRows.days.map { it.id }, updatedRows.days.map { it.id }, dao::deleteDays)
+        deleteRemoved(currentRows.weeks.map { it.id }, updatedRows.weeks.map { it.id }, dao::deleteWeeks)
+    }
+
+    private suspend fun deleteRemoved(
+        before: List<String>,
+        after: List<String>,
+        delete: suspend (List<String>) -> Unit,
+    ) {
+        val removed = before.toSet() - after.toSet()
+        if (removed.isNotEmpty()) delete(removed.toList())
     }
 
     private fun starterPlan(

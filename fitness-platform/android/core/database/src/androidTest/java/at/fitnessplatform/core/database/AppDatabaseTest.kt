@@ -16,6 +16,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -220,6 +221,80 @@ class AppDatabaseTest {
         migrated.query("SELECT COUNT(*) FROM plan_schedules").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals(0, cursor.getInt(0))
+        }
+        migrated.close()
+        context.deleteDatabase(migrationName)
+    }
+
+    @Test fun migrationEightToNinePreservesCalendarIdentityAndSnapshots() {
+        val migrationName = "calendar-integrity-migration.db"
+        val original = migrationHelper.createDatabase(migrationName, 8)
+        original.execSQL(
+            "INSERT INTO guest_profile VALUES " +
+                "('profile', 'Guest', 1, 'METRIC', 'COMPLETED', 'LOCAL_ONLY', NULL, NULL)",
+        )
+        original.execSQL(
+            """INSERT INTO training_plans VALUES (
+                'plan', 'profile', 'Strength', '', 'STRENGTH', 1, 'profile', 0, NULL,
+                1, 2, 7, NULL)""",
+        )
+        original.execSQL("INSERT INTO plan_weeks VALUES ('week', 'plan', 0, 'Week', 2)")
+        original.execSQL("INSERT INTO plan_days VALUES ('day', 'week', 0, 'Day', 0, 60, '')")
+        original.execSQL("INSERT INTO plan_blocks VALUES ('block', 'day', 0, 'MAIN', 'Main', NULL)")
+        original.execSQL(
+            "INSERT INTO plan_exercises VALUES ('exercise', 'block', 0, 'CATALOG', NULL, " +
+                "'demo', 'squat', 'catalog', 'Squat', 'REPS', '[\"barbell\",\"bench\"]', " +
+                "'legs', 'RESOLVED', 0, '')",
+        )
+        original.execSQL(
+            "INSERT INTO plan_schedules VALUES " +
+                "('schedule', 'profile', 'plan', '2026-07-13', 'Europe/Berlin', 1, " +
+                "'profile', 1, 1, 0)",
+        )
+        original.execSQL(
+            "INSERT INTO plan_day_schedule_rules VALUES " +
+                "('rule', 'schedule', 'day', 1, '18:00', 60, NULL, 0)",
+        )
+        original.execSQL(
+            """INSERT INTO scheduled_workout_occurrences (
+                id, ownerProfileId, scheduleId, planId, planDayId, titleSnapshot,
+                scheduledLocalDate, scheduledLocalStartTime, timeZoneId,
+                plannedDurationMinutes, status, notes, createdAtEpochMs,
+                updatedAtEpochMs, revision
+            ) VALUES (
+                'occurrence', 'profile', 'schedule', 'plan', 'day', 'Day',
+                '2026-07-13', '18:00', 'Europe/Berlin', 60, 'PLANNED', '', 1, 1, 0
+            )""",
+        )
+        original.close()
+
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            migrationName,
+            9,
+            true,
+            MIGRATION_8_9,
+        )
+        migrated.query(
+            """SELECT planDayId, planDayIdSnapshot, planRevisionSnapshot,
+                planWeekIndexSnapshot, requiredEquipmentSnapshotJson, originType,
+                isDetachedOverride FROM scheduled_workout_occurrences
+                WHERE id = 'occurrence'""",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("day", cursor.getString(0))
+            assertEquals("day", cursor.getString(1))
+            assertEquals(7, cursor.getInt(2))
+            assertEquals(2, cursor.getInt(3))
+            assertEquals("[\"barbell\",\"bench\"]", cursor.getString(4))
+            assertEquals("GENERATED", cursor.getString(5))
+            assertEquals(0, cursor.getInt(6))
+        }
+        assertThrows(android.database.sqlite.SQLiteConstraintException::class.java) {
+            migrated.execSQL("DELETE FROM plan_days WHERE id = 'day'")
+        }
+        migrated.query("SELECT planDayId FROM plan_day_schedule_rules WHERE id = 'rule'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("day", cursor.getString(0))
         }
         migrated.close()
         context.deleteDatabase(migrationName)

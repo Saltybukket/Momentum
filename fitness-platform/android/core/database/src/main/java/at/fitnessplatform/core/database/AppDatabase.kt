@@ -12,6 +12,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import org.json.JSONArray
 
 interface DatabaseStartupProbe {
     fun verifyStartup()
@@ -46,7 +47,7 @@ interface DatabaseStartupProbe {
         AvailabilityRuleEntity::class,
         ScheduleOverrideEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -361,6 +362,91 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `plan_day_schedule_rules` RENAME TO `plan_day_schedule_rules_room8`")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `plan_day_schedule_rules` (
+                `id` TEXT NOT NULL, `scheduleId` TEXT NOT NULL, `planDayId` TEXT NOT NULL,
+                `dayOfWeek` INTEGER NOT NULL, `defaultStartTime` TEXT,
+                `defaultDurationMinutes` INTEGER NOT NULL, `preferredLocationId` TEXT,
+                `position` INTEGER NOT NULL, PRIMARY KEY(`id`),
+                FOREIGN KEY(`scheduleId`) REFERENCES `plan_schedules`(`id`)
+                ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`planDayId`) REFERENCES `plan_days`(`id`)
+                ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(`preferredLocationId`) REFERENCES `training_locations`(`id`)
+                ON UPDATE NO ACTION ON DELETE SET NULL)""",
+        )
+        database.execSQL(
+            "INSERT INTO `plan_day_schedule_rules` SELECT * FROM `plan_day_schedule_rules_room8`",
+        )
+        database.execSQL("DROP TABLE `plan_day_schedule_rules_room8`")
+        database.execSQL("CREATE INDEX `index_plan_day_schedule_rules_scheduleId` ON `plan_day_schedule_rules` (`scheduleId`)")
+        database.execSQL("CREATE INDEX `index_plan_day_schedule_rules_planDayId` ON `plan_day_schedule_rules` (`planDayId`)")
+        database.execSQL("CREATE INDEX `index_plan_day_schedule_rules_preferredLocationId` ON `plan_day_schedule_rules` (`preferredLocationId`)")
+        database.execSQL("CREATE UNIQUE INDEX `index_plan_day_schedule_rules_scheduleId_planDayId` ON `plan_day_schedule_rules` (`scheduleId`, `planDayId`)")
+        database.execSQL("CREATE UNIQUE INDEX `index_plan_day_schedule_rules_scheduleId_position` ON `plan_day_schedule_rules` (`scheduleId`, `position`)")
+
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `planDayIdSnapshot` TEXT")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `planRevisionSnapshot` INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `planWeekIndexSnapshot` INTEGER")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `requiredEquipmentSnapshotJson` TEXT NOT NULL DEFAULT '[]'")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `hasUnavailableExerciseSnapshot` INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `originalScheduledStartTime` TEXT")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `originType` TEXT NOT NULL DEFAULT 'GENERATED'")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `isDetachedOverride` INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE `scheduled_workout_occurrences` ADD COLUMN `sourceOccurrenceId` TEXT")
+        database.execSQL(
+            "UPDATE `scheduled_workout_occurrences` SET " +
+                "`planDayIdSnapshot` = `planDayId`, " +
+                "`planRevisionSnapshot` = COALESCE((SELECT p.revision FROM training_plans p " +
+                "WHERE p.id = scheduled_workout_occurrences.planId), 0), " +
+                "`planWeekIndexSnapshot` = (SELECT w.weekIndex FROM plan_days d " +
+                "JOIN plan_weeks w ON w.id = d.weekId WHERE d.id = scheduled_workout_occurrences.planDayId), " +
+                "`hasUnavailableExerciseSnapshot` = CASE WHEN EXISTS(SELECT 1 FROM plan_blocks b " +
+                "JOIN plan_exercises e ON e.blockId = b.id WHERE b.dayId = scheduled_workout_occurrences.planDayId " +
+                "AND e.resolutionStatus != 'RESOLVED') THEN 1 ELSE 0 END, " +
+                "`originType` = CASE WHEN originalScheduledDate IS NOT NULL THEN 'MOVED_ONCE' " +
+                "WHEN scheduleId IS NULL AND movedFromOccurrenceId IS NOT NULL THEN 'COPIED' " +
+                "WHEN scheduleId IS NULL THEN 'AD_HOC' ELSE 'GENERATED' END, " +
+                "`isDetachedOverride` = CASE WHEN originalScheduledDate IS NOT NULL OR scheduleId IS NULL THEN 1 ELSE 0 END, " +
+                "`sourceOccurrenceId` = CASE WHEN scheduleId IS NULL THEN movedFromOccurrenceId ELSE NULL END",
+        )
+        val occurrenceDays = mutableListOf<Pair<String, String>>()
+        database.query(
+            "SELECT id, planDayId FROM scheduled_workout_occurrences WHERE planDayId IS NOT NULL",
+        ).use { cursor ->
+            while (cursor.moveToNext()) occurrenceDays += cursor.getString(0) to cursor.getString(1)
+        }
+        occurrenceDays.forEach { (occurrenceId, planDayId) ->
+            val equipment = sortedSetOf<String>()
+            database.query(
+                "SELECT e.snapshotEquipment FROM plan_blocks b " +
+                    "JOIN plan_exercises e ON e.blockId = b.id WHERE b.dayId = ?",
+                arrayOf(planDayId),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val values = JSONArray(cursor.getString(0))
+                    repeat(values.length()) { index -> equipment += values.getString(index) }
+                }
+            }
+            database.execSQL(
+                "UPDATE scheduled_workout_occurrences " +
+                    "SET requiredEquipmentSnapshotJson = ? WHERE id = ?",
+                arrayOf(JSONArray(equipment.toList()).toString(), occurrenceId),
+            )
+        }
+        database.execSQL(
+            "DROP INDEX `index_scheduled_workout_occurrences_scheduleId_planDayId_scheduledLocalDate`",
+        )
+        database.execSQL(
+            "CREATE UNIQUE INDEX `index_scheduled_workout_occurrences_scheduleId_planDayIdSnapshot_scheduledLocalDate` " +
+                "ON `scheduled_workout_occurrences` (`scheduleId`, `planDayIdSnapshot`, `scheduledLocalDate`)",
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -376,6 +462,7 @@ object DatabaseModule {
                 MIGRATION_5_6,
                 MIGRATION_6_7,
                 MIGRATION_7_8,
+                MIGRATION_8_9,
             )
             .build()
 

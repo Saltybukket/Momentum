@@ -30,6 +30,8 @@ data class PlanDayScheduleRule(
 
 enum class ScheduledWorkoutStatus { PLANNED, IN_PROGRESS, COMPLETED, SKIPPED, MOVED, CANCELLED, CONFLICT }
 
+enum class OccurrenceOrigin { GENERATED, MOVED_ONCE, COPIED, AD_HOC }
+
 data class ScheduledWorkoutOccurrence(
     val id: String,
     val ownerProfileId: String,
@@ -50,6 +52,15 @@ data class ScheduledWorkoutOccurrence(
     val updatedAtEpochMs: Long,
     val revision: Long = 0,
     val deletedAtEpochMs: Long? = null,
+    val planDayIdSnapshot: String? = planDayId,
+    val planRevisionSnapshot: Long = 0,
+    val planWeekIndexSnapshot: Int? = null,
+    val requiredEquipmentSnapshot: Set<String> = emptySet(),
+    val hasUnavailableExerciseSnapshot: Boolean = false,
+    val originalScheduledStartTime: LocalTime? = null,
+    val origin: OccurrenceOrigin = if (scheduleId == null) OccurrenceOrigin.AD_HOC else OccurrenceOrigin.GENERATED,
+    val isDetachedOverride: Boolean = false,
+    val sourceOccurrenceId: String? = null,
 )
 
 data class AvailabilityRule(

@@ -384,6 +384,62 @@ interface TrainingPlanDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertSets(rows: List<PlanSetPrescriptionEntity>)
 
+    @Upsert
+    suspend fun upsertWeeks(rows: List<PlanWeekEntity>)
+
+    @Upsert
+    suspend fun upsertDays(rows: List<PlanDayEntity>)
+
+    @Upsert
+    suspend fun upsertBlocks(rows: List<PlanBlockEntity>)
+
+    @Upsert
+    suspend fun upsertExercises(rows: List<PlanExerciseEntity>)
+
+    @Upsert
+    suspend fun upsertSets(rows: List<PlanSetPrescriptionEntity>)
+
+    @Query("UPDATE plan_weeks SET position = position + 10000 WHERE planId = :planId")
+    suspend fun reserveWeekPositions(planId: String)
+
+    @Query("UPDATE plan_days SET position = position + 10000 WHERE weekId IN (SELECT id FROM plan_weeks WHERE planId = :planId)")
+    suspend fun reserveDayPositions(planId: String)
+
+    @Query(
+        "UPDATE plan_blocks SET position = position + 10000 WHERE dayId IN " +
+            "(SELECT d.id FROM plan_days d JOIN plan_weeks w ON w.id = d.weekId WHERE w.planId = :planId)",
+    )
+    suspend fun reserveBlockPositions(planId: String)
+
+    @Query(
+        "UPDATE plan_exercises SET position = position + 10000 WHERE blockId IN " +
+            "(SELECT b.id FROM plan_blocks b JOIN plan_days d ON d.id = b.dayId " +
+            "JOIN plan_weeks w ON w.id = d.weekId WHERE w.planId = :planId)",
+    )
+    suspend fun reserveExercisePositions(planId: String)
+
+    @Query(
+        "UPDATE plan_set_prescriptions SET position = position + 10000 WHERE planExerciseId IN " +
+            "(SELECT e.id FROM plan_exercises e JOIN plan_blocks b ON b.id = e.blockId " +
+            "JOIN plan_days d ON d.id = b.dayId JOIN plan_weeks w ON w.id = d.weekId WHERE w.planId = :planId)",
+    )
+    suspend fun reserveSetPositions(planId: String)
+
+    @Query("DELETE FROM plan_set_prescriptions WHERE id IN (:ids)")
+    suspend fun deleteSets(ids: List<String>)
+
+    @Query("DELETE FROM plan_exercises WHERE id IN (:ids)")
+    suspend fun deleteExercises(ids: List<String>)
+
+    @Query("DELETE FROM plan_blocks WHERE id IN (:ids)")
+    suspend fun deleteBlocks(ids: List<String>)
+
+    @Query("DELETE FROM plan_days WHERE id IN (:ids)")
+    suspend fun deleteDays(ids: List<String>)
+
+    @Query("DELETE FROM plan_weeks WHERE id IN (:ids)")
+    suspend fun deleteWeeks(ids: List<String>)
+
     @Query("DELETE FROM plan_weeks WHERE planId = :planId")
     suspend fun deletePlanContents(planId: String)
 

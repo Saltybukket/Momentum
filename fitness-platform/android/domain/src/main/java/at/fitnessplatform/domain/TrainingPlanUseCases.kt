@@ -26,6 +26,10 @@ interface TrainingPlanRepository {
     suspend fun seedStarterPlans()
 }
 
+class PlanRemovalDecisionRequiredException(
+    val affectedPlanDayIds: Set<String>,
+) : IllegalStateException("BLOCKED_PENDING_DECISION")
+
 fun validateTrainingPlan(plan: TrainingPlan) {
     validateText(plan.name, MAX_PLAN_NAME, "Plan name", allowBlank = false, singleLine = true)
     validateText(plan.description, 2_000, "Plan description", allowBlank = true, singleLine = false)

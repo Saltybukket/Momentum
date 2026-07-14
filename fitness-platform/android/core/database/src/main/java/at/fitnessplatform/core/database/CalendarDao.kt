@@ -17,6 +17,7 @@ data class PlanScheduleWithRules(
 )
 
 @Dao
+@Suppress("TooManyFunctions")
 interface CalendarDao {
     @Transaction
     @Query(
@@ -45,6 +46,17 @@ interface CalendarDao {
             "AND id = :id AND deletedAtEpochMs IS NULL LIMIT 1",
     )
     suspend fun getOccurrence(id: String, ownerProfileId: String): ScheduledWorkoutOccurrenceEntity?
+
+    @Query(
+        "SELECT COUNT(*) FROM plan_day_schedule_rules WHERE planDayId IN (:planDayIds)",
+    )
+    suspend fun countRulesForPlanDays(planDayIds: List<String>): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM scheduled_workout_occurrences WHERE " +
+            "(planDayId IN (:planDayIds) OR planDayIdSnapshot IN (:planDayIds)) AND deletedAtEpochMs IS NULL",
+    )
+    suspend fun countOccurrencesForPlanDays(planDayIds: List<String>): Int
 
     @Query(
         "SELECT * FROM scheduled_workout_occurrences WHERE ownerProfileId = :ownerProfileId " +
@@ -100,7 +112,8 @@ interface CalendarDao {
     @Query(
         "DELETE FROM scheduled_workout_occurrences WHERE ownerProfileId = :ownerProfileId " +
             "AND scheduleId = :scheduleId AND scheduledLocalDate BETWEEN :from AND :to " +
-            "AND status IN ('PLANNED', 'CONFLICT')",
+            "AND status IN ('PLANNED', 'CONFLICT') AND originType = 'GENERATED' " +
+            "AND isDetachedOverride = 0",
     )
     suspend fun deleteFuturePlanningRows(ownerProfileId: String, scheduleId: String, from: String, to: String)
 

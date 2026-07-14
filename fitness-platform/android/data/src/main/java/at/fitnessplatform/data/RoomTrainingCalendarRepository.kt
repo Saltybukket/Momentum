@@ -10,6 +10,7 @@ import at.fitnessplatform.core.database.toModel
 import at.fitnessplatform.core.model.AvailabilityRule
 import at.fitnessplatform.core.model.Clock
 import at.fitnessplatform.core.model.PlanSchedule
+import at.fitnessplatform.core.model.OccurrenceOrigin
 import at.fitnessplatform.core.model.ScheduleOverride
 import at.fitnessplatform.core.model.ScheduledWorkoutOccurrence
 import at.fitnessplatform.core.model.ScheduledWorkoutStatus
@@ -148,7 +149,10 @@ class RoomTrainingCalendarRepository @Inject constructor(
                 id = ids.newUuid(),
                 scheduleId = null,
                 status = ScheduledWorkoutStatus.PLANNED,
-                movedFromOccurrenceId = source.id,
+                movedFromOccurrenceId = null,
+                origin = OccurrenceOrigin.COPIED,
+                isDetachedOverride = true,
+                sourceOccurrenceId = source.id,
                 createdAtEpochMs = now,
                 updatedAtEpochMs = now,
                 revision = 0,

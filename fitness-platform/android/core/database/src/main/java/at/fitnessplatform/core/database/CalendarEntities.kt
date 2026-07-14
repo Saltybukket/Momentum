@@ -31,7 +31,7 @@ data class PlanScheduleEntity(
     primaryKeys = ["id"],
     foreignKeys = [
         ForeignKey(entity = PlanScheduleEntity::class, parentColumns = ["id"], childColumns = ["scheduleId"], onDelete = ForeignKey.CASCADE),
-        ForeignKey(entity = PlanDayEntity::class, parentColumns = ["id"], childColumns = ["planDayId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = PlanDayEntity::class, parentColumns = ["id"], childColumns = ["planDayId"], onDelete = ForeignKey.RESTRICT),
         ForeignKey(entity = TrainingLocationEntity::class, parentColumns = ["id"], childColumns = ["preferredLocationId"], onDelete = ForeignKey.SET_NULL),
     ],
     indices = [
@@ -63,7 +63,7 @@ data class PlanDayScheduleRuleEntity(
     indices = [
         Index("ownerProfileId"), Index("scheduleId"), Index("planId"), Index("planDayId"), Index("trainingLocationId"),
         Index(value = ["ownerProfileId", "scheduledLocalDate"]),
-        Index(value = ["scheduleId", "planDayId", "scheduledLocalDate"], unique = true),
+        Index(value = ["scheduleId", "planDayIdSnapshot", "scheduledLocalDate"], unique = true),
     ],
 )
 data class ScheduledWorkoutOccurrenceEntity(
@@ -72,6 +72,11 @@ data class ScheduledWorkoutOccurrenceEntity(
     val scheduleId: String?,
     val planId: String?,
     val planDayId: String?,
+    val planDayIdSnapshot: String?,
+    val planRevisionSnapshot: Long,
+    val planWeekIndexSnapshot: Int?,
+    val requiredEquipmentSnapshotJson: String,
+    val hasUnavailableExerciseSnapshot: Boolean,
     val titleSnapshot: String,
     val scheduledLocalDate: String,
     val scheduledLocalStartTime: String?,
@@ -80,7 +85,11 @@ data class ScheduledWorkoutOccurrenceEntity(
     val trainingLocationId: String?,
     val status: String,
     val originalScheduledDate: String?,
+    val originalScheduledStartTime: String?,
     val movedFromOccurrenceId: String?,
+    val originType: String,
+    val isDetachedOverride: Boolean,
+    val sourceOccurrenceId: String?,
     val notes: String,
     val createdAtEpochMs: Long,
     val updatedAtEpochMs: Long,

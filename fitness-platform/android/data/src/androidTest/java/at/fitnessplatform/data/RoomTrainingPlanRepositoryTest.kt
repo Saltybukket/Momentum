@@ -16,12 +16,19 @@ import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.PlanBlock
 import at.fitnessplatform.core.model.PlanBlockType
 import at.fitnessplatform.core.model.PlanDay
+import at.fitnessplatform.core.model.PlanDayScheduleRule
 import at.fitnessplatform.core.model.PlanExercise
+import at.fitnessplatform.core.model.PlanSchedule
 import at.fitnessplatform.core.model.PlanWeek
 import at.fitnessplatform.core.model.SetPrescription
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.TrainingPlan
+import at.fitnessplatform.core.model.TrainingPlanGoal
 import at.fitnessplatform.core.model.UuidProvider
+import at.fitnessplatform.domain.PlanRemovalDecisionRequiredException
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.LocalTime
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -116,6 +123,138 @@ class RoomTrainingPlanRepositoryTest {
         assertEquals(before + 1, repository.observePlans().first().size)
     }
 
+    @Test fun renamingScheduledPlanPreservesRulesAndOccurrencePlanDayIdentity() = runTest {
+        val created = repository.create(plan("plan-1", "Original"))
+        val calendar = RoomTrainingCalendarRepository(
+            database,
+            database.guestProfileDao(),
+            database.trainingPlanDao(),
+            database.calendarDao(),
+            object : UuidProvider { override fun newUuid() = "calendar-${sequence++}" },
+            object : Clock { override fun nowEpochMs() = now++ },
+        )
+        val schedule = calendar.saveSchedule(
+            PlanSchedule(
+                id = "schedule",
+                ownerProfileId = "profile",
+                planId = created.id,
+                startDate = LocalDate.of(2026, 7, 13),
+                timeZoneId = "Europe/Berlin",
+                isActive = true,
+                createdAtEpochMs = 0,
+                updatedAtEpochMs = 0,
+                rules = listOf(
+                    PlanDayScheduleRule(
+                        id = "rule",
+                        scheduleId = "schedule",
+                        planDayId = "day",
+                        dayOfWeek = DayOfWeek.MONDAY,
+                        defaultStartTime = LocalTime.of(18, 0),
+                        defaultDurationMinutes = 60,
+                        preferredLocationId = null,
+                        position = 0,
+                    ),
+                ),
+            ),
+        )
+        val occurrence = calendar.materialize(schedule.id, schedule.startDate).single()
+
+        repository.update(created.copy(name = "Renamed"))
+
+        assertEquals("day", database.calendarDao().getSchedule("schedule", "profile")?.rules?.single()?.planDayId)
+        assertEquals("day", database.calendarDao().getOccurrence(occurrence.id, "profile")?.planDayId)
+    }
+
+    @Test fun scheduledPlanFieldsSetsAndOrderingUpdateWithoutReplacingChildren() = runTest {
+        var current = repository.create(reorderablePlan())
+        val (_, occurrenceId) = schedule(current)
+
+        current = repository.update(current.copy(description = "Updated description"))
+        current = repository.update(current.copy(goal = TrainingPlanGoal.MOBILITY))
+        current = repository.update(
+            current.copy(
+                weeks = current.weeks.map { week ->
+                    week.copy(
+                        days = week.days.map { day ->
+                            day.copy(
+                                blocks = day.blocks.map { block ->
+                                    block.copy(
+                                        exercises = block.exercises.map { exercise ->
+                                            exercise.copy(
+                                                sets = exercise.sets.map { set ->
+                                                    if (set.id == "set-a") set.copy(repsMin = 12) else set
+                                                },
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                },
+            ),
+        )
+        current = repository.update(
+            current.copy(
+                weeks = current.weeks.map { week ->
+                    week.copy(
+                        days = week.days.map { day ->
+                            day.copy(
+                                blocks = day.blocks.reversed().mapIndexed { blockPosition, block ->
+                                    block.copy(
+                                        position = blockPosition,
+                                        exercises = block.exercises.reversed().mapIndexed { exercisePosition, exercise ->
+                                            exercise.copy(position = exercisePosition)
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                },
+            ),
+        )
+
+        assertEquals("Updated description", current.description)
+        assertEquals(TrainingPlanGoal.MOBILITY, current.goal)
+        assertEquals(12, current.weeks.first().days.first().blocks.flatMap { it.exercises }
+            .flatMap { it.sets }.single { it.id == "set-a" }.repsMin)
+        assertEquals(listOf("block-b", "block-a"), current.weeks.first().days.first().blocks.map { it.id })
+        assertEquals(listOf("exercise-b", "exercise-a"), current.weeks.first().days.first().blocks
+            .single { it.id == "block-a" }.exercises.map { it.id })
+        assertEquals("day", database.calendarDao().getSchedule("schedule", "profile")?.rules?.single()?.planDayId)
+        assertEquals("day", database.calendarDao().getOccurrence(occurrenceId, "profile")?.planDayIdSnapshot)
+    }
+
+    @Test fun removingScheduledStructureRequiresDecisionAndRollsBackAggregate() = runTest {
+        val created = repository.create(reorderablePlan())
+        schedule(created)
+        val withoutScheduledDay = created.copy(
+            name = "Must roll back",
+            weeks = created.weeks.map { week -> week.copy(days = week.days.filterNot { it.id == "day" }) },
+        )
+
+        val failure = runCatching { repository.update(withoutScheduledDay) }.exceptionOrNull()
+
+        assertTrue(failure is PlanRemovalDecisionRequiredException)
+        assertEquals(setOf("day"), (failure as PlanRemovalDecisionRequiredException).affectedPlanDayIds)
+        assertEquals("Reorderable", repository.getPlan(created.id)?.name)
+        assertEquals("day", database.calendarDao().getSchedule("schedule", "profile")?.rules?.single()?.planDayId)
+    }
+
+    @Test fun archivingAndSoftDeletingPlanPreserveScheduleAndOccurrenceHistory() = runTest {
+        val created = repository.create(plan("plan-1", "Original"))
+        val (_, occurrenceId) = schedule(created)
+
+        repository.setArchived(created.id, true)
+        assertEquals("day", database.calendarDao().getSchedule("schedule", "profile")?.rules?.single()?.planDayId)
+        repository.delete(created.id)
+
+        assertEquals(null, repository.getPlan(created.id))
+        assertEquals("day", database.calendarDao().getSchedule("schedule", "profile")?.rules?.single()?.planDayId)
+        assertEquals("day", database.calendarDao().getOccurrence(occurrenceId, "profile")?.planDayIdSnapshot)
+    }
+
     @Test fun starterPlansAreIdempotentEditableAndKeepStableCatalogIdentity() = runTest {
         repository.seedStarterPlans()
         repository.seedStarterPlans()
@@ -166,6 +305,95 @@ class RoomTrainingPlanRepositoryTest {
             )),
         ),
     )
+
+    private fun reorderablePlan() = TrainingPlan(
+        id = "plan-1",
+        ownerProfileId = "profile",
+        name = "Reorderable",
+        createdAtEpochMs = 0,
+        updatedAtEpochMs = 0,
+        weeks = listOf(
+            PlanWeek(
+                "week",
+                0,
+                "Week",
+                listOf(
+                    PlanDay(
+                        "day",
+                        0,
+                        "Day",
+                        listOf(
+                            PlanBlock(
+                                "block-a",
+                                0,
+                                PlanBlockType.MAIN,
+                                "Main",
+                                listOf(
+                                    planExercise("exercise-a", 0, "set-a"),
+                                    planExercise("exercise-b", 1, "set-b"),
+                                ),
+                            ),
+                            PlanBlock(
+                                "block-b",
+                                1,
+                                PlanBlockType.OPTIONAL,
+                                "Accessory",
+                                listOf(planExercise("exercise-c", 0, "set-c")),
+                            ),
+                        ),
+                    ),
+                    PlanDay("spare-day", 1, "Spare day", emptyList()),
+                ),
+            ),
+        ),
+    )
+
+    private fun planExercise(id: String, position: Int, setId: String) = PlanExercise(
+        id = id,
+        position = position,
+        reference = ExerciseReference(
+            ExerciseReferenceKind.CUSTOM,
+            customExerciseId = "custom",
+            snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, setOf("none"), "legs"),
+        ),
+        sets = listOf(SetPrescription(setId, 0, repsMin = 8, restSeconds = 90)),
+    )
+
+    private suspend fun schedule(plan: TrainingPlan): Pair<PlanSchedule, String> {
+        val calendar = RoomTrainingCalendarRepository(
+            database,
+            database.guestProfileDao(),
+            database.trainingPlanDao(),
+            database.calendarDao(),
+            object : UuidProvider { override fun newUuid() = "calendar-${sequence++}" },
+            object : Clock { override fun nowEpochMs() = now++ },
+        )
+        val saved = calendar.saveSchedule(
+            PlanSchedule(
+                id = "schedule",
+                ownerProfileId = "profile",
+                planId = plan.id,
+                startDate = LocalDate.of(2026, 7, 13),
+                timeZoneId = "Europe/Berlin",
+                isActive = true,
+                createdAtEpochMs = 0,
+                updatedAtEpochMs = 0,
+                rules = listOf(
+                    PlanDayScheduleRule(
+                        id = "rule",
+                        scheduleId = "schedule",
+                        planDayId = "day",
+                        dayOfWeek = DayOfWeek.MONDAY,
+                        defaultStartTime = LocalTime.of(18, 0),
+                        defaultDurationMinutes = 60,
+                        preferredLocationId = null,
+                        position = 0,
+                    ),
+                ),
+            ),
+        )
+        return saved to calendar.materialize(saved.id, saved.startDate).single().id
+    }
 
     private fun TrainingPlan.exercise() = weeks.single().days.single().blocks.single().exercises.single()
 }

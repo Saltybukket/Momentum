@@ -10,6 +10,7 @@ import at.fitnessplatform.core.model.ScheduledWorkoutStatus
 import at.fitnessplatform.core.model.TrainingPlan
 import at.fitnessplatform.core.model.Clock
 import at.fitnessplatform.core.model.PlanDayScheduleRule
+import at.fitnessplatform.core.model.OccurrenceOrigin
 import at.fitnessplatform.core.model.UuidProvider
 import java.time.LocalDate
 import java.time.LocalTime
@@ -106,27 +107,50 @@ fun materializeSchedule(
         "Schedule and plan must share identity and owner."
     }
     if (through < schedule.startDate) return emptyList()
-    val days = plan.weeks.flatMap { it.days }.associateBy { it.id }
+    val weeks = plan.weeks.sortedBy { it.weekIndex }
+    ensureCalendar(weeks.isNotEmpty()) { "A scheduled plan requires at least one week." }
+    val days = weeks.flatMap { week -> week.days.map { day -> day.id to (week to day) } }.toMap()
+    schedule.rules.forEach { rule ->
+        ensureCalendar(rule.planDayId in days) { "Schedule rule references an unknown plan day." }
+    }
     return generateSequence(schedule.startDate) { current -> current.plusDays(1) }
         .takeWhile { it <= through }
         .flatMap { date ->
+            val cycleWeek = (java.time.temporal.ChronoUnit.DAYS.between(schedule.startDate, date) / 7)
+                .mod(weeks.size.toLong()).toInt()
+            val activeWeek = weeks[cycleWeek]
             schedule.rules.asSequence()
                 .filter { it.dayOfWeek == date.dayOfWeek }
+                .filter { rule -> days[rule.planDayId]?.first?.id == activeWeek.id }
                 .sortedBy { it.position }
                 .map { rule ->
-                    val day = requireNotNull(days[rule.planDayId]) { "Schedule rule references an unknown plan day." }
+                    val (week, day) = requireNotNull(days[rule.planDayId]) {
+                        "Schedule rule references an unknown plan day."
+                    }
+                    val exercises = day.blocks.flatMap { it.exercises }
                     ScheduledWorkoutOccurrence(
                         id = idFor(rule.id, date),
                         ownerProfileId = schedule.ownerProfileId,
                         scheduleId = schedule.id,
                         planId = plan.id,
                         planDayId = day.id,
+                        planDayIdSnapshot = day.id,
+                        planRevisionSnapshot = plan.revision,
+                        planWeekIndexSnapshot = week.weekIndex,
+                        requiredEquipmentSnapshot = exercises.flatMapTo(mutableSetOf()) {
+                            it.reference.snapshot.equipment
+                        },
+                        hasUnavailableExerciseSnapshot = exercises.any {
+                            it.reference.resolutionStatus !=
+                                at.fitnessplatform.core.model.ExerciseResolutionStatus.RESOLVED
+                        },
                         titleSnapshot = day.title,
                         scheduledLocalDate = date,
                         scheduledLocalStartTime = rule.defaultStartTime,
                         timeZoneId = schedule.timeZoneId,
                         plannedDurationMinutes = rule.defaultDurationMinutes,
                         trainingLocationId = rule.preferredLocationId,
+                        origin = OccurrenceOrigin.GENERATED,
                         createdAtEpochMs = nowEpochMs,
                         updatedAtEpochMs = nowEpochMs,
                     )
@@ -236,6 +260,9 @@ class MoveOccurrenceUseCase(private val repository: TrainingCalendarRepository) 
             plannedDurationMinutes = durationMinutes,
             trainingLocationId = locationId,
             originalScheduledDate = occurrence.originalScheduledDate ?: occurrence.scheduledLocalDate,
+            originalScheduledStartTime = occurrence.originalScheduledStartTime ?: occurrence.scheduledLocalStartTime,
+            origin = OccurrenceOrigin.MOVED_ONCE,
+            isDetachedOverride = true,
             revision = occurrence.revision + 1,
         )
         validateOccurrence(moved)
