@@ -18,6 +18,9 @@ abstract class RepositoryBindings {
     @Binds @Singleton abstract fun bindTrainingLocationRepository(impl: RoomTrainingLocationRepository): TrainingLocationRepository
     @Binds @Singleton abstract fun bindTrainingPlanRepository(impl: RoomTrainingPlanRepository): TrainingPlanRepository
     @Binds @Singleton abstract fun bindTrainingCalendarRepository(impl: RoomTrainingCalendarRepository): TrainingCalendarRepository
+    @Binds @Singleton abstract fun bindTrainingPlanCalendarCoordinator(
+        impl: RoomTrainingPlanCalendarCoordinator,
+    ): TrainingPlanCalendarCoordinator
     @Binds @Singleton abstract fun bindSyncPreferencesRepository(impl: RoomSyncPreferencesRepository): SyncPreferencesRepository
     @Binds @Singleton abstract fun bindEventDispatcher(impl: LocalEventDispatcher): DomainEventDispatcher
 }
@@ -73,13 +76,11 @@ object TrainingPlanUseCaseModule {
         calendarRepository: TrainingCalendarRepository,
     ) = SetActiveTrainingPlanUseCase(repository, calendarRepository)
     @Provides fun archiveTrainingPlan(
-        repository: TrainingPlanRepository,
-        calendarRepository: TrainingCalendarRepository,
-    ) = ArchiveTrainingPlanUseCase(repository, calendarRepository)
+        coordinator: TrainingPlanCalendarCoordinator,
+    ) = ArchiveTrainingPlanUseCase(coordinator)
     @Provides fun deleteTrainingPlan(
-        repository: TrainingPlanRepository,
-        calendarRepository: TrainingCalendarRepository,
-    ) = DeleteTrainingPlanUseCase(repository, calendarRepository)
+        coordinator: TrainingPlanCalendarCoordinator,
+    ) = DeleteTrainingPlanUseCase(coordinator)
     @Provides fun seedStarterTrainingPlans(repository: TrainingPlanRepository) = SeedStarterTrainingPlansUseCase(repository)
 }
 
@@ -99,5 +100,10 @@ object TrainingCalendarUseCaseModule {
         ids: at.fitnessplatform.core.model.UuidProvider,
         clock: at.fitnessplatform.core.model.Clock,
     ) = CreatePlanScheduleUseCase(repository, ids, clock)
+    @Provides fun activatePlanWithSchedule(
+        coordinator: TrainingPlanCalendarCoordinator,
+        ids: at.fitnessplatform.core.model.UuidProvider,
+        clock: at.fitnessplatform.core.model.Clock,
+    ) = ActivatePlanWithScheduleUseCase(coordinator, ids, clock)
     @Provides fun updateScheduleRule(repository: TrainingCalendarRepository) = UpdateScheduleRuleUseCase(repository)
 }

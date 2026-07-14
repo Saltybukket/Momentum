@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.map
 
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("TooManyFunctions")
 class RoomTrainingCalendarRepository @Inject constructor(
     private val database: AppDatabase,
     private val profileDao: GuestProfileDao,
@@ -56,6 +57,11 @@ class RoomTrainingCalendarRepository @Inject constructor(
         else calendarDao.observeActiveSchedule(profile.id).map { it?.toModel() }
     }
 
+    internal suspend fun getActiveSchedule(): PlanSchedule? {
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        return calendarDao.getActiveSchedule(owner.id)?.toModel()
+    }
+
     override fun observeAvailability(): Flow<List<AvailabilityRule>> = profileDao.observe().flatMapLatest { profile ->
         if (profile == null) flowOf(emptyList())
         else calendarDao.observeAvailability(profile.id).map { rows -> rows.map { it.toModel() } }
@@ -67,23 +73,15 @@ class RoomTrainingCalendarRepository @Inject constructor(
     }
 
     override suspend fun saveSchedule(schedule: PlanSchedule): PlanSchedule {
-        validateSchedule(schedule)
-        val owner = requireNotNull(profileDao.get()) { "Create a guest profile before scheduling a plan." }
-        require(schedule.ownerProfileId == owner.id) { "Schedules must belong to the current profile." }
-        val plan = requireNotNull(planDao.get(schedule.planId, owner.id)?.toModel()) { "Training plan does not exist." }
-        val planDayIds = plan.weeks.flatMap { it.days }.mapTo(mutableSetOf()) { it.id }
-        require(schedule.rules.all { it.planDayId in planDayIds }) { "Schedule references an unknown plan day." }
-        val now = clock.nowEpochMs()
-        return database.withTransaction {
-            val current = calendarDao.getSchedule(schedule.id, owner.id)?.toModel()
-            val saved = schedule.copy(
-                createdAtEpochMs = current?.createdAtEpochMs ?: now,
-                updatedAtEpochMs = now,
-                revision = current?.revision?.plus(1) ?: 0,
-            )
-            calendarDao.saveSchedule(saved.toEntity(), saved.rules.map { it.toEntity() })
-            saved
-        }
+        return database.withTransaction { saveScheduleInTransaction(schedule) }
+    }
+
+    override suspend fun saveAndMaterialize(
+        schedule: PlanSchedule,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence> = database.withTransaction {
+        val saved = saveScheduleInTransaction(schedule)
+        materializeInTransaction(saved.id, null, through)
     }
 
     override suspend fun materialize(
@@ -124,6 +122,18 @@ class RoomTrainingCalendarRepository @Inject constructor(
         val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
         calendarDao.deleteFuturePlanningRows(owner.id, scheduleId, from.toString(), through.toString())
         materializeInTransaction(scheduleId, from, through)
+    }
+
+    override suspend fun saveAndReplaceFuturePlanned(
+        schedule: PlanSchedule,
+        from: LocalDate,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence> = database.withTransaction {
+        require(through >= from) { "Calendar horizon end must not precede its start." }
+        val saved = saveScheduleInTransaction(schedule)
+        val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
+        calendarDao.deleteFuturePlanningRows(owner.id, saved.id, from.toString(), through.toString())
+        materializeInTransaction(saved.id, from, through)
     }
 
     override suspend fun saveOccurrence(
@@ -212,6 +222,28 @@ class RoomTrainingCalendarRepository @Inject constructor(
     override suspend fun deleteOverride(id: String) {
         val owner = requireNotNull(profileDao.get()) { "Guest profile does not exist." }
         check(calendarDao.deleteOverride(id, owner.id) == 1) { "Schedule override does not exist." }
+    }
+
+    private suspend fun saveScheduleInTransaction(schedule: PlanSchedule): PlanSchedule {
+        validateSchedule(schedule)
+        val owner = requireNotNull(profileDao.get()) { "Create a guest profile before scheduling a plan." }
+        require(schedule.ownerProfileId == owner.id) { "Schedules must belong to the current profile." }
+        val plan = requireNotNull(planDao.get(schedule.planId, owner.id)?.toModel()) {
+            "Training plan does not exist."
+        }
+        val planDayIds = plan.weeks.flatMap { it.days }.mapTo(mutableSetOf()) { it.id }
+        require(schedule.rules.all { it.planDayId in planDayIds }) {
+            "Schedule references an unknown plan day."
+        }
+        val now = clock.nowEpochMs()
+        val current = calendarDao.getSchedule(schedule.id, owner.id)?.toModel()
+        val saved = schedule.copy(
+            createdAtEpochMs = current?.createdAtEpochMs ?: now,
+            updatedAtEpochMs = now,
+            revision = current?.revision?.plus(1) ?: 0,
+        )
+        calendarDao.saveSchedule(saved.toEntity(), saved.rules.map { it.toEntity() })
+        return saved
     }
 
     private suspend fun materializeInTransaction(

@@ -19,6 +19,7 @@ import at.fitnessplatform.core.model.TrainingPlanGoal
 import at.fitnessplatform.core.model.UuidProvider
 import at.fitnessplatform.core.testing.MainDispatcherRule
 import at.fitnessplatform.domain.ArchiveTrainingPlanUseCase
+import at.fitnessplatform.domain.ActivatePlanWithScheduleUseCase
 import at.fitnessplatform.domain.AdaptTrainingPlanCopyUseCase
 import at.fitnessplatform.domain.CatalogRepository
 import at.fitnessplatform.domain.CopyTrainingPlanUseCase
@@ -29,12 +30,14 @@ import at.fitnessplatform.domain.EditTrainingPlanUseCase
 import at.fitnessplatform.domain.ObserveTrainingPlansUseCase
 import at.fitnessplatform.domain.PlanStructureKind
 import at.fitnessplatform.domain.PlanScheduleActivationDecision
+import at.fitnessplatform.domain.PreviewPlanScheduleUseCase
 import at.fitnessplatform.domain.SaveTrainingPlanUseCase
 import at.fitnessplatform.domain.SeedStarterTrainingPlansUseCase
 import at.fitnessplatform.domain.SetActiveTrainingPlanUseCase
 import at.fitnessplatform.domain.TrainingLocationRepository
 import at.fitnessplatform.domain.TrainingCalendarRepository
 import at.fitnessplatform.domain.TrainingPlanRepository
+import at.fitnessplatform.domain.TrainingPlanCalendarCoordinator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,22 +57,7 @@ class TrainingPlansViewModelTest {
         val plans = MutablePlanRepository()
         val calendar = EmptyPlanCalendarRepository()
         val ids = SequentialIds()
-        val viewModel = TrainingPlansViewModel(
-            ObserveTrainingPlansUseCase(plans),
-            SaveTrainingPlanUseCase(plans),
-            CopyTrainingPlanUseCase(plans),
-            AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
-            EditTrainingPlanUseCase(plans, ids),
-            SetActiveTrainingPlanUseCase(plans, calendar),
-            ArchiveTrainingPlanUseCase(plans, calendar),
-            DeleteTrainingPlanUseCase(plans, calendar),
-            SeedStarterTrainingPlansUseCase(plans),
-            EmptyCatalogRepository(),
-            OneExerciseRepository(),
-            EmptyLocationRepository(),
-            ids,
-            object : Clock { override fun nowEpochMs() = 100L },
-        )
+        val viewModel = viewModel(plans, calendar, ids, TestClock(100L))
         advanceUntilIdle()
         assertEquals(listOf("Your private exercise"), viewModel.state.value.choices.map { it.name })
 
@@ -131,17 +119,7 @@ class TrainingPlansViewModelTest {
     @Test fun `view model surfaces failed save without replacing previous plan`() = runTest {
         val plans = MutablePlanRepository().apply { failSave = true }
         val calendar = EmptyPlanCalendarRepository()
-        val viewModel = TrainingPlansViewModel(
-            ObserveTrainingPlansUseCase(plans), SaveTrainingPlanUseCase(plans), CopyTrainingPlanUseCase(plans),
-            AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
-            EditTrainingPlanUseCase(plans, SequentialIds()),
-            SetActiveTrainingPlanUseCase(plans, calendar),
-            ArchiveTrainingPlanUseCase(plans, calendar),
-            DeleteTrainingPlanUseCase(plans, calendar),
-            SeedStarterTrainingPlansUseCase(plans),
-            EmptyCatalogRepository(), OneExerciseRepository(), EmptyLocationRepository(),
-            SequentialIds(), object : Clock { override fun nowEpochMs() = 1L },
-        )
+        val viewModel = viewModel(plans, calendar, SequentialIds(), TestClock(1L))
         advanceUntilIdle()
         viewModel.create("profile", "Rejected", "", TrainingPlanGoal.CUSTOM)
         advanceUntilIdle()
@@ -153,14 +131,7 @@ class TrainingPlansViewModelTest {
         val plans = MutablePlanRepository()
         val calendar = EmptyPlanCalendarRepository()
         val ids = SequentialIds()
-        val viewModel = TrainingPlansViewModel(
-            ObserveTrainingPlansUseCase(plans), SaveTrainingPlanUseCase(plans), CopyTrainingPlanUseCase(plans),
-            AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
-            EditTrainingPlanUseCase(plans, ids), SetActiveTrainingPlanUseCase(plans, calendar),
-            ArchiveTrainingPlanUseCase(plans, calendar), DeleteTrainingPlanUseCase(plans, calendar),
-            SeedStarterTrainingPlansUseCase(plans), EmptyCatalogRepository(), OneExerciseRepository(),
-            EmptyLocationRepository(), ids, object : Clock { override fun nowEpochMs() = 100L },
-        )
+        val viewModel = viewModel(plans, calendar, ids, TestClock(100L))
         advanceUntilIdle()
         viewModel.create("profile", "First", "", TrainingPlanGoal.STRENGTH)
         advanceUntilIdle()
@@ -193,10 +164,70 @@ class TrainingPlansViewModelTest {
         viewModel.resolveActivation(PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP)
         advanceUntilIdle()
 
-        assertTrue(plans.state.value.single { it.id == second.id }.isActive)
-        assertEquals(null, calendar.currentSchedule())
+        assertFalse(plans.state.value.single { it.id == second.id }.isActive)
+        assertEquals("schedule", calendar.currentSchedule()?.id)
         assertEquals(null, viewModel.state.value.pendingActivationPlanId)
+        assertEquals(second.id, viewModel.state.value.pendingScheduleSetupPlanId)
+        assertEquals("schedule", calendar.currentSchedule()?.id)
+
+        val drafts = second.weeks.flatMap { it.days }.mapIndexed { index, day ->
+            at.fitnessplatform.domain.ScheduleRuleDraft(
+                day.id,
+                java.time.DayOfWeek.MONDAY.plus(index.toLong()),
+                java.time.LocalTime.of(8, 0),
+                60,
+                null,
+            )
+        }
+        viewModel.previewActivationSchedule(
+            java.time.LocalDate.of(2026, 7, 20),
+            "Europe/Berlin",
+            drafts,
+        )
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.pendingScheduleSetup != null)
+        assertFalse(plans.state.value.single { it.id == second.id }.isActive)
+        assertEquals("schedule", calendar.currentSchedule()?.id)
+
+        viewModel.confirmActivationSchedule()
+        advanceUntilIdle()
+        assertTrue(plans.state.value.single { it.id == second.id }.isActive)
+        assertEquals(second.id, calendar.currentSchedule()?.planId)
+        assertEquals(null, viewModel.state.value.pendingScheduleSetupPlanId)
+        assertEquals(null, viewModel.state.value.pendingScheduleSetup)
     }
+
+    private fun viewModel(
+        plans: MutablePlanRepository,
+        calendar: EmptyPlanCalendarRepository,
+        ids: SequentialIds,
+        clock: Clock,
+    ): TrainingPlansViewModel {
+        val coordinator = TestPlanCalendarCoordinator(plans, calendar)
+        return TrainingPlansViewModel(
+            ObserveTrainingPlansUseCase(plans),
+            SaveTrainingPlanUseCase(plans),
+            CopyTrainingPlanUseCase(plans),
+            AdaptTrainingPlanCopyUseCase(plans, FindCompatibleAlternativesUseCase()),
+            EditTrainingPlanUseCase(plans, ids),
+            SetActiveTrainingPlanUseCase(plans, calendar),
+            ActivatePlanWithScheduleUseCase(coordinator, ids, clock),
+            PreviewPlanScheduleUseCase(clock),
+            ArchiveTrainingPlanUseCase(coordinator),
+            DeleteTrainingPlanUseCase(coordinator),
+            SeedStarterTrainingPlansUseCase(plans),
+            EmptyCatalogRepository(),
+            OneExerciseRepository(),
+            EmptyLocationRepository(),
+            calendar,
+            ids,
+            clock,
+        )
+    }
+}
+
+private class TestClock(private val now: Long) : Clock {
+    override fun nowEpochMs() = now
 }
 
 private fun TrainingPlan.exercise() = weeks.single().days.single().blocks.single().exercises.single()
@@ -249,6 +280,8 @@ private class EmptyPlanCalendarRepository : TrainingCalendarRepository {
     override suspend fun saveSchedule(schedule: PlanSchedule): PlanSchedule = schedule.also {
         activeSchedule.value = it.takeIf(PlanSchedule::isActive)
     }
+    override suspend fun saveAndMaterialize(schedule: PlanSchedule, through: java.time.LocalDate) =
+        emptyList<ScheduledWorkoutOccurrence>()
     override suspend fun materialize(scheduleId: String, through: java.time.LocalDate) =
         emptyList<ScheduledWorkoutOccurrence>()
     override suspend fun ensureHorizon(
@@ -266,6 +299,11 @@ private class EmptyPlanCalendarRepository : TrainingCalendarRepository {
         from: java.time.LocalDate,
         through: java.time.LocalDate,
     ) = emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun saveAndReplaceFuturePlanned(
+        schedule: PlanSchedule,
+        from: java.time.LocalDate,
+        through: java.time.LocalDate,
+    ) = emptyList<ScheduledWorkoutOccurrence>()
     override suspend fun saveOccurrence(occurrence: ScheduledWorkoutOccurrence) = occurrence
     override suspend fun copyOccurrence(id: String) = error("unused")
     override suspend fun changeStatus(id: String, status: ScheduledWorkoutStatus) = Unit
@@ -273,6 +311,33 @@ private class EmptyPlanCalendarRepository : TrainingCalendarRepository {
     override suspend fun saveOverride(override: ScheduleOverride) = Unit
     override suspend fun deleteAvailability(id: String) = Unit
     override suspend fun deleteOverride(id: String) = Unit
+}
+
+private class TestPlanCalendarCoordinator(
+    private val plans: MutablePlanRepository,
+    private val calendar: EmptyPlanCalendarRepository,
+) : TrainingPlanCalendarCoordinator {
+    override suspend fun activatePlanWithSchedule(
+        planId: String,
+        schedule: PlanSchedule,
+        through: java.time.LocalDate,
+    ): List<ScheduledWorkoutOccurrence> {
+        calendar.saveSchedule(schedule)
+        plans.setActive(planId)
+        return emptyList()
+    }
+
+    override suspend fun setArchived(planId: String, archived: Boolean) {
+        val active = calendar.currentSchedule()
+        if (archived && active?.planId == planId) calendar.saveSchedule(active.copy(isActive = false))
+        plans.setArchived(planId, archived)
+    }
+
+    override suspend fun delete(planId: String) {
+        val active = calendar.currentSchedule()
+        if (active?.planId == planId) calendar.saveSchedule(active.copy(isActive = false))
+        plans.delete(planId)
+    }
 }
 
 private class EmptyCatalogRepository : CatalogRepository {

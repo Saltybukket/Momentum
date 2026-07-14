@@ -123,6 +123,81 @@ class RoomTrainingPlanRepositoryTest {
         assertEquals(before + 1, repository.observePlans().first().size)
     }
 
+    @Test fun planScheduleSwitchAndArchiveLifecycleRollBackAsSingleTransactions() = runTest {
+        val oldPlan = repository.create(plan("old-plan", "Old"))
+        val newPlan = repository.create(plan("new-plan", "New"))
+        repository.setActive(oldPlan.id)
+        val calendar = RoomTrainingCalendarRepository(
+            database,
+            database.guestProfileDao(),
+            database.trainingPlanDao(),
+            database.calendarDao(),
+            object : UuidProvider { override fun newUuid() = "calendar-${sequence++}" },
+            object : Clock { override fun nowEpochMs() = now++ },
+        )
+        val coordinator = RoomTrainingPlanCalendarCoordinator(database, repository, calendar)
+        val oldSchedule = scheduleFor(oldPlan, "old-schedule")
+        calendar.saveAndMaterialize(oldSchedule, oldSchedule.startDate.plusDays(7))
+        database.openHelper.writableDatabase.execSQL(
+            """CREATE TRIGGER fail_plan_switch BEFORE UPDATE OF isActive ON training_plans
+                WHEN NEW.id = 'new-plan' AND NEW.isActive = 1
+                BEGIN SELECT RAISE(ABORT, 'injected plan activation failure'); END""",
+        )
+
+        val newSchedule = scheduleFor(newPlan, "new-schedule")
+        assertTrue(
+            runCatching {
+                coordinator.activatePlanWithSchedule(
+                    newPlan.id,
+                    newSchedule,
+                    newSchedule.startDate.plusDays(7),
+                )
+            }.isFailure,
+        )
+        assertEquals("old-schedule", calendar.observeActiveSchedule().first()?.id)
+        assertEquals(null, database.calendarDao().getSchedule("new-schedule", "profile"))
+        assertTrue(repository.getPlan(oldPlan.id)?.isActive == true)
+        assertFalse(repository.getPlan(newPlan.id)?.isActive ?: true)
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_plan_switch")
+
+        database.openHelper.writableDatabase.execSQL(
+            """CREATE TRIGGER fail_plan_archive BEFORE UPDATE OF isArchived ON training_plans
+                WHEN NEW.id = 'old-plan' AND NEW.isArchived = 1
+                BEGIN SELECT RAISE(ABORT, 'injected archive failure'); END""",
+        )
+        assertTrue(runCatching { coordinator.setArchived(oldPlan.id, true) }.isFailure)
+        assertEquals("old-schedule", calendar.observeActiveSchedule().first()?.id)
+        assertFalse(repository.getPlan(oldPlan.id)?.isArchived ?: true)
+        assertTrue(repository.getPlan(oldPlan.id)?.isActive == true)
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_plan_archive")
+    }
+
+    private fun scheduleFor(plan: TrainingPlan, id: String): PlanSchedule {
+        val day = plan.weeks.single().days.single()
+        return PlanSchedule(
+            id = id,
+            ownerProfileId = plan.ownerProfileId,
+            planId = plan.id,
+            startDate = LocalDate.of(2026, 7, 13),
+            timeZoneId = "Europe/Berlin",
+            isActive = true,
+            createdAtEpochMs = 1,
+            updatedAtEpochMs = 1,
+            rules = listOf(
+                PlanDayScheduleRule(
+                    "$id-rule",
+                    id,
+                    day.id,
+                    DayOfWeek.MONDAY,
+                    LocalTime.of(8, 0),
+                    60,
+                    null,
+                    0,
+                ),
+            ),
+        )
+    }
+
     @Test fun renamingScheduledPlanPreservesRulesAndOccurrencePlanDayIdentity() = runTest {
         val created = repository.create(plan("plan-1", "Original"))
         val calendar = RoomTrainingCalendarRepository(

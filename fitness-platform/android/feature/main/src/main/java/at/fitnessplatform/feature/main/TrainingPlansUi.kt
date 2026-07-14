@@ -66,6 +66,8 @@ import at.fitnessplatform.core.model.TrainingPlan
 import at.fitnessplatform.core.model.TrainingPlanGoal
 import at.fitnessplatform.domain.PlanStructureKind
 import at.fitnessplatform.domain.PlanScheduleActivationDecision
+import at.fitnessplatform.domain.ScheduleRuleDraft
+import java.time.LocalDate
 
 @Composable
 fun TrainingPlansRoute(
@@ -95,6 +97,9 @@ fun TrainingPlansRoute(
         onAdaptCopy = viewModel::adaptCopy,
         onActivate = viewModel::activate,
         onResolveActivation = viewModel::resolveActivation,
+        onPreviewActivationSchedule = viewModel::previewActivationSchedule,
+        onConfirmActivationSchedule = viewModel::confirmActivationSchedule,
+        onCancelActivationSchedule = viewModel::cancelActivationSchedule,
         onArchive = viewModel::archive,
         onDelete = viewModel::delete,
         onClearError = viewModel::clearError,
@@ -125,6 +130,9 @@ internal fun TrainingPlansScreen(
     onAdaptCopy: (String) -> Unit,
     onActivate: (String) -> Unit,
     onResolveActivation: (PlanScheduleActivationDecision) -> Unit,
+    onPreviewActivationSchedule: (LocalDate, String, List<ScheduleRuleDraft>, () -> Unit) -> Unit,
+    onConfirmActivationSchedule: (() -> Unit) -> Unit,
+    onCancelActivationSchedule: () -> Unit,
     onArchive: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
     onClearError: () -> Unit,
@@ -256,12 +264,80 @@ internal fun TrainingPlansScreen(
             },
         )
     }
+    PendingActivationScheduleDialogs(
+        state,
+        onPreviewActivationSchedule,
+        onConfirmActivationSchedule,
+        onCancelActivationSchedule,
+    )
     state.error?.let {
         AlertDialog(
             onDismissRequest = onClearError,
             title = { Text(stringResource(R.string.plans_error_title)) },
             text = { Text(stringResource(R.string.plans_error_message)) },
             confirmButton = { TextButton(onClick = onClearError) { Text(stringResource(R.string.plans_ok)) } },
+        )
+    }
+}
+
+@Composable
+private fun PendingActivationScheduleDialogs(
+    state: TrainingPlansUiState,
+    onPreview: (LocalDate, String, List<ScheduleRuleDraft>, () -> Unit) -> Unit,
+    onConfirm: (() -> Unit) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val plan = state.pendingScheduleSetupPlanId?.let { planId ->
+        state.plans.firstOrNull { it.id == planId }
+    }
+    if (plan != null && state.pendingScheduleSetup == null) {
+        ScheduleSetupDialog(
+            plan = plan,
+            locations = state.locations,
+            availability = state.availability,
+            today = state.today,
+            saving = state.saving,
+            onDismiss = onCancel,
+            onConfirm = { startDate, timeZoneId, drafts -> onPreview(startDate, timeZoneId, drafts) {} },
+        )
+    }
+    state.pendingScheduleSetup?.let { preview ->
+        AlertDialog(
+            onDismissRequest = { if (!state.saving) onCancel() },
+            title = { Text(stringResource(R.string.calendar_schedule_preview_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        pluralStringResource(
+                            R.plurals.calendar_preview_occurrences,
+                            preview.occurrences.size,
+                            preview.occurrences.size,
+                        ),
+                    )
+                    Text(
+                        pluralStringResource(
+                            R.plurals.calendar_preview_conflicts,
+                            preview.conflicts.size,
+                            preview.conflicts.size,
+                        ),
+                        color = if (preview.conflicts.isEmpty()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onConfirm {} }, enabled = !state.saving) {
+                    Text(stringResource(R.string.calendar_materialize_schedule))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancel, enabled = !state.saving) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }
@@ -826,6 +902,9 @@ private fun TrainingPlansPreview() = MomentumTheme {
         onAdaptCopy = {},
         onActivate = {},
         onResolveActivation = {},
+        onPreviewActivationSchedule = { _, _, _, success -> success() },
+        onConfirmActivationSchedule = { success -> success() },
+        onCancelActivationSchedule = {},
         onArchive = { _, _ -> },
         onDelete = {},
         onClearError = {},

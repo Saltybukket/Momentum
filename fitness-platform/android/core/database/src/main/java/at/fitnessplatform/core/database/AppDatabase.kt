@@ -407,8 +407,8 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
                 "`hasUnavailableExerciseSnapshot` = CASE WHEN EXISTS(SELECT 1 FROM plan_blocks b " +
                 "JOIN plan_exercises e ON e.blockId = b.id WHERE b.dayId = scheduled_workout_occurrences.planDayId " +
                 "AND e.resolutionStatus != 'RESOLVED') THEN 1 ELSE 0 END, " +
-                "`originType` = CASE WHEN originalScheduledDate IS NOT NULL THEN 'MOVED_ONCE' " +
-                "WHEN scheduleId IS NULL AND movedFromOccurrenceId IS NOT NULL THEN 'COPIED' " +
+                "`originType` = CASE WHEN scheduleId IS NULL AND movedFromOccurrenceId IS NOT NULL THEN 'COPIED' " +
+                "WHEN originalScheduledDate IS NOT NULL THEN 'MOVED_ONCE' " +
                 "WHEN scheduleId IS NULL THEN 'AD_HOC' ELSE 'GENERATED' END, " +
                 "`isDetachedOverride` = CASE WHEN originalScheduledDate IS NOT NULL OR scheduleId IS NULL THEN 1 ELSE 0 END, " +
                 "`sourceOccurrenceId` = CASE WHEN scheduleId IS NULL THEN movedFromOccurrenceId ELSE NULL END",

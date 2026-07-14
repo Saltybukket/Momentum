@@ -266,6 +266,18 @@ class AppDatabaseTest {
                 '2026-07-13', '18:00', 'Europe/Berlin', 60, 'PLANNED', '', 1, 1, 0
             )""",
         )
+        original.execSQL(
+            """INSERT INTO scheduled_workout_occurrences (
+                id, ownerProfileId, scheduleId, planId, planDayId, titleSnapshot,
+                scheduledLocalDate, scheduledLocalStartTime, timeZoneId,
+                plannedDurationMinutes, status, originalScheduledDate,
+                movedFromOccurrenceId, notes, createdAtEpochMs, updatedAtEpochMs, revision
+            ) VALUES (
+                'copy-of-moved', 'profile', NULL, 'plan', 'day', 'Day copy',
+                '2026-07-15', '18:00', 'Europe/Berlin', 60, 'PLANNED',
+                '2026-07-14', 'occurrence', '', 1, 1, 0
+            )""",
+        )
         original.close()
 
         val migrated = migrationHelper.runMigrationsAndValidate(
@@ -288,6 +300,15 @@ class AppDatabaseTest {
             assertEquals("[\"barbell\",\"bench\"]", cursor.getString(4))
             assertEquals("GENERATED", cursor.getString(5))
             assertEquals(0, cursor.getInt(6))
+        }
+        migrated.query(
+            """SELECT originType, isDetachedOverride, sourceOccurrenceId
+                FROM scheduled_workout_occurrences WHERE id = 'copy-of-moved'""",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("COPIED", cursor.getString(0))
+            assertEquals(1, cursor.getInt(1))
+            assertEquals("occurrence", cursor.getString(2))
         }
         assertThrows(android.database.sqlite.SQLiteConstraintException::class.java) {
             migrated.execSQL("DELETE FROM plan_days WHERE id = 'day'")

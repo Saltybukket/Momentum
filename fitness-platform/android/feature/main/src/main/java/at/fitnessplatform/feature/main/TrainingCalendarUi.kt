@@ -817,7 +817,7 @@ private data class ScheduleRuleInput(
 
 @Composable
 @Suppress("CyclomaticComplexMethod")
-private fun ScheduleSetupDialog(
+internal fun ScheduleSetupDialog(
     plan: TrainingPlan,
     locations: List<TrainingLocation>,
     availability: List<AvailabilityRule>,

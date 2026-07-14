@@ -27,6 +27,16 @@ interface TrainingPlanRepository {
     suspend fun seedStarterPlans()
 }
 
+interface TrainingPlanCalendarCoordinator {
+    suspend fun activatePlanWithSchedule(
+        planId: String,
+        schedule: PlanSchedule,
+        through: java.time.LocalDate,
+    ): List<ScheduledWorkoutOccurrence>
+    suspend fun setArchived(planId: String, archived: Boolean)
+    suspend fun delete(planId: String)
+}
+
 class PlanRemovalDecisionRequiredException(
     val affectedPlanDayIds: Set<String>,
 ) : IllegalStateException("BLOCKED_PENDING_DECISION")
@@ -425,48 +435,36 @@ class SetActiveTrainingPlanUseCase(
         decision: PlanScheduleActivationDecision? = null,
     ): PlanActivationResult {
         val activeSchedule = calendarRepository.observeActiveSchedule().first()
-        if (activeSchedule != null && activeSchedule.planId != id) {
+        val pendingResult = if (activeSchedule != null && activeSchedule.planId != id) {
             ensure(decision != null) { "PLAN_SCHEDULE_DECISION_REQUIRED" }
             when (decision) {
-                PlanScheduleActivationDecision.CANCEL -> return PlanActivationResult(false)
-                PlanScheduleActivationDecision.KEEP_CURRENT_SCHEDULE -> Unit
-                PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP -> {
-                    calendarRepository.saveSchedule(activeSchedule.copy(isActive = false))
-                }
+                PlanScheduleActivationDecision.CANCEL -> PlanActivationResult(false)
+                PlanScheduleActivationDecision.KEEP_CURRENT_SCHEDULE -> null
+                PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP ->
+                    PlanActivationResult(activated = false, scheduleSetupRequired = true)
                 null -> error("Decision was validated above.")
             }
-        }
+        } else null
+        if (pendingResult != null) return pendingResult
         repository.setActive(id)
-        return PlanActivationResult(
-            activated = true,
-            scheduleSetupRequired = decision == PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP,
-        )
+        return PlanActivationResult(activated = true)
     }
 }
 
 class ArchiveTrainingPlanUseCase(
-    private val repository: TrainingPlanRepository,
-    private val calendarRepository: TrainingCalendarRepository,
+    private val coordinator: TrainingPlanCalendarCoordinator,
 ) {
     suspend operator fun invoke(id: String, archived: Boolean) {
-        if (archived) deactivateScheduleForPlan(calendarRepository, id)
-        repository.setArchived(id, archived)
+        coordinator.setArchived(id, archived)
     }
 }
 
 class DeleteTrainingPlanUseCase(
-    private val repository: TrainingPlanRepository,
-    private val calendarRepository: TrainingCalendarRepository,
+    private val coordinator: TrainingPlanCalendarCoordinator,
 ) {
     suspend operator fun invoke(id: String) {
-        deactivateScheduleForPlan(calendarRepository, id)
-        repository.delete(id)
+        coordinator.delete(id)
     }
-}
-
-private suspend fun deactivateScheduleForPlan(repository: TrainingCalendarRepository, planId: String) {
-    val schedule = repository.observeActiveSchedule().first()
-    if (schedule?.planId == planId) repository.saveSchedule(schedule.copy(isActive = false))
 }
 
 class SeedStarterTrainingPlansUseCase(private val repository: TrainingPlanRepository) {

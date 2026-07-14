@@ -9,6 +9,7 @@ import java.time.YearMonth
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -72,7 +73,67 @@ class TrainingCalendarViewModelTest {
             LocalDate.of(2026, 7, 15) to LocalDate.of(2026, 9, 8),
             calendarQueryRange(CalendarDisplayMode.AGENDA, LocalDate.of(2026, 7, 15)),
         )
+        listOf(
+            CalendarDisplayMode.TODAY to LocalDate.of(2026, 7, 15),
+            CalendarDisplayMode.WEEK to LocalDate.of(2026, 7, 15),
+            CalendarDisplayMode.MONTH to LocalDate.of(2026, 7, 15),
+        ).forEach { (mode, date) ->
+            val visible = calendarQueryRange(mode, date)
+            assertEquals(
+                visible.first.minusDays(1) to visible.second.plusDays(1),
+                calendarConflictQueryRange(visible),
+            )
+        }
     }
+
+    @Test fun `cross midnight conflicts load adjacent dates without exposing them in visible rows`() = runTest {
+        val calendar = CalendarStateRepository()
+        val date = LocalDate.of(2026, 1, 12)
+        calendar.rows.value = listOf(
+            occurrence("previous", date.minusDays(1), LocalTime.of(23, 30), 90),
+            occurrence("visible", date, LocalTime.of(0, 15), 30),
+        )
+        val clock = object : Clock { override fun nowEpochMs() = 1_768_176_000_000L }
+        val ids = object : UuidProvider { override fun newUuid() = "new-id" }
+        val viewModel = TrainingCalendarViewModel(
+            calendar,
+            ObserveActiveTrainingPlanUseCase(CalendarPlanRepository()),
+            CreatePlanScheduleUseCase(calendar, ids, clock),
+            PreviewPlanScheduleUseCase(clock),
+            EnsureCalendarHorizonUseCase(calendar),
+            MoveOccurrenceUseCase(calendar),
+            UpdateScheduleRuleUseCase(calendar),
+            ChangeOccurrenceStatusUseCase(calendar),
+            DetectCalendarConflictsUseCase(),
+            calendar,
+            CalendarLocationRepository(),
+            ids,
+            clock,
+        )
+        viewModel.setMode(CalendarDisplayMode.TODAY)
+        viewModel.selectDate(date)
+        advanceUntilIdle()
+
+        assertEquals(listOf("visible"), viewModel.state.value.occurrences.map { it.id })
+        assertTrue(viewModel.state.value.conflicts.any {
+            it.occurrenceId == "visible" && it.type == CalendarConflictType.OVERLAP
+        })
+        assertTrue("previous" !in viewModel.state.value.conflicts.map { it.occurrenceId })
+        assertEquals(date.minusDays(1) to date.plusDays(1), calendar.observedRanges.last())
+    }
+
+    private fun occurrence(id: String, date: LocalDate, time: LocalTime, duration: Int) =
+        ScheduledWorkoutOccurrence(
+            id,
+            "owner",
+            titleSnapshot = "Strength",
+            scheduledLocalDate = date,
+            scheduledLocalStartTime = time,
+            timeZoneId = "Europe/Berlin",
+            plannedDurationMinutes = duration,
+            createdAtEpochMs = 0,
+            updatedAtEpochMs = 0,
+        )
 }
 
 private class CalendarLocationRepository : TrainingLocationRepository {
@@ -87,6 +148,7 @@ private class CalendarLocationRepository : TrainingLocationRepository {
 }
 
 private class CalendarStateRepository : TrainingCalendarRepository {
+    val observedRanges = mutableListOf<Pair<LocalDate, LocalDate>>()
     val rows = MutableStateFlow(listOf(
         ScheduledWorkoutOccurrence(
             "occurrence",
@@ -100,17 +162,26 @@ private class CalendarStateRepository : TrainingCalendarRepository {
             updatedAtEpochMs = 0,
         ),
     ))
-    override fun observeOccurrences(from: LocalDate, to: LocalDate): Flow<List<ScheduledWorkoutOccurrence>> = rows
+    override fun observeOccurrences(from: LocalDate, to: LocalDate): Flow<List<ScheduledWorkoutOccurrence>> {
+        observedRanges += from to to
+        return rows.map { values -> values.filter { it.scheduledLocalDate in from..to } }
+    }
     override fun observeActiveSchedule(): Flow<PlanSchedule?> = MutableStateFlow(null)
     override fun observeAvailability(): Flow<List<AvailabilityRule>> = MutableStateFlow(listOf(
         AvailabilityRule("availability", "owner", java.time.DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0), 60),
     ))
     override fun observeOverrides(): Flow<List<ScheduleOverride>> = MutableStateFlow(emptyList())
     override suspend fun saveSchedule(schedule: PlanSchedule) = schedule
+    override suspend fun saveAndMaterialize(schedule: PlanSchedule, through: LocalDate) = rows.value
     override suspend fun materialize(scheduleId: String, through: LocalDate) = rows.value
     override suspend fun ensureHorizon(scheduleId: String, from: LocalDate, through: LocalDate) = rows.value
     override suspend fun generatedOccurrences(scheduleId: String, from: LocalDate, through: LocalDate) = rows.value
     override suspend fun replaceFuturePlanned(scheduleId: String, from: LocalDate, through: LocalDate) = rows.value
+    override suspend fun saveAndReplaceFuturePlanned(
+        schedule: PlanSchedule,
+        from: LocalDate,
+        through: LocalDate,
+    ) = rows.value
     override suspend fun saveOccurrence(occurrence: ScheduledWorkoutOccurrence) = occurrence.also { row ->
         rows.value = rows.value.filterNot { it.id == row.id } + row
     }

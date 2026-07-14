@@ -48,6 +48,10 @@ interface TrainingCalendarRepository {
     fun observeAvailability(): Flow<List<AvailabilityRule>>
     fun observeOverrides(): Flow<List<ScheduleOverride>>
     suspend fun saveSchedule(schedule: PlanSchedule): PlanSchedule
+    suspend fun saveAndMaterialize(
+        schedule: PlanSchedule,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence>
     suspend fun materialize(scheduleId: String, through: LocalDate): List<ScheduledWorkoutOccurrence>
     suspend fun ensureHorizon(
         scheduleId: String,
@@ -61,6 +65,11 @@ interface TrainingCalendarRepository {
     ): List<ScheduledWorkoutOccurrence>
     suspend fun replaceFuturePlanned(
         scheduleId: String,
+        from: LocalDate,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence>
+    suspend fun saveAndReplaceFuturePlanned(
+        schedule: PlanSchedule,
         from: LocalDate,
         through: LocalDate,
     ): List<ScheduledWorkoutOccurrence>
@@ -477,8 +486,38 @@ class CreatePlanScheduleUseCase(
             nowEpochMs = now,
             ruleId = { ids.newUuid() },
         )
-        val saved = repository.saveSchedule(schedule)
-        return repository.materialize(saved.id, startDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1))
+        return repository.saveAndMaterialize(
+            schedule,
+            startDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1),
+        )
+    }
+}
+
+class ActivatePlanWithScheduleUseCase(
+    private val coordinator: TrainingPlanCalendarCoordinator,
+    private val ids: UuidProvider,
+    private val clock: Clock,
+) {
+    suspend operator fun invoke(
+        plan: TrainingPlan,
+        startDate: LocalDate,
+        timeZoneId: String,
+        drafts: List<ScheduleRuleDraft>,
+    ): List<ScheduledWorkoutOccurrence> {
+        val schedule = buildPlanSchedule(
+            plan = plan,
+            startDate = startDate,
+            timeZoneId = timeZoneId,
+            drafts = drafts,
+            scheduleId = ids.newUuid(),
+            nowEpochMs = clock.nowEpochMs(),
+            ruleId = { ids.newUuid() },
+        )
+        return coordinator.activatePlanWithSchedule(
+            plan.id,
+            schedule,
+            startDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1),
+        )
     }
 }
 
@@ -558,8 +597,11 @@ class UpdateScheduleRuleUseCase(
 
     suspend fun confirm(preview: FutureScheduleChangePreview): List<ScheduledWorkoutOccurrence> {
         validateSchedule(preview.updatedSchedule)
-        val saved = repository.saveSchedule(preview.updatedSchedule)
-        return repository.replaceFuturePlanned(saved.id, preview.effectiveDate, preview.through)
+        return repository.saveAndReplaceFuturePlanned(
+            preview.updatedSchedule,
+            preview.effectiveDate,
+            preview.through,
+        )
     }
 }
 

@@ -200,7 +200,7 @@ class TrainingCalendarUseCasesTest {
         assertTrue(!repository.replaced)
         assertEquals(null, repository.savedSchedule)
         useCase.confirm(preview)
-        assertTrue(repository.replaced)
+        assertTrue(repository.savedAndReplaced)
         assertEquals(LocalTime.of(10, 0), repository.savedSchedule?.rules?.single()?.defaultStartTime)
     }
 
@@ -365,6 +365,7 @@ private class FakeCalendarRepository : TrainingCalendarRepository {
     var ensuredRange: Pair<LocalDate, LocalDate>? = null
     var ensureCalls = 0
     var savedSchedule: PlanSchedule? = null
+    var savedAndReplaced = false
     val rows = listOf(
         ScheduledWorkoutOccurrence(
             "row",
@@ -383,6 +384,8 @@ private class FakeCalendarRepository : TrainingCalendarRepository {
     override fun observeAvailability(): Flow<List<AvailabilityRule>> = MutableStateFlow(emptyList())
     override fun observeOverrides(): Flow<List<ScheduleOverride>> = MutableStateFlow(emptyList())
     override suspend fun saveSchedule(schedule: PlanSchedule) = schedule.also { savedSchedule = it }
+    override suspend fun saveAndMaterialize(schedule: PlanSchedule, through: LocalDate) =
+        rows.also { savedSchedule = schedule }
     override suspend fun materialize(scheduleId: String, through: LocalDate) = rows
     override suspend fun ensureHorizon(scheduleId: String, from: LocalDate, through: LocalDate): List<ScheduledWorkoutOccurrence> {
         ensuredRange = from to through
@@ -393,6 +396,14 @@ private class FakeCalendarRepository : TrainingCalendarRepository {
     override suspend fun replaceFuturePlanned(scheduleId: String, from: LocalDate, through: LocalDate): List<ScheduledWorkoutOccurrence> {
         replaced = true
         return rows
+    }
+    override suspend fun saveAndReplaceFuturePlanned(
+        schedule: PlanSchedule,
+        from: LocalDate,
+        through: LocalDate,
+    ) = rows.also {
+        savedSchedule = schedule
+        savedAndReplaced = true
     }
     override suspend fun saveOccurrence(occurrence: ScheduledWorkoutOccurrence) = occurrence
     override suspend fun copyOccurrence(id: String) = rows.first()

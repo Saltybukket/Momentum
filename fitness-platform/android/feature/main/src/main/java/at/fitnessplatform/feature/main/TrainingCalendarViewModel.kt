@@ -87,7 +87,7 @@ class TrainingCalendarViewModel @Inject constructor(
     private val zone = ZoneId.systemDefault()
     private val today = Instant.ofEpochMilli(clock.nowEpochMs()).atZone(zone).toLocalDate()
     val state = MutableStateFlow(TrainingCalendarUiState(today = today))
-    private val occurrenceRange = MutableStateFlow(calendarQueryRange(CalendarDisplayMode.WEEK, today))
+    private val visibleRange = MutableStateFlow(calendarQueryRange(CalendarDisplayMode.WEEK, today))
 
     init {
         viewModelScope.launch {
@@ -111,21 +111,30 @@ class TrainingCalendarViewModel @Inject constructor(
                 locationRepository.observeLocations(),
             ) { availability, overrides, locations -> Triple(availability, overrides, locations) }
             combine(
-                occurrenceRange.flatMapLatest { (from, through) -> repository.observeOccurrences(from, through) },
+                visibleRange.flatMapLatest { range ->
+                    val (from, through) = calendarConflictQueryRange(range)
+                    repository.observeOccurrences(from, through)
+                },
                 repository.observeActiveSchedule(),
                 observeActivePlan(),
                 constraints,
             ) { occurrences, schedule, plan, constraintRows ->
                 val (availability, overrides, locations) = constraintRows
+                val (visibleFrom, visibleThrough) = visibleRange.value
+                val visibleOccurrences = occurrences.filter {
+                    it.scheduledLocalDate in visibleFrom..visibleThrough
+                }
+                val visibleOccurrenceIds = visibleOccurrences.mapTo(mutableSetOf()) { it.id }
                 state.value.copy(
                     loading = false,
-                    occurrences = occurrences,
+                    occurrences = visibleOccurrences,
                     activeSchedule = schedule,
                     activePlan = plan,
                     availability = availability,
                     overrides = overrides,
                     locations = locations,
-                    conflicts = conflicts(occurrences, availability, overrides, locations),
+                    conflicts = conflicts(occurrences, availability, overrides, locations)
+                        .filter { it.occurrenceId in visibleOccurrenceIds },
                 )
             }.catch { error ->
                 state.update { it.copy(loading = false, error = error.message ?: "CALENDAR_LOAD_FAILED") }
@@ -135,11 +144,11 @@ class TrainingCalendarViewModel @Inject constructor(
 
     fun selectDate(date: LocalDate) {
         state.update { it.copy(selectedDate = date) }
-        occurrenceRange.value = calendarQueryRange(state.value.mode, date)
+        visibleRange.value = calendarQueryRange(state.value.mode, date)
     }
     fun setMode(mode: CalendarDisplayMode) {
         state.update { it.copy(mode = mode) }
-        occurrenceRange.value = calendarQueryRange(mode, state.value.selectedDate)
+        visibleRange.value = calendarQueryRange(mode, state.value.selectedDate)
     }
     fun navigatePeriod(delta: Long) {
         val current = state.value
@@ -340,3 +349,7 @@ internal fun calendarQueryRange(mode: CalendarDisplayMode, selectedDate: LocalDa
         }
         CalendarDisplayMode.AGENDA -> selectedDate to selectedDate.plusDays(55)
     }
+
+internal fun calendarConflictQueryRange(
+    visibleRange: Pair<LocalDate, LocalDate>,
+): Pair<LocalDate, LocalDate> = visibleRange.first.minusDays(1) to visibleRange.second.plusDays(1)

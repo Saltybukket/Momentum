@@ -107,6 +107,7 @@ class TrainingPlanUseCasesTest {
     @Test fun `plan activation requires explicit schedule decision and destructive lifecycle deactivates schedule`() = runTest {
         val plans = FakeTrainingPlanRepository()
         val calendar = FakePlanCalendarRepository()
+        val coordinator = FakePlanCalendarCoordinator(plans, calendar)
         val activate = SetActiveTrainingPlanUseCase(plans, calendar)
 
         assertTrue(runCatching { activate("new-plan") }.exceptionOrNull() is ValidationException)
@@ -114,17 +115,18 @@ class TrainingPlanUseCasesTest {
         assertEquals(PlanActivationResult(false), activate("new-plan", PlanScheduleActivationDecision.CANCEL))
 
         val result = activate("new-plan", PlanScheduleActivationDecision.START_NEW_SCHEDULE_SETUP)
-        assertEquals(PlanActivationResult(true, scheduleSetupRequired = true), result)
-        assertEquals("new-plan", plans.activatedId)
-        assertEquals(false, calendar.savedSchedules.last().isActive)
+        assertEquals(PlanActivationResult(false, scheduleSetupRequired = true), result)
+        assertEquals(null, plans.activatedId)
+        assertTrue(calendar.savedSchedules.isEmpty())
+        assertEquals(calendar.schedule, calendar.active.value)
 
         calendar.active.value = calendar.schedule.copy(planId = "new-plan", isActive = true)
-        ArchiveTrainingPlanUseCase(plans, calendar)("new-plan", true)
+        ArchiveTrainingPlanUseCase(coordinator)("new-plan", true)
         assertEquals("new-plan", plans.archivedId)
         assertEquals(false, calendar.savedSchedules.last().isActive)
 
         calendar.active.value = calendar.schedule.copy(planId = "delete-plan", isActive = true)
-        DeleteTrainingPlanUseCase(plans, calendar)("delete-plan")
+        DeleteTrainingPlanUseCase(coordinator)("delete-plan")
         assertEquals("delete-plan", plans.deletedId)
         assertEquals(false, calendar.savedSchedules.last().isActive)
     }
@@ -239,6 +241,8 @@ private class FakePlanCalendarRepository : TrainingCalendarRepository {
         savedSchedules += it
         active.value = it.takeIf(PlanSchedule::isActive)
     }
+    override suspend fun saveAndMaterialize(schedule: PlanSchedule, through: LocalDate) =
+        emptyList<ScheduledWorkoutOccurrence>()
     override suspend fun materialize(scheduleId: String, through: LocalDate) =
         emptyList<ScheduledWorkoutOccurrence>()
     override suspend fun ensureHorizon(scheduleId: String, from: LocalDate, through: LocalDate) =
@@ -247,6 +251,11 @@ private class FakePlanCalendarRepository : TrainingCalendarRepository {
         emptyList<ScheduledWorkoutOccurrence>()
     override suspend fun replaceFuturePlanned(scheduleId: String, from: LocalDate, through: LocalDate) =
         emptyList<ScheduledWorkoutOccurrence>()
+    override suspend fun saveAndReplaceFuturePlanned(
+        schedule: PlanSchedule,
+        from: LocalDate,
+        through: LocalDate,
+    ) = emptyList<ScheduledWorkoutOccurrence>()
     override suspend fun saveOccurrence(occurrence: ScheduledWorkoutOccurrence) = occurrence
     override suspend fun copyOccurrence(id: String) = error("unused")
     override suspend fun changeStatus(id: String, status: ScheduledWorkoutStatus) = Unit
@@ -254,4 +263,31 @@ private class FakePlanCalendarRepository : TrainingCalendarRepository {
     override suspend fun saveOverride(override: ScheduleOverride) = Unit
     override suspend fun deleteAvailability(id: String) = Unit
     override suspend fun deleteOverride(id: String) = Unit
+}
+
+private class FakePlanCalendarCoordinator(
+    private val plans: FakeTrainingPlanRepository,
+    private val calendar: FakePlanCalendarRepository,
+) : TrainingPlanCalendarCoordinator {
+    override suspend fun activatePlanWithSchedule(
+        planId: String,
+        schedule: PlanSchedule,
+        through: LocalDate,
+    ): List<ScheduledWorkoutOccurrence> {
+        calendar.saveSchedule(schedule)
+        plans.setActive(planId)
+        return emptyList()
+    }
+
+    override suspend fun setArchived(planId: String, archived: Boolean) {
+        val active = calendar.active.value
+        if (archived && active?.planId == planId) calendar.saveSchedule(active.copy(isActive = false))
+        plans.setArchived(planId, archived)
+    }
+
+    override suspend fun delete(planId: String) {
+        val active = calendar.active.value
+        if (active?.planId == planId) calendar.saveSchedule(active.copy(isActive = false))
+        plans.delete(planId)
+    }
 }

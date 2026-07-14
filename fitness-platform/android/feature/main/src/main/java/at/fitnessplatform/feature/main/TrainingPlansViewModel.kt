@@ -6,6 +6,7 @@ import at.fitnessplatform.core.model.CatalogExercise
 import at.fitnessplatform.core.model.CatalogFilter
 import at.fitnessplatform.core.model.Clock
 import at.fitnessplatform.core.model.CustomExercise
+import at.fitnessplatform.core.model.AvailabilityRule
 import at.fitnessplatform.core.model.ExerciseReference
 import at.fitnessplatform.core.model.ExerciseReferenceKind
 import at.fitnessplatform.core.model.ExerciseSnapshot
@@ -16,12 +17,14 @@ import at.fitnessplatform.core.model.PlanDay
 import at.fitnessplatform.core.model.PlanExercise
 import at.fitnessplatform.core.model.PlanWeek
 import at.fitnessplatform.core.model.SetPrescription
+import at.fitnessplatform.core.model.ScheduleOverride
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.TrainingLocation
 import at.fitnessplatform.core.model.TrainingPlan
 import at.fitnessplatform.core.model.TrainingPlanGoal
 import at.fitnessplatform.core.model.UuidProvider
 import at.fitnessplatform.domain.ArchiveTrainingPlanUseCase
+import at.fitnessplatform.domain.ActivatePlanWithScheduleUseCase
 import at.fitnessplatform.domain.AdaptTrainingPlanCopyUseCase
 import at.fitnessplatform.domain.CatalogRepository
 import at.fitnessplatform.domain.CopyTrainingPlanUseCase
@@ -36,9 +39,16 @@ import at.fitnessplatform.domain.SetActiveTrainingPlanUseCase
 import at.fitnessplatform.domain.TrainingLocationRepository
 import at.fitnessplatform.domain.PlanStructureKind
 import at.fitnessplatform.domain.PlanScheduleActivationDecision
+import at.fitnessplatform.domain.PreviewPlanScheduleUseCase
+import at.fitnessplatform.domain.ScheduleRuleDraft
+import at.fitnessplatform.domain.ScheduleSetupPreview
+import at.fitnessplatform.domain.TrainingCalendarRepository
 import at.fitnessplatform.domain.isCompatibleWith
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -55,12 +65,18 @@ data class PlanExerciseChoice(
 )
 
 data class TrainingPlansUiState(
+    val today: LocalDate = LocalDate.ofEpochDay(0),
     val loading: Boolean = true,
     val plans: List<TrainingPlan> = emptyList(),
     val selectedPlanId: String? = null,
     val choices: List<PlanExerciseChoice> = emptyList(),
     val activeLocation: TrainingLocation? = null,
+    val locations: List<TrainingLocation> = emptyList(),
+    val availability: List<AvailabilityRule> = emptyList(),
+    val overrides: List<ScheduleOverride> = emptyList(),
     val pendingActivationPlanId: String? = null,
+    val pendingScheduleSetupPlanId: String? = null,
+    val pendingScheduleSetup: ScheduleSetupPreview? = null,
     val saving: Boolean = false,
     val error: String? = null,
 ) {
@@ -76,16 +92,23 @@ class TrainingPlansViewModel @Inject constructor(
     private val adaptPlanCopy: AdaptTrainingPlanCopyUseCase,
     private val editPlan: EditTrainingPlanUseCase,
     private val activatePlan: SetActiveTrainingPlanUseCase,
+    private val activatePlanWithSchedule: ActivatePlanWithScheduleUseCase,
+    private val previewPlanSchedule: PreviewPlanScheduleUseCase,
     private val archivePlan: ArchiveTrainingPlanUseCase,
     private val deletePlan: DeleteTrainingPlanUseCase,
     private val seedStarterPlans: SeedStarterTrainingPlansUseCase,
     private val catalogRepository: CatalogRepository,
     private val exerciseRepository: ExerciseRepository,
     private val locationRepository: TrainingLocationRepository,
+    private val calendarRepository: TrainingCalendarRepository,
     private val ids: UuidProvider,
     private val clock: Clock,
 ) : ViewModel() {
-    val state = MutableStateFlow(TrainingPlansUiState())
+    val state = MutableStateFlow(
+        TrainingPlansUiState(
+            today = Instant.ofEpochMilli(clock.nowEpochMs()).atZone(ZoneId.systemDefault()).toLocalDate(),
+        ),
+    )
     private var catalog: List<CatalogExercise> = emptyList()
 
     init {
@@ -95,20 +118,33 @@ class TrainingPlansViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            val scheduleConstraints = combine(
+                locationRepository.observeLocations(),
+                calendarRepository.observeAvailability(),
+                calendarRepository.observeOverrides(),
+            ) { locations, availability, overrides -> Triple(locations, availability, overrides) }
             combine(
                 observePlans(),
                 catalogRepository.observeCatalog(CatalogFilter()),
                 exerciseRepository.observeExercises(),
-                locationRepository.observeActiveLocation(),
-            ) { plans, catalogRows, privateRows, location ->
+                scheduleConstraints,
+            ) { plans, catalogRows, privateRows, constraints ->
+                val (locations, availability, overrides) = constraints
+                val location = locations.firstOrNull(TrainingLocation::isActive)
                 catalog = catalogRows
                 TrainingPlansUiState(
+                    today = state.value.today,
                     loading = false,
                     plans = plans,
                     selectedPlanId = state.value.selectedPlanId?.takeIf { id -> plans.any { it.id == id } },
                     choices = choices(catalogRows, privateRows, location),
                     activeLocation = location,
+                    locations = locations,
+                    availability = availability,
+                    overrides = overrides,
                     pendingActivationPlanId = state.value.pendingActivationPlanId,
+                    pendingScheduleSetupPlanId = state.value.pendingScheduleSetupPlanId,
+                    pendingScheduleSetup = state.value.pendingScheduleSetup,
                     saving = state.value.saving,
                     error = state.value.error,
                 )
@@ -248,9 +284,61 @@ class TrainingPlansViewModel @Inject constructor(
             return
         }
         operation {
-            activatePlan(id, decision)
-            state.update { it.copy(pendingActivationPlanId = null) }
+            val result = activatePlan(id, decision)
+            state.update {
+                it.copy(
+                    pendingActivationPlanId = null,
+                    pendingScheduleSetupPlanId = id.takeIf { result.scheduleSetupRequired },
+                )
+            }
         }
+    }
+
+    fun previewActivationSchedule(
+        startDate: LocalDate,
+        timeZoneId: String,
+        drafts: List<ScheduleRuleDraft>,
+        onSuccess: () -> Unit = {},
+    ) = operation(onSuccess) {
+        val planId = requireNotNull(state.value.pendingScheduleSetupPlanId) {
+            "No plan activation schedule is pending."
+        }
+        val plan = requireNotNull(state.value.plans.firstOrNull { it.id == planId }) {
+            "Training plan does not exist."
+        }
+        state.update {
+            it.copy(
+                pendingScheduleSetup = previewPlanSchedule(
+                    plan,
+                    startDate,
+                    timeZoneId,
+                    drafts,
+                    it.availability,
+                    it.overrides,
+                    it.locations,
+                ),
+            )
+        }
+    }
+
+    fun confirmActivationSchedule(onSuccess: () -> Unit = {}) = operation(onSuccess) {
+        val planId = requireNotNull(state.value.pendingScheduleSetupPlanId) {
+            "No plan activation schedule is pending."
+        }
+        val plan = requireNotNull(state.value.plans.firstOrNull { it.id == planId }) {
+            "Training plan does not exist."
+        }
+        val preview = requireNotNull(state.value.pendingScheduleSetup) {
+            "No activation schedule preview is pending."
+        }
+        activatePlanWithSchedule(plan, preview.startDate, preview.timeZoneId, preview.drafts)
+        state.update {
+            it.copy(pendingScheduleSetupPlanId = null, pendingScheduleSetup = null)
+        }
+    }
+
+    fun cancelActivationSchedule() {
+        state.update { it.copy(pendingScheduleSetupPlanId = null, pendingScheduleSetup = null) }
     }
     fun archive(id: String, archived: Boolean) = operation { archivePlan(id, archived) }
     fun delete(id: String) = operation { deletePlan(id); state.update { it.copy(selectedPlanId = null) } }

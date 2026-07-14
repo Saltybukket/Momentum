@@ -61,6 +61,53 @@ class RoomTrainingCalendarRepositoryTest {
         assertEquals(2, second.groupBy { it.scheduledLocalDate }.values.first().size)
     }
 
+    @Test fun scheduleCreationRollsBackWhenInitialMaterializationFails() = runTest {
+        database.openHelper.writableDatabase.execSQL(
+            """CREATE TRIGGER fail_initial_materialization BEFORE INSERT ON scheduled_workout_occurrences
+                BEGIN SELECT RAISE(ABORT, 'injected materialization failure'); END""",
+        )
+
+        assertTrue(
+            runCatching {
+                repository.saveAndMaterialize(schedule(), LocalDate.of(2026, 7, 20))
+            }.isFailure,
+        )
+        assertEquals(null, database.calendarDao().getSchedule("schedule", "profile"))
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_initial_materialization")
+    }
+
+    @Test fun confirmedRuleReplacementRollsBackScheduleAndRowsWhenRematerializationFails() = runTest {
+        val original = repository.saveSchedule(schedule())
+        val originalRows = repository.materialize(original.id, LocalDate.of(2026, 7, 20))
+        database.openHelper.writableDatabase.execSQL(
+            """CREATE TRIGGER fail_rule_rematerialization BEFORE INSERT ON scheduled_workout_occurrences
+                BEGIN SELECT RAISE(ABORT, 'injected rematerialization failure'); END""",
+        )
+        val changed = original.copy(
+            rules = original.rules.map { it.copy(defaultStartTime = LocalTime.of(10, 0)) },
+        )
+
+        assertTrue(
+            runCatching {
+                repository.saveAndReplaceFuturePlanned(
+                    changed,
+                    LocalDate.of(2026, 7, 13),
+                    LocalDate.of(2026, 7, 20),
+                )
+            }.isFailure,
+        )
+        val persisted = requireNotNull(database.calendarDao().getSchedule("schedule", "profile")).toModel()
+        assertEquals(original.rules.map { it.defaultStartTime }, persisted.rules.map { it.defaultStartTime })
+        assertEquals(
+            originalRows.map { it.id }.toSet(),
+            database.calendarDao()
+                .getScheduleOccurrences("profile", "schedule", "2026-07-13", "2026-07-20")
+                .map { it.id }
+                .toSet(),
+        )
+        database.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_rule_rematerialization")
+    }
+
     @Test fun explicitFutureReplacementKeepsCompletedRowsAndCopyIsAdHoc() = runTest {
         val schedule = repository.saveSchedule(schedule())
         val rows = repository.materialize(schedule.id, LocalDate.of(2026, 7, 20))

@@ -27,6 +27,13 @@ interface CalendarDao {
     fun observeActiveSchedule(ownerProfileId: String): Flow<PlanScheduleWithRules?>
 
     @Transaction
+    @Query(
+        "SELECT * FROM plan_schedules WHERE ownerProfileId = :ownerProfileId " +
+            "AND activeSlot = :ownerProfileId LIMIT 1",
+    )
+    suspend fun getActiveSchedule(ownerProfileId: String): PlanScheduleWithRules?
+
+    @Transaction
     @Query("SELECT * FROM plan_schedules WHERE id = :id AND ownerProfileId = :ownerProfileId LIMIT 1")
     suspend fun getSchedule(id: String, ownerProfileId: String): PlanScheduleWithRules?
 
