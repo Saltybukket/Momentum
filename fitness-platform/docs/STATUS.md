@@ -1,7 +1,7 @@
 # Project status
 
-Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, locally verified
-Phase 2B.2 calendar gate pending the final pushed-commit CI record.
+Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified Phase 2B.2
+implementation commit `376659cd679ff81971512b8c5d1802df012292c3`.
 
 ## Implemented
 
@@ -56,6 +56,10 @@ Phase 2B.2 calendar gate pending the final pushed-commit CI record.
 - Docker Compose config/build/up, container migration and smoke passed. Gitleaks found no secrets;
   Trivy found no fixed HIGH/CRITICAL filesystem or runtime-image vulnerabilities. The image report
   retains 20 unfixed HIGH/CRITICAL Debian findings for review.
+- Phase 2B.2 implementation CI
+  [run 29294493621](https://github.com/Saltybukket/Momentum/actions/runs/29294493621), attempt 1,
+  passed Android, backend and repository-security for exact head `376659cd` without reruns. Full
+  local evidence is in [the Phase 2B.2 handoff](HANDOFF_2026-07-13_PHASE_2B2.md).
 
 ## Active risks
 
@@ -71,6 +75,5 @@ Phase 2B.2 calendar gate pending the final pushed-commit CI record.
 
 ## Next phase
 
-Phase 2B.2 is locally complete and awaits only the final commit, push and exact-head CI evidence.
-No later feature gate is open. Workout execution, calendar sync, gamification and optional location
-synchronization remain outside this gate.
+Phase 2B.2 is complete. No later feature gate is open. Workout execution, calendar sync,
+gamification and optional location synchronization remain outside this gate.
