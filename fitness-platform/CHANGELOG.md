@@ -6,8 +6,15 @@
 
 - Added Room schema 8 with owner-scoped plan schedules, recurring plan-day rules, dated workout
   occurrences, availability rules and one-date overrides, plus an explicit 7→8 migration.
-- Added deterministic eight-week civil-time materialization, one-off moves/copies, explicitly
+- Added Room schema 9 snapshot/origin integrity and corrected 8→9 migration precedence so copies
+  of moved occurrences remain `COPIED`.
+- Added deterministic rolling 56-day civil-time materialization, one-off moves/copies, explicitly
   confirmed future-rule replacement, terminal-history protection and derived conflicts.
+- Made schedule creation/materialization, confirmed rule replacement, plan/schedule activation and
+  archive/delete lifecycle changes atomic, with injected-failure rollback coverage.
+- Kept the old plan and schedule active throughout resumable replacement setup, expanded conflict
+  queries across visible-range boundaries and explicitly blocked referenced plan-day removal
+  instead of permitting a silent cascade.
 - Added Today/Calendar/Plans/History navigation, Week/Month/Agenda views and
   persistence-confirmed schedule/occurrence editors.
 - Corrected Phase 2B.1 by preserving all equipment requirements, making adapt-as-copy atomic,

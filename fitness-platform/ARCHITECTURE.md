@@ -313,20 +313,30 @@ mock layout. See `docs/UI_DESIGN_SYSTEM.md`.
 
 ## 13. Offline plans and local training calendar
 
-Room 7 introduced the owner-scoped training-plan aggregate. Room 8 keeps reusable plan structure
-strictly separate from dated `ScheduledWorkoutOccurrence` rows. A `PlanSchedule` stores an IANA
+Room 7 introduced the owner-scoped training-plan aggregate. Room 8 added reusable plan structure
+strictly separate from dated `ScheduledWorkoutOccurrence` rows. Room 9 preserves occurrence
+identity and snapshots across plan edits, protects scheduled plan-day references and classifies
+generated, moved, copied and ad-hoc origins explicitly. A `PlanSchedule` stores an IANA
 time-zone identifier and recurring plan-day rules as local civil dates/times; conversion to an
 instant is deferred to workout execution so daylight-saving transitions cannot silently rewrite
 the user's intended wall-clock time.
 
-Materialization is a deterministic, idempotent eight-week Room transaction. Editing one
-occurrence never edits its plan or rule. Replacing future planned occurrences is a separate,
-explicitly confirmed transaction that preserves completed, running, skipped, cancelled and
-historical rows. Availability and date overrides are inputs to derived conflicts, never persisted
-conflict authority.
+Materialization is deterministic and idempotent over a rolling 56-day horizon. Initial schedule
+creation and materialization commit in one Room transaction; an explicitly confirmed rule change
+and replacement/rematerialization of generated future occurrences also commit atomically. Editing
+one occurrence never edits its plan or rule. Replacement preserves completed, running, skipped,
+cancelled and historical rows. Availability and date overrides are inputs to derived conflicts,
+never persisted conflict authority. Conflict queries load one adjacent civil day on each side of
+the visible range, while presentation remains clipped to the requested day, week or month.
+
+Starting schedule setup for another plan is non-mutating until the user confirms the preview. A
+data coordinator then creates/materializes the replacement schedule and activates its plan in one
+database transaction. Archive and delete coordinate schedule deactivation with the plan mutation
+in the same transaction. Removing a plan day referenced by dated calendar state remains a safe,
+explicitly unsupported operation in this gate; it never cascades silently.
 
 Plan exercise snapshots store every required equipment slug as a canonical JSON array in the
 existing Room column. Compatibility and calendar conflict derivation require the full set, not a
 single representative item. Adapt-as-copy is one repository transaction: the transformed deep
 copy is inserted once or no copy is inserted. Calendar sync, workout execution and server APIs are
-not part of this local slice. See ADR-017 and ADR-018.
+not part of this local slice. See ADR-017, ADR-018 and ADR-019.

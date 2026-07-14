@@ -234,4 +234,13 @@ cancelled rows are terminal for calendar editing.
 
 Room 8 also migrates `plan_exercises.snapshotEquipment` from one slug to a canonical sorted JSON
 array. This is an immutable snapshot value; catalog and location authority remain normalized
-elsewhere. Exported schemas 1–8 live under `android/core/database/schemas/`.
+elsewhere.
+
+Room schema 9 adds durable occurrence snapshot identity and explicit origin semantics while
+protecting a schedule rule's plan-day reference with `RESTRICT`. Migration 8→9 classifies a row
+with no schedule and a `movedFromOccurrenceId` as `COPIED` before considering legacy
+`originalScheduledDate`, so a copy of an already moved occurrence cannot become `MOVED_ONCE`.
+Plan aggregate updates are differential and retain referenced calendar history. Schedule creation
+plus initial materialization, confirmed rule replacement, plan activation plus replacement
+schedule creation, and archive/delete plus schedule deactivation each have a single Room
+transaction boundary. Exported schemas 1–9 live under `android/core/database/schemas/`.

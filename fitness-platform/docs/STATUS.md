@@ -1,7 +1,7 @@
 # Project status
 
-Status basis: 2026-07-13, branch `codex/fix-scaffold-reproducibility`, verified Phase 2B.2
-implementation commit `376659cd679ff81971512b8c5d1802df012292c3`.
+Status basis: 2026-07-15, branch `codex/fix-scaffold-reproducibility`, verified Phase 2B.2.1
+implementation commit `9550f9ccc2aa8f9ba58ce165307fa48633d50c1d`.
 
 ## Implemented
 
@@ -38,28 +38,32 @@ implementation commit `376659cd679ff81971512b8c5d1802df012292c3`.
   plan editing and idempotent self-authored starter plans. The immutable workout snapshot boundary
   is defined without beginning workout execution or plan synchronization.
 - Phase 2B.2 adds Room-backed recurring schedules, civil-time dated occurrences, availability and
-  overrides, deterministic eight-week materialization, explicit one-off versus future edits and
-  derived conflicts. Workouts expose Today, Calendar, Plans and History without beginning workout
-  execution or calendar synchronization.
+  overrides, deterministic rolling 56-day materialization, explicit one-off versus future edits
+  and derived conflicts. Phase 2B.2.1 makes schedule materialization, permanent-rule replacement
+  and plan/schedule lifecycle switches atomic; replacement setup preserves the old active state
+  until confirmation. Conflict queries include adjacent days without leaking them into visible
+  output, and Room 9 retains durable snapshot/origin identity. Workouts expose Today, Calendar,
+  Plans and History without beginning workout execution or calendar synchronization.
 - Repository, migration, static-analysis, JVM/build and container verification workflows.
 
 ## Schema and verification authority
 
 - Alembic head: `0d4f6a8b2c17`.
-- Android Room version: 8; exported schemas 1–8 are committed.
+- Android Room version: 9; exported schemas 1–9 are committed.
 - The canonical command matrix and connected-test limitation are in [TESTING.md](../TESTING.md).
-- Phase 2B.2 local verification passed 128 PostgreSQL backend tests with zero skips and 79.37%
-  combined coverage, fresh PostgreSQL and SQLite Alembic upgrade/check at `0d4f6a8b2c17`, 65
-  distinct Android JVM tests (118 debug/release and pure-JVM executions), the complete 656-task
-  Android gate and the 208-task AndroidTest compile gate. Connected Room migration execution is
-  not claimed because the stable API-36 AVD remains unavailable.
+- Phase 2B.2.1 local verification passed 129 PostgreSQL backend tests with zero skips and 79.20%
+  combined statement/branch coverage, fresh PostgreSQL and SQLite Alembic upgrade/check at
+  `0d4f6a8b2c17`, 78 distinct Android JVM tests (134 task/variant executions), the complete Android
+  gate and compilation of all changed AndroidTest source modules. The final combined Gradle command
+  reported 701 actionable tasks (120 executed, 581 up-to-date). Connected Room migration execution
+  is not claimed because the stable API-36 AVD remains unavailable.
 - Docker Compose config/build/up, container migration and smoke passed. Gitleaks found no secrets;
   Trivy found no fixed HIGH/CRITICAL filesystem or runtime-image vulnerabilities. The image report
   retains 20 unfixed HIGH/CRITICAL Debian findings for review.
-- Phase 2B.2 implementation CI
-  [run 29294493621](https://github.com/Saltybukket/Momentum/actions/runs/29294493621), attempt 1,
-  passed Android, backend and repository-security for exact head `376659cd` without reruns. Full
-  local evidence is in [the Phase 2B.2 handoff](HANDOFF_2026-07-13_PHASE_2B2.md).
+- Phase 2B.2.1 implementation CI
+  [run 29347954640](https://github.com/Saltybukket/Momentum/actions/runs/29347954640), attempt 1,
+  passed Android, backend and repository-security for exact head `9550f9c` without reruns. Full
+  local evidence is in [the Phase 2B.2.1 completion handoff](HANDOFF_2026-07-15_PHASE_2B21_COMPLETE.md).
 
 ## Active risks
 
@@ -75,5 +79,7 @@ implementation commit `376659cd679ff81971512b8c5d1802df012292c3`.
 
 ## Next phase
 
-Phase 2B.2 is complete. No later feature gate is open. Workout execution, calendar sync,
-gamification and optional location synchronization remain outside this gate.
+Phase 2B.2.1 is complete. No later feature gate is open. Workout execution, calendar sync,
+gamification, optional location synchronization and the visual design sprint remain outside this
+gate. Removing a plan day referenced by dated calendar state is deliberately unsupported rather
+than destructive; a future flow requires explicit impact preview and confirmation.
