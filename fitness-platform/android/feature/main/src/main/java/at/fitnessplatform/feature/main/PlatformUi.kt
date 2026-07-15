@@ -55,6 +55,7 @@ private object Routes {
     const val CONFLICTS = "conflicts"
     const val CONFLICT = "conflict/{exerciseId}"
     const val WORKOUTS = "workouts"
+    const val WORKOUT_DETAIL = "workout-detail/{workoutId}"
     const val CATALOG = "catalog"
     const val CATALOG_EXERCISE = "catalog/{catalogId}"
     const val PRIVACY = "privacy"
@@ -93,7 +94,7 @@ internal fun showsUpNavigation(route: String?): Boolean =
     route != null && rootDestinations.none { it.route == route }
 
 private fun routeTitle(route: String?): Int = when (route?.substringBefore('/')) {
-    "workouts" -> R.string.workouts_title
+    "workouts", "workout-detail" -> R.string.workouts_title
     "exercises", "exercise", "conflicts", "conflict" -> R.string.custom_exercises_title
     "catalog" -> R.string.catalog_title
     "privacy" -> R.string.privacy_title
@@ -261,8 +262,23 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onCreate = viewModel::createWorkout,
                             onStart = viewModel::startWorkout,
                             onComplete = viewModel::completeWorkout,
+                            onOpen = { navController.navigate("workout-detail/$it") },
                             onPlans = { navController.navigate(Routes.PLANS) },
                             onCalendar = { navController.navigate(Routes.CALENDAR) },
+                        )
+                    }
+                    composable(
+                        Routes.WORKOUT_DETAIL,
+                        arguments = listOf(navArgument("workoutId") { type = NavType.StringType }),
+                    ) { entry ->
+                        val id = entry.arguments?.getString("workoutId").orEmpty()
+                        WorkoutDetailScreen(
+                            workoutId = id,
+                            state = state,
+                            onStart = viewModel::startWorkout,
+                            onComplete = viewModel::completeWorkout,
+                            onRepeat = { viewModel.repeatWorkout(id) { newId -> navController.navigate("workout-detail/$newId") } },
+                            onBack = { navController.popBackStack() },
                         )
                     }
                     composable(Routes.CATALOG) {
@@ -758,6 +774,7 @@ internal fun WorkoutScreen(
     onCreate: (String, List<String>) -> Unit,
     onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
+    onOpen: (String) -> Unit,
     onPlans: () -> Unit,
     onCalendar: () -> Unit,
 ) {
@@ -795,10 +812,10 @@ internal fun WorkoutScreen(
         )
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (section == WorkoutListSection.TODAY) {
-                workoutSection(R.string.workouts_active, active, onStart, onComplete)
-                workoutSection(R.string.workouts_planned, planned, onStart, onComplete)
+                workoutSection(R.string.workouts_active, active, onStart, onComplete, onOpen)
+                workoutSection(R.string.workouts_planned, planned, onStart, onComplete, onOpen)
             } else {
-                workoutSection(R.string.workouts_history, history, onStart, onComplete)
+                workoutSection(R.string.workouts_history, history, onStart, onComplete, onOpen)
             }
         }
     }
@@ -813,11 +830,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.workoutSection(
     workouts: List<at.fitnessplatform.core.model.Workout>,
     onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
+    onOpen: (String) -> Unit,
 ) {
     if (workouts.isEmpty()) return
     item { MomentumSectionHeader(stringResource(title)) }
     items(workouts, key = { it.id }) { workout ->
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            onClick = { onOpen(workout.id) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Column(Modifier.padding(12.dp)) {
                 Text(workout.title, style = MaterialTheme.typography.titleMedium)
                 Text(workoutStatusLabel(workout.status))
@@ -862,3 +883,78 @@ private fun workoutStatusLabel(status: WorkoutStatus): String = stringResource(
         WorkoutStatus.CANCELLED -> R.string.workout_cancelled
     },
 )
+
+@Composable
+private fun WorkoutDetailScreen(
+    workoutId: String,
+    state: PlatformUiState,
+    onStart: (String) -> Unit,
+    onComplete: (String) -> Unit,
+    onRepeat: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val workout = state.workouts.firstOrNull { it.id == workoutId }
+    if (workout == null) {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
+    val exercises = state.exercises.associateBy { it.id }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(MomentumSpacing.sm),
+    ) {
+        MomentumSectionHeader(workout.title, workoutStatusLabel(workout.status))
+        val startMs = workout.startTimeEpochMs
+        if (startMs != null) {
+            MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_started, java.time.Instant.ofEpochMilli(startMs).toString()))
+            }
+        }
+        val endMs = workout.endTimeEpochMs
+        if (endMs != null) {
+            MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_ended, java.time.Instant.ofEpochMilli(endMs).toString()))
+            }
+        }
+        if (workout.notes.isNotBlank()) {
+            MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_notes_label))
+                Text(workout.notes, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (workout.exercises.isNotEmpty()) {
+            MomentumSectionHeader(stringResource(R.string.workout_exercises_label))
+            workout.exercises.sortedBy { it.position }.forEach { we ->
+                val exercise = exercises[we.exerciseId]
+                MomentumCard(Modifier.fillMaxWidth()) {
+                    if (exercise != null) {
+                        Text(exercise.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.exercise_summary, exercise.primaryMuscleGroup, exercise.requiredEquipment),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text(
+                            stringResource(R.string.workout_exercise_missing),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        }
+        when (workout.status) {
+            WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }, Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.start))
+            }
+            WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }, Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.complete))
+            }
+            WorkoutStatus.COMPLETED -> Button(
+                { onRepeat(workout.id) },
+                Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.workout_repeat)) }
+            else -> Unit
+        }
+    }
+}

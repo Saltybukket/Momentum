@@ -41,6 +41,7 @@ class PlatformViewModelTest {
             createWorkout = CreateWorkoutUseCase(workouts),
             startWorkout = StartWorkoutUseCase(workouts),
             completeWorkout = CompleteWorkoutUseCase(workouts),
+            repeatWorkout = RepeatWorkoutUseCase(workouts),
         )
         val values = mutableListOf<PlatformUiState>()
         val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect { values += it } }
@@ -128,6 +129,7 @@ class PlatformViewModelTest {
         createWorkout = CreateWorkoutUseCase(workouts),
         startWorkout = StartWorkoutUseCase(workouts),
         completeWorkout = CompleteWorkoutUseCase(workouts),
+        repeatWorkout = RepeatWorkoutUseCase(workouts),
     )
 }
 

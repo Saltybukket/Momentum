@@ -36,6 +36,9 @@ interface ExerciseDao {
     @Query("SELECT * FROM custom_exercises WHERE id = :id LIMIT 1")
     suspend fun get(id: String): CustomExerciseEntity?
 
+    @Query("SELECT * FROM custom_exercises WHERE id = :id AND ownerProfileId = :ownerProfileId AND deletedAtEpochMs IS NULL LIMIT 1")
+    suspend fun getActive(id: String, ownerProfileId: String): CustomExerciseEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: CustomExerciseEntity)
 

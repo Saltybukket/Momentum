@@ -31,10 +31,10 @@ data class PlatformUiState(
     val errorMessage: String? = null,
 ) {
     val activeWorkout: Workout?
-        get() = workouts.firstOrNull { it.status == WorkoutStatus.IN_PROGRESS }
+        get() = workouts.firstOrNull { it.status == WorkoutStatus.IN_PROGRESS || it.status == WorkoutStatus.PAUSED }
 
     val recentWorkouts: List<Workout>
-        get() = workouts.filter { it.status != WorkoutStatus.IN_PROGRESS }.take(3)
+        get() = workouts.filter { it.status != WorkoutStatus.IN_PROGRESS && it.status != WorkoutStatus.PAUSED }.take(3)
 }
 
 @HiltViewModel
@@ -54,6 +54,7 @@ class PlatformViewModel @Inject constructor(
     private val createWorkout: CreateWorkoutUseCase,
     private val startWorkout: StartWorkoutUseCase,
     private val completeWorkout: CompleteWorkoutUseCase,
+    private val repeatWorkout: RepeatWorkoutUseCase,
 ) : ViewModel() {
     private data class PlatformData(
         val profile: GuestProfile?,
@@ -148,6 +149,11 @@ class PlatformViewModel @Inject constructor(
 
     fun startWorkout(id: String) = runOperation { startWorkout.invoke(id) }
     fun completeWorkout(id: String) = runOperation { completeWorkout.invoke(id) }
+
+    fun repeatWorkout(id: String, onRepeated: (String) -> Unit) = runOperation {
+        val newWorkout = repeatWorkout.invoke(id)
+        onRepeated(newWorkout.id)
+    }
 
     private fun runOperation(onSuccess: () -> Unit = {}, block: suspend () -> Unit) {
         viewModelScope.launch {

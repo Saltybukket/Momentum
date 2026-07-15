@@ -41,6 +41,7 @@ object UseCaseModule {
     @Provides fun createWorkout(repository: WorkoutRepository) = CreateWorkoutUseCase(repository)
     @Provides fun startWorkout(repository: WorkoutRepository) = StartWorkoutUseCase(repository)
     @Provides fun completeWorkout(repository: WorkoutRepository) = CompleteWorkoutUseCase(repository)
+    @Provides fun repeatWorkout(repository: WorkoutRepository) = RepeatWorkoutUseCase(repository)
 }
 
 @Module

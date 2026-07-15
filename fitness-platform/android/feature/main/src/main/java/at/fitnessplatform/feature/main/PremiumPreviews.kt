@@ -49,7 +49,7 @@ private fun HomePreview() = MomentumTheme {
 @Preview(name = "Workouts expanded", widthDp = 840, heightDp = 600)
 @Composable
 private fun WorkoutsPreview() = MomentumTheme {
-    WorkoutScreen(previewPlatformState, { _, _ -> }, {}, {}, {}, {})
+    WorkoutScreen(previewPlatformState, { _, _ -> }, {}, {}, {}, {}, {})
 }
 
 @Preview(name = "Exercises empty", widthDp = 360, heightDp = 800)

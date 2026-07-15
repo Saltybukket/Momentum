@@ -751,7 +751,11 @@ class RoomWorkoutRepository @Inject constructor(
 
     override suspend fun create(title: String, exerciseIds: List<String>, notes: String): Workout {
         val profile = profileDao.get() ?: error("Create a guest profile before adding workouts.")
-        exerciseIds.forEach { requireNotNull(exerciseDao.get(it)) { "Exercise $it does not exist." } }
+        exerciseIds.forEach { exerciseId ->
+            requireNotNull(exerciseDao.getActive(exerciseId, profile.id)) {
+                "Exercise $exerciseId does not exist or has been deleted."
+            }
+        }
         val now = clock.nowEpochMs()
         val workoutId = ids.newUuid()
         val workout = Workout(
@@ -773,7 +777,10 @@ class RoomWorkoutRepository @Inject constructor(
 
     override suspend fun start(id: String): Workout {
         val current = requireNotNull(workoutDao.get(id)?.toModel()) { "Workout not found." }
-        if (current.status == WorkoutStatus.IN_PROGRESS || current.status == WorkoutStatus.COMPLETED) return current
+        if (current.status == WorkoutStatus.IN_PROGRESS) return current
+        require(current.status == WorkoutStatus.PLANNED) {
+            "Only a planned workout can be started."
+        }
         val now = clock.nowEpochMs()
         val updated = current.copy(status = WorkoutStatus.IN_PROGRESS, startTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
         database.withTransaction {

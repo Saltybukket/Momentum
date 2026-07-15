@@ -423,4 +423,10 @@
         <item quantity="one">%1$d conflict needs your attention.</item>
         <item quantity="other">%1$d conflicts need your attention.</item>
     </plurals>
+    <string name="workout_started">Started: %1$s</string>
+    <string name="workout_ended">Ended: %1$s</string>
+    <string name="workout_notes_label">Notes</string>
+    <string name="workout_exercises_label">Exercises</string>
+    <string name="workout_exercise_missing">Exercise not available</string>
+    <string name="workout_repeat">Repeat workout</string>
 </resources>

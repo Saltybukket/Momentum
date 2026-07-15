@@ -6,6 +6,7 @@ import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.Workout
+import at.fitnessplatform.core.model.WorkoutStatus
 import kotlinx.coroutines.flow.Flow
 
 class ValidationException(message: String) : IllegalArgumentException(message)
@@ -103,4 +104,21 @@ class StartWorkoutUseCase(private val repository: WorkoutRepository) {
 
 class CompleteWorkoutUseCase(private val repository: WorkoutRepository) {
     suspend operator fun invoke(id: String): Workout = repository.complete(id)
+}
+
+class RepeatWorkoutUseCase(private val repository: WorkoutRepository) {
+    suspend operator fun invoke(sourceId: String): Workout {
+        val source = requireNotNull(repository.getWorkout(sourceId)) {
+            "Source workout does not exist."
+        }
+        require(source.status == WorkoutStatus.COMPLETED) {
+            "Only completed workouts can be repeated."
+        }
+        val exerciseIds = source.exercises.sortedBy { it.position }.map { it.exerciseId }
+        return repository.create(
+            title = source.title,
+            exerciseIds = exerciseIds,
+            notes = source.notes.trim(),
+        )
+    }
 }
