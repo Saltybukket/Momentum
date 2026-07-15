@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Gate 18D workout history and repeat stabilization
+
+- Added an accessible Workout History detail surface with explicit loading/not-found states,
+  localized date/time presentation, ordered current-exercise resolution and preview/test coverage.
+- Made Repeat an owner-scoped planned-workout clone that preserves notes and exercise order,
+  rejects non-completed or unresolved sources, serializes duplicate submissions and navigates only
+  after durable creation.
+- Made workout create/start/complete validation, lifecycle transitions and UPSERT outbox writes
+  atomic, owner-bound and idempotent, with real Room repository AndroidTests.
+- Preserved the accepted Phase 2B.2.1 calendar cleanup and did not begin full workout execution.
+
 ### Phase 2B offline training calendar
 
 - Added Room schema 8 with owner-scoped plan schedules, recurring plan-day rules, dated workout
