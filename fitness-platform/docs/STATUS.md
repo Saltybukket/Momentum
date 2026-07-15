@@ -1,8 +1,8 @@
 # Project status
 
-Status basis: 2026-07-15, branch `codex/fix-scaffold-reproducibility`. The implementation/test
-candidate is `d0dfcf6`; the Gate 20C pause documentation HEAD and resume start HEAD are `b56016f`.
-Gate 20C is not accepted or pushed until the stable API-36 Connected matrix passes.
+Status basis: 2026-07-15, branch `codex/fix-scaffold-reproducibility`. Gate 20C Visual Sprint 1
+is locally accepted at code head `9321e83`; final documentation and CI verification follow this
+code checkpoint. The stable Windows API-36 acceptance device was `emulator-5554`, Android 16.
 
 ## Implemented
 
@@ -63,17 +63,18 @@ Gate 20C is not accepted or pushed until the stable API-36 Connected matrix pass
 - Alembic head: `0d4f6a8b2c17`.
 - Android Room version: 9; exported schemas 1–9 are committed.
 - The canonical command matrix and connected-test limitation are in [TESTING.md](../TESTING.md).
-- The Gate 20C candidate passes 101 distinct Android JVM tests (176 task/variant executions) with
-  zero failures, errors or skips. `spotlessCheck detekt test lintDebug assembleDebug` passed with
-  656 actionable tasks (62 executed, 594 up-to-date). Database, datastore, data, feature and app
-  AndroidTest sources compile; the sync task succeeds with `NO-SOURCE`. On the non-acceptance
-  API-37 preview AVD, database 20/20,
-  datastore 8/8 and data 36/36 instrumentation tests passed. Feature and app Compose tests cannot
-  initialize Espresso because that preview removed `InputManager.getInstance`; this evidence is
-  not Gate 20C connected acceptance.
+- The Gate 20C matrix passes 101 distinct Android JVM tests (176 debug/release task executions)
+  with zero failures, errors or skips. `spotlessCheck detekt test lintDebug assembleDebug` passed
+  with 656 actionable tasks (48 executed, 4 from cache and 604 up-to-date), and every AndroidTest
+  source set compiles (`core:sync` is intentionally `NO-SOURCE`).
+- Stable API-36 connected acceptance executed 87 tests: database 20/20, datastore 8/8, data 36/36,
+  feature 14/14 and app 9/9. The strict parser verified exactly one successful completion per
+  module; raw evidence is `android/build/connected-test-results/20260715T162301Z.txt`.
+- Backend PostgreSQL verification passes 129 tests at 79.24% combined coverage. PostgreSQL and
+  SQLite Alembic upgrade/check pass at head `0d4f6a8b2c17`.
 - Docker Compose config/build/up, container migration and smoke passed. Gitleaks found no secrets;
-  Trivy found no fixed HIGH/CRITICAL filesystem or runtime-image vulnerabilities. The image report
-  retains 20 unfixed HIGH/CRITICAL Debian findings for review.
+  Trivy found no fixed HIGH/CRITICAL filesystem or runtime-image vulnerabilities. The current
+  runtime-image report retains 22 unfixed/deferred HIGH/CRITICAL Debian findings for review.
 - Gate 18D implementation CI
   [run 29406924215](https://github.com/Saltybukket/Momentum/actions/runs/29406924215), attempt 1,
   passed Android, backend and repository-security for exact head `4993310` without reruns. Full
@@ -84,10 +85,9 @@ Gate 20C is not accepted or pushed until the stable API-36 Connected matrix pass
 - Guest identity and explicit replacement remain a development contract, not production
   authentication, revocation or account linking. Replacing local credentials does not delete
   previously stored server data.
-- Stable API-36 connected acceptance has not yet completed. The earlier API-37 preview diagnostic
-  resolved Espresso 3.5.0 transitively despite the catalogued 3.7.0; Gate 20C.1 binds 3.7.0 only in
-  the affected AndroidTest configurations. API-37 remains non-acceptance evidence. Gate 20C
-  commits remain local and no final CI run exists.
+- Gate 20C is locally accepted, but the final documentation commit is not accepted remotely until
+  its exact pushed SHA has a green GitHub Actions run. API-37 preview results remain diagnostic
+  history only.
 - Owner scoping is enforced at the Workout repository boundary; other private-data repositories
   still require their own later identity-boundary audit.
 - Health, nutrition, rewards, social, commerce, AI and production provider integrations are not
@@ -97,7 +97,7 @@ Gate 20C is not accepted or pushed until the stable API-36 Connected matrix pass
 
 ## Next phase
 
-Install and run the stable Windows API-36 Google APIs/x86_64 AVD, execute the complete connected
-matrix, then update evidence, push and verify CI for the exact final head. Do not begin Visual
-Sprint 2 or another product gate before Gate 20C is accepted. Full workout execution, calendar
-sync, gamification and optional location synchronization remain outside this gate.
+Commit the final Gate 20C evidence, push and verify GitHub Actions for the exact final SHA. Only
+after that remote acceptance may the next explicitly authorized gate begin. Full workout
+execution, calendar sync, gamification and optional location synchronization remain outside this
+gate.

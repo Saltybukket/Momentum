@@ -63,5 +63,5 @@ user-facing when a localized label exists. Light and dark schemes maintain reada
 Previews use conspicuously synthetic state and must never invent product metrics such as XP,
 streaks, calories, steps or weekly progress. Screenshots are accepted only from a built app or a
 named synthetic preview and must state which source was used. Connected visual acceptance remains
-separate from compile-only verification when no suitable API-36 AVD exists. API-37 preview
-execution is diagnostic only and cannot close the gate.
+separate from compile-only verification. Gate 20C executed its feature and app presentation
+contracts on stable API 36; API-37 preview execution remains diagnostic only.

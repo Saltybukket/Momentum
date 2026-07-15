@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Gate 20C Visual Sprint 1 acceptance
+
+- Hardened route-family navigation acceptance with stable root/nested screen semantics, real
+  system-Back and Navigate-Up transitions, accessible root icons and truthful Home actions.
+- Added distinct persistence-safe conflict confirmations, responsive tracking-control coverage and
+  explicit workout-detail loading, missing-exercise and busy states.
+- Made the Windows/WSL connected runner validate exact per-module completions and pinned Espresso
+  3.7.0 in the affected AndroidTest runtime graphs.
+- Passed the stable API-36 connected matrix with 87/87 tests across database, datastore, data,
+  feature and app modules.
+
 ### Gate 18D workout history and repeat stabilization
 
 - Added an accessible Workout History detail surface with explicit loading/not-found states,

@@ -104,6 +104,12 @@ requested module, and rejects failure, crash, skip, timeout, missing and duplica
 markers. API 36 with Google APIs/x86_64 is the project baseline; API 37 preview is not a valid
 substitute for acceptance verification.
 
+Gate 20C stable acceptance ran on `emulator-5554`, API 36 / Android 16. The complete matrix passed
+database 20/20, datastore 8/8, data 36/36, feature 14/14 and app 9/9: 87/87 with no failure,
+crash, skip, timeout or duplicate completion marker. The aggregate raw log is
+`android/build/connected-test-results/20260715T162301Z.txt` (local generated evidence, not a
+tracked artifact).
+
 `core:testing` provides `FakeClock`, `FakeUuidProvider`, deterministic test values and `MainDispatcherRule`.
 
 ## Fixtures and builders
@@ -241,11 +247,9 @@ inspection must confirm that `icon_and_image_ideas/` is absent. Compile-only And
 must never be described as connected visual or accessibility execution; those require the stable
 API-36 AVD.
 
-The local Gate 20C candidate passes 101 distinct JVM tests (176 debug/release task executions),
-Spotless, Detekt, lint and debug assembly. Diagnostic API-37 preview execution passes database
-20/20, datastore 8/8 and data 36/36. Feature and app Compose suites fail before test bodies because
-Espresso reflects the removed platform method `android.hardware.input.InputManager.getInstance`.
-This is environment evidence, not an accepted connected run. Install the stable image with
-`sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, create `Momentum_API_36` with
-`avdmanager.bat create avd -n Momentum_API_36 -k
-"system-images;android-36;google_apis;x86_64"`, and rerun the full connected matrix before push.
+Gate 20C passes 101 distinct JVM tests (176 debug/release task executions), Spotless, Detekt, lint,
+debug assembly and all 87 stable API-36 connected tests. The earlier API-37 preview run remains
+diagnostic history and is not part of acceptance. To recreate the accepted device, install the
+stable image with `sdkmanager.bat "system-images;android-36;google_apis;x86_64"` and create
+`Momentum_API_36` with `avdmanager.bat create avd -n Momentum_API_36 -k
+"system-images;android-36;google_apis;x86_64"`.
