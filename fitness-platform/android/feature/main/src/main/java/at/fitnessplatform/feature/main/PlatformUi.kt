@@ -38,6 +38,8 @@ import at.fitnessplatform.core.model.ExerciseConflict
 import at.fitnessplatform.core.model.ExerciseConflictType
 import at.fitnessplatform.core.model.ExerciseConflictResolution
 import at.fitnessplatform.core.model.WorkoutStatus
+import at.fitnessplatform.core.model.Workout
+import at.fitnessplatform.core.model.WorkoutExercise
 import at.fitnessplatform.domain.GuestCredentialStatus
 import at.fitnessplatform.core.designsystem.MomentumCard
 import at.fitnessplatform.core.designsystem.MomentumEmptyState
@@ -46,6 +48,11 @@ import at.fitnessplatform.core.designsystem.MomentumSectionHeader
 import at.fitnessplatform.core.designsystem.MomentumSpacing
 import at.fitnessplatform.core.designsystem.MomentumTheme
 import at.fitnessplatform.core.designsystem.MomentumSkeletonLine
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 private object Routes {
     const val HOME = "home"
@@ -92,6 +99,11 @@ internal fun rootRouteFor(route: String?): String? =
 
 internal fun showsUpNavigation(route: String?): Boolean =
     route != null && rootDestinations.none { it.route == route }
+
+internal fun workoutDetailRoute(workoutId: String): String {
+    require(workoutId.isNotBlank() && '/' !in workoutId) { "Workout ID is not route-safe." }
+    return "workout-detail/$workoutId"
+}
 
 private fun routeTitle(route: String?): Int = when (route?.substringBefore('/')) {
     "workouts", "workout-detail" -> R.string.workouts_title
@@ -262,7 +274,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             onCreate = viewModel::createWorkout,
                             onStart = viewModel::startWorkout,
                             onComplete = viewModel::completeWorkout,
-                            onOpen = { navController.navigate("workout-detail/$it") },
+                            onOpen = { navController.navigate(workoutDetailRoute(it)) },
                             onPlans = { navController.navigate(Routes.PLANS) },
                             onCalendar = { navController.navigate(Routes.CALENDAR) },
                         )
@@ -273,11 +285,17 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                     ) { entry ->
                         val id = entry.arguments?.getString("workoutId").orEmpty()
                         WorkoutDetailScreen(
-                            workoutId = id,
-                            state = state,
+                            detailState = workoutDetailState(id, state),
+                            busy = state.operationInProgress,
                             onStart = viewModel::startWorkout,
                             onComplete = viewModel::completeWorkout,
-                            onRepeat = { viewModel.repeatWorkout(id) { newId -> navController.navigate("workout-detail/$newId") } },
+                            onRepeat = {
+                                viewModel.repeatWorkout(id) { newId ->
+                                    navController.navigate(workoutDetailRoute(newId)) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                            },
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -812,10 +830,10 @@ internal fun WorkoutScreen(
         )
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (section == WorkoutListSection.TODAY) {
-                workoutSection(R.string.workouts_active, active, onStart, onComplete, onOpen)
-                workoutSection(R.string.workouts_planned, planned, onStart, onComplete, onOpen)
+                workoutSection(R.string.workouts_active, active, state.operationInProgress, onStart, onComplete, onOpen)
+                workoutSection(R.string.workouts_planned, planned, state.operationInProgress, onStart, onComplete, onOpen)
             } else {
-                workoutSection(R.string.workouts_history, history, onStart, onComplete, onOpen)
+                workoutSection(R.string.workouts_history, history, state.operationInProgress, onStart, onComplete, onOpen)
             }
         }
     }
@@ -828,6 +846,7 @@ internal fun newWorkoutExerciseIds(): List<String> = emptyList()
 private fun androidx.compose.foundation.lazy.LazyListScope.workoutSection(
     title: Int,
     workouts: List<at.fitnessplatform.core.model.Workout>,
+    busy: Boolean,
     onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
     onOpen: (String) -> Unit,
@@ -843,8 +862,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.workoutSection(
                 Text(workout.title, style = MaterialTheme.typography.titleMedium)
                 Text(workoutStatusLabel(workout.status))
                 when (workout.status) {
-                    WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }) { Text(stringResource(R.string.start)) }
-                    WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }) { Text(stringResource(R.string.complete)) }
+                    WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }, enabled = !busy) { Text(stringResource(R.string.start)) }
+                    WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }, enabled = !busy) { Text(stringResource(R.string.complete)) }
                     else -> Unit
                 }
             }
@@ -884,49 +903,125 @@ private fun workoutStatusLabel(status: WorkoutStatus): String = stringResource(
     },
 )
 
+internal data class ResolvedWorkoutExercise(
+    val link: WorkoutExercise,
+    val exercise: CustomExercise?,
+)
+
+internal sealed interface WorkoutDetailUiState {
+    data object Loading : WorkoutDetailUiState
+    data object NotFound : WorkoutDetailUiState
+    data class Content(
+        val workout: Workout,
+        val exercises: List<ResolvedWorkoutExercise>,
+        val repeatAllowed: Boolean,
+    ) : WorkoutDetailUiState
+}
+
+internal fun resolveWorkoutExercises(
+    workout: Workout,
+    exercises: List<CustomExercise>,
+): List<ResolvedWorkoutExercise> {
+    val byId = exercises.associateBy { it.id }
+    return workout.exercises.sortedBy { it.position }.map { link ->
+        ResolvedWorkoutExercise(link, byId[link.exerciseId])
+    }
+}
+
+internal fun workoutDetailState(workoutId: String, state: PlatformUiState): WorkoutDetailUiState {
+    return if (state.isLoading) {
+        WorkoutDetailUiState.Loading
+    } else {
+        state.workouts.firstOrNull { it.id == workoutId }?.let { workout ->
+            val resolved = resolveWorkoutExercises(workout, state.exercises)
+            WorkoutDetailUiState.Content(
+                workout = workout,
+                exercises = resolved,
+                repeatAllowed = workout.status == WorkoutStatus.COMPLETED &&
+                    resolved.all { it.exercise != null },
+            )
+        } ?: WorkoutDetailUiState.NotFound
+    }
+}
+
+internal fun formatWorkoutDateTime(
+    epochMs: Long,
+    locale: Locale = Locale.getDefault(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): String = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+    .withLocale(locale)
+    .format(Instant.ofEpochMilli(epochMs).atZone(zoneId))
+
 @Composable
-private fun WorkoutDetailScreen(
-    workoutId: String,
-    state: PlatformUiState,
+internal fun WorkoutDetailScreen(
+    detailState: WorkoutDetailUiState,
+    busy: Boolean,
     onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
     onRepeat: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val workout = state.workouts.firstOrNull { it.id == workoutId }
-    if (workout == null) {
-        LaunchedEffect(Unit) { onBack() }
-        return
+    when (detailState) {
+        WorkoutDetailUiState.Loading -> MomentumScreen(Modifier.fillMaxSize()) {
+            item { MomentumSectionHeader(stringResource(R.string.workout_detail_loading)) }
+            item { MomentumSkeletonLine(Modifier.fillMaxWidth()) }
+        }
+        WorkoutDetailUiState.NotFound -> MomentumScreen(Modifier.fillMaxSize()) {
+            item {
+                MomentumEmptyState(
+                    stringResource(R.string.workout_detail_not_found_title),
+                    stringResource(R.string.workout_detail_not_found_body),
+                    stringResource(R.string.back),
+                    onBack,
+                )
+            }
+        }
+        is WorkoutDetailUiState.Content -> WorkoutDetailContent(
+            state = detailState,
+            busy = busy,
+            onStart = onStart,
+            onComplete = onComplete,
+            onRepeat = onRepeat,
+        )
     }
-    val exercises = state.exercises.associateBy { it.id }
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(MomentumSpacing.sm),
-    ) {
-        MomentumSectionHeader(workout.title, workoutStatusLabel(workout.status))
+}
+
+@Composable
+internal fun WorkoutDetailContent(
+    state: WorkoutDetailUiState.Content,
+    busy: Boolean,
+    onStart: (String) -> Unit,
+    onComplete: (String) -> Unit,
+    onRepeat: (String) -> Unit,
+) {
+    val workout = state.workout
+    MomentumScreen(Modifier.fillMaxSize()) {
+        item { MomentumSectionHeader(workout.title, workoutStatusLabel(workout.status)) }
         val startMs = workout.startTimeEpochMs
         if (startMs != null) {
-            MomentumCard(Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.workout_started, java.time.Instant.ofEpochMilli(startMs).toString()))
-            }
+            item { MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_started, formatWorkoutDateTime(startMs)))
+            } }
         }
         val endMs = workout.endTimeEpochMs
         if (endMs != null) {
-            MomentumCard(Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.workout_ended, java.time.Instant.ofEpochMilli(endMs).toString()))
-            }
+            item { MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_ended, formatWorkoutDateTime(endMs)))
+            } }
         }
         if (workout.notes.isNotBlank()) {
-            MomentumCard(Modifier.fillMaxWidth()) {
+            item { MomentumCard(Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.workout_notes_label))
                 Text(workout.notes, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            } }
         }
-        if (workout.exercises.isNotEmpty()) {
-            MomentumSectionHeader(stringResource(R.string.workout_exercises_label))
-            workout.exercises.sortedBy { it.position }.forEach { we ->
-                val exercise = exercises[we.exerciseId]
-                MomentumCard(Modifier.fillMaxWidth()) {
+        if (state.exercises.isNotEmpty()) {
+            item { MomentumSectionHeader(stringResource(R.string.workout_exercises_label)) }
+            items(state.exercises, key = { it.link.id }) { resolved ->
+                val exercise = resolved.exercise
+                val exerciseDescription = exercise?.name
+                    ?: stringResource(R.string.workout_exercise_missing)
+                MomentumCard(Modifier.fillMaxWidth().semantics { contentDescription = exerciseDescription }) {
                     if (exercise != null) {
                         Text(exercise.name, style = MaterialTheme.typography.titleMedium)
                         Text(
@@ -944,16 +1039,25 @@ private fun WorkoutDetailScreen(
             }
         }
         when (workout.status) {
-            WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }, Modifier.fillMaxWidth()) {
+            WorkoutStatus.PLANNED -> item { Button({ onStart(workout.id) }, Modifier.fillMaxWidth(), enabled = !busy) {
                 Text(stringResource(R.string.start))
-            }
-            WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }, Modifier.fillMaxWidth()) {
+            } }
+            WorkoutStatus.IN_PROGRESS -> item { Button({ onComplete(workout.id) }, Modifier.fillMaxWidth(), enabled = !busy) {
                 Text(stringResource(R.string.complete))
+            } }
+            WorkoutStatus.COMPLETED -> {
+                item { Button(
+                    { onRepeat(workout.id) },
+                    Modifier.fillMaxWidth(),
+                    enabled = !busy && state.repeatAllowed,
+                ) { Text(stringResource(R.string.workout_repeat)) } }
+                if (!state.repeatAllowed) {
+                    item { Text(
+                        stringResource(R.string.workout_repeat_unavailable_missing),
+                        color = MaterialTheme.colorScheme.error,
+                    ) }
+                }
             }
-            WorkoutStatus.COMPLETED -> Button(
-                { onRepeat(workout.id) },
-                Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.workout_repeat)) }
             else -> Unit
         }
     }

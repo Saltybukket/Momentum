@@ -429,4 +429,8 @@
     <string name="workout_exercises_label">Exercises</string>
     <string name="workout_exercise_missing">Exercise not available</string>
     <string name="workout_repeat">Repeat workout</string>
+    <string name="workout_detail_loading">Loading workout</string>
+    <string name="workout_detail_not_found_title">Workout not found</string>
+    <string name="workout_detail_not_found_body">This workout is unavailable for the current profile.</string>
+    <string name="workout_repeat_unavailable_missing">Repeat is unavailable because a referenced exercise is missing.</string>
 </resources>

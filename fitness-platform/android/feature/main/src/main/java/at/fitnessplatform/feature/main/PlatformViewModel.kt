@@ -11,7 +11,9 @@ import at.fitnessplatform.core.model.Workout
 import at.fitnessplatform.core.model.WorkoutStatus
 import at.fitnessplatform.domain.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -71,6 +73,8 @@ class PlatformViewModel @Inject constructor(
 
     private val operationInProgress = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val recentlyCreatedWorkouts = MutableStateFlow<Map<String, Workout>>(emptyMap())
+    private val operationReserved = AtomicBoolean(false)
 
     private val platformData = combine(
         observeProfile(), observeExercises(), observeWorkouts(), observeConflicts(),
@@ -89,13 +93,16 @@ class PlatformViewModel @Inject constructor(
         syncSummary,
         operationInProgress,
         errorMessage,
-    ) { data, sync, busy, error ->
+        recentlyCreatedWorkouts,
+    ) { data, sync, busy, error, recent ->
+        val observedIds = data.workouts.mapTo(mutableSetOf()) { it.id }
+        val workouts = data.workouts + recent.values.filterNot { it.id in observedIds }
         PlatformUiState(
             isLoading = false,
             profile = data.profile,
             exercises = data.exercises,
             conflicts = data.conflicts,
-            workouts = data.workouts,
+            workouts = workouts,
             syncEnabled = sync.enabled,
             pendingSyncCount = sync.pendingCount,
             credentialStatus = sync.credentials,
@@ -122,7 +129,7 @@ class PlatformViewModel @Inject constructor(
         trackingType: TrackingType,
         notes: String,
         onSaved: () -> Unit,
-    ) = runOperation(onSuccess = onSaved) {
+    ) = runOperation(onSuccess = { onSaved() }) {
         val existing = id?.let { selectedId -> uiState.value.exercises.firstOrNull { it.id == selectedId } }
         if (existing == null) {
             createExercise(name, description, muscle, equipment, trackingType, notes)
@@ -150,19 +157,28 @@ class PlatformViewModel @Inject constructor(
     fun startWorkout(id: String) = runOperation { startWorkout.invoke(id) }
     fun completeWorkout(id: String) = runOperation { completeWorkout.invoke(id) }
 
-    fun repeatWorkout(id: String, onRepeated: (String) -> Unit) = runOperation {
+    fun repeatWorkout(id: String, onRepeated: (String) -> Unit) = runOperation(onSuccess = onRepeated) {
         val newWorkout = repeatWorkout.invoke(id)
-        onRepeated(newWorkout.id)
+        recentlyCreatedWorkouts.value += newWorkout.id to newWorkout
+        newWorkout.id
     }
 
-    private fun runOperation(onSuccess: () -> Unit = {}, block: suspend () -> Unit) {
+    @Suppress("TooGenericExceptionCaught")
+    private fun <T> runOperation(onSuccess: (T) -> Unit = { _ -> }, block: suspend () -> T) {
+        if (!operationReserved.compareAndSet(false, true)) return
+        operationInProgress.value = true
+        errorMessage.value = null
         viewModelScope.launch {
-            operationInProgress.value = true
-            errorMessage.value = null
-            runCatching { block() }
-                .onSuccess { onSuccess() }
-                .onFailure { errorMessage.value = it.message ?: "Unknown error" }
-            operationInProgress.value = false
+            try {
+                onSuccess(block())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                errorMessage.value = error.message ?: "Unknown error"
+            } finally {
+                operationReserved.set(false)
+                operationInProgress.value = false
+            }
         }
     }
 }

@@ -5,12 +5,15 @@ import at.fitnessplatform.core.testing.MainDispatcherRule
 import at.fitnessplatform.domain.*
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -109,6 +112,135 @@ class PlatformViewModelTest {
         job.cancel()
     }
 
+    @Test fun `repeat success navigates once and bridges delayed Room emission`() = runTest {
+        val workouts = FakeWorkoutRepository().apply {
+            add(completedWorkout())
+            publishCreates = false
+        }
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            FakeExerciseRepository(),
+            workouts,
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val states = mutableListOf<PlatformUiState>()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect { states += it }
+        }
+        val navigated = mutableListOf<String>()
+
+        viewModel.repeatWorkout("completed", navigated::add)
+        advanceUntilIdle()
+
+        assertEquals(listOf("created-1"), navigated)
+        assertEquals(1, workouts.createCalls)
+        assertTrue(states.last().workouts.any { it.id == "created-1" })
+        assertFalse(states.last().operationInProgress)
+        job.cancel()
+    }
+
+    @Test fun `repeat failure exposes error and never navigates`() = runTest {
+        val workouts = FakeWorkoutRepository().apply {
+            add(completedWorkout())
+            createFailure = ValidationException("Exercise unavailable")
+        }
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            FakeExerciseRepository(),
+            workouts,
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+        val navigated = mutableListOf<String>()
+
+        viewModel.repeatWorkout("completed", navigated::add)
+        advanceUntilIdle()
+
+        assertTrue(navigated.isEmpty())
+        assertEquals("Exercise unavailable", viewModel.uiState.value.errorMessage)
+        assertFalse(viewModel.uiState.value.operationInProgress)
+        job.cancel()
+    }
+
+    @Test fun `two immediate repeats reserve one operation and Busy resets after suspension`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val workouts = FakeWorkoutRepository().apply {
+            add(completedWorkout())
+            createGate = gate
+        }
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            FakeExerciseRepository(),
+            workouts,
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+        advanceUntilIdle()
+        val navigated = mutableListOf<String>()
+
+        viewModel.repeatWorkout("completed", navigated::add)
+        viewModel.repeatWorkout("completed", navigated::add)
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.operationInProgress)
+        assertEquals(1, workouts.createCalls)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("created-1"), navigated)
+        assertFalse(viewModel.uiState.value.operationInProgress)
+        job.cancel()
+    }
+
+    @Test fun `cancelled operation resets Busy without navigation or error`() = runTest {
+        val workouts = FakeWorkoutRepository().apply {
+            add(completedWorkout())
+            createFailure = CancellationException("cancelled")
+        }
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            FakeExerciseRepository(),
+            workouts,
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+        val navigated = mutableListOf<String>()
+
+        viewModel.repeatWorkout("completed", navigated::add)
+        advanceUntilIdle()
+
+        assertTrue(navigated.isEmpty())
+        assertFalse(viewModel.uiState.value.operationInProgress)
+        assertEquals(null, viewModel.uiState.value.errorMessage)
+        job.cancel()
+    }
+
+    @Test fun `paused remains active while completed remains recent`() = runTest {
+        val workouts = FakeWorkoutRepository().apply {
+            add(Workout("paused", "p", "Paused", status = WorkoutStatus.PAUSED, createdAtEpochMs = 2, updatedAtEpochMs = 2))
+            add(completedWorkout())
+        }
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            FakeExerciseRepository(),
+            workouts,
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+        advanceUntilIdle()
+
+        assertEquals("paused", viewModel.uiState.value.activeWorkout?.id)
+        assertEquals(listOf("completed"), viewModel.uiState.value.recentWorkouts.map { it.id })
+        job.cancel()
+    }
+
     private fun createViewModel(
         profiles: FakeProfileRepository,
         exercises: FakeExerciseRepository,
@@ -130,6 +262,16 @@ class PlatformViewModelTest {
         startWorkout = StartWorkoutUseCase(workouts),
         completeWorkout = CompleteWorkoutUseCase(workouts),
         repeatWorkout = RepeatWorkoutUseCase(workouts),
+    )
+
+    private fun completedWorkout() = Workout(
+        "completed",
+        "p",
+        "Completed",
+        status = WorkoutStatus.COMPLETED,
+        exercises = listOf(WorkoutExercise("link", "completed", "exercise", 0)),
+        createdAtEpochMs = 1,
+        updatedAtEpochMs = 1,
     )
 }
 
@@ -170,9 +312,29 @@ private class FakeExerciseRepository : ExerciseRepository {
 }
 private class FakeWorkoutRepository : WorkoutRepository {
     private val state = MutableStateFlow<List<Workout>>(emptyList())
+    var createCalls = 0
+    var createFailure: Throwable? = null
+    var createGate: CompletableDeferred<Unit>? = null
+    var publishCreates = true
     override fun observeWorkouts(): Flow<List<Workout>> = state
     override suspend fun getWorkout(id: String) = state.value.firstOrNull { it.id == id }
-    override suspend fun create(title: String, exerciseIds: List<String>, notes: String) = Workout("w", "p", title, notes = notes, createdAtEpochMs = 1, updatedAtEpochMs = 1).also { state.value += it }
+    override suspend fun create(title: String, exerciseIds: List<String>, notes: String): Workout {
+        createCalls++
+        createGate?.await()
+        createFailure?.let { throw it }
+        val id = "created-$createCalls"
+        return Workout(
+            id,
+            "p",
+            title,
+            notes = notes,
+            exercises = exerciseIds.mapIndexed { index, exerciseId ->
+                WorkoutExercise("$id-link-$index", id, exerciseId, index)
+            },
+            createdAtEpochMs = 1,
+            updatedAtEpochMs = 1,
+        ).also { if (publishCreates) state.value += it }
+    }
     override suspend fun start(id: String) = requireNotNull(getWorkout(id)).copy(status = WorkoutStatus.IN_PROGRESS).also { update(it) }
     override suspend fun complete(id: String) = requireNotNull(getWorkout(id)).copy(status = WorkoutStatus.COMPLETED).also { update(it) }
     private fun update(workout: Workout) { state.value = state.value.map { if (it.id == workout.id) workout else it } }

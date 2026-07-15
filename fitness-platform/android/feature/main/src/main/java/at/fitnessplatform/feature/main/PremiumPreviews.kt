@@ -9,12 +9,16 @@ import at.fitnessplatform.core.designsystem.MomentumTheme
 import at.fitnessplatform.core.model.CatalogExercise
 import at.fitnessplatform.core.model.CatalogMuscle
 import at.fitnessplatform.core.model.CatalogStatus
+import at.fitnessplatform.core.model.CustomExercise
 import at.fitnessplatform.core.model.Equipment
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.Muscle
 import at.fitnessplatform.core.model.MuscleRole
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.LocationType
+import at.fitnessplatform.core.model.Workout
+import at.fitnessplatform.core.model.WorkoutExercise
+import at.fitnessplatform.core.model.WorkoutStatus
 
 private val previewProfile = GuestProfile("preview-profile", "Alex", 0L)
 private val previewCatalogExercise = CatalogExercise(
@@ -35,6 +39,28 @@ private val previewCatalogExercise = CatalogExercise(
 )
 
 private val previewPlatformState = PlatformUiState(isLoading = false, profile = previewProfile)
+private val previewExercise = CustomExercise(
+    id = "preview-exercise",
+    ownerProfileId = previewProfile.id,
+    name = "Controlled squat",
+    primaryMuscleGroup = "Legs",
+    requiredEquipment = "None",
+    trackingType = TrackingType.REPS,
+    createdAtEpochMs = 0,
+    updatedAtEpochMs = 0,
+)
+private val previewCompletedWorkout = Workout(
+    id = "preview-workout",
+    ownerProfileId = previewProfile.id,
+    title = "Lower body session",
+    status = WorkoutStatus.COMPLETED,
+    startTimeEpochMs = 1_784_099_400_000,
+    endTimeEpochMs = 1_784_103_000_000,
+    notes = "Synthetic preview session.",
+    exercises = listOf(WorkoutExercise("preview-link", "preview-workout", previewExercise.id, 0)),
+    createdAtEpochMs = 1_784_099_400_000,
+    updatedAtEpochMs = 1_784_103_000_000,
+)
 
 @Preview(name = "Home compact", widthDp = 360, heightDp = 800)
 @Preview(name = "Home expanded", widthDp = 840, heightDp = 960)
@@ -50,6 +76,41 @@ private fun HomePreview() = MomentumTheme {
 @Composable
 private fun WorkoutsPreview() = MomentumTheme {
     WorkoutScreen(previewPlatformState, { _, _ -> }, {}, {}, {}, {}, {})
+}
+
+@Preview(name = "Workout detail completed compact", widthDp = 360, heightDp = 800)
+@Preview(name = "Workout detail completed dark", widthDp = 411, heightDp = 891, uiMode = 0x20)
+@Preview(name = "Workout detail completed 200 percent", widthDp = 411, heightDp = 891, fontScale = 2f)
+@Preview(name = "Workout detail completed expanded", widthDp = 840, heightDp = 600)
+@Composable
+private fun WorkoutDetailCompletedPreview() = MomentumTheme {
+    WorkoutDetailContent(
+        state = WorkoutDetailUiState.Content(
+            workout = previewCompletedWorkout,
+            exercises = resolveWorkoutExercises(previewCompletedWorkout, listOf(previewExercise)),
+            repeatAllowed = true,
+        ),
+        busy = false,
+        onStart = {},
+        onComplete = {},
+        onRepeat = {},
+    )
+}
+
+@Preview(name = "Workout detail missing exercise", widthDp = 411, heightDp = 891)
+@Composable
+private fun WorkoutDetailMissingExercisePreview() = MomentumTheme {
+    WorkoutDetailContent(
+        state = WorkoutDetailUiState.Content(
+            workout = previewCompletedWorkout,
+            exercises = resolveWorkoutExercises(previewCompletedWorkout, emptyList()),
+            repeatAllowed = false,
+        ),
+        busy = false,
+        onStart = {},
+        onComplete = {},
+        onRepeat = {},
+    )
 }
 
 @Preview(name = "Exercises empty", widthDp = 360, heightDp = 800)

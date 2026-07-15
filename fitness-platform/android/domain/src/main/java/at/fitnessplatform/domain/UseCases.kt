@@ -108,11 +108,10 @@ class CompleteWorkoutUseCase(private val repository: WorkoutRepository) {
 
 class RepeatWorkoutUseCase(private val repository: WorkoutRepository) {
     suspend operator fun invoke(sourceId: String): Workout {
-        val source = requireNotNull(repository.getWorkout(sourceId)) {
-            "Source workout does not exist."
-        }
-        require(source.status == WorkoutStatus.COMPLETED) {
-            "Only completed workouts can be repeated."
+        val source = repository.getWorkout(sourceId)
+            ?: throw ValidationException("Source workout does not exist.")
+        if (source.status != WorkoutStatus.COMPLETED) {
+            throw ValidationException("Only completed workouts can be repeated.")
         }
         val exerciseIds = source.exercises.sortedBy { it.position }.map { it.exerciseId }
         return repository.create(

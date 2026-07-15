@@ -64,7 +64,7 @@ class AppDatabaseTest {
         database.workoutDao().insertWorkout(workout.toEntity())
         database.workoutDao().insertExercises(workout.exercises.map { it.toEntity() })
         database.outboxDao().insert(OutboxEntity("o1", "w1", OutboxOperationType.UPSERT_WORKOUT.name, "{}", 1, SyncStatus.PENDING.name, 0, null))
-        assertNotNull(database.workoutDao().get("w1"))
+        assertNotNull(database.workoutDao().get("w1", "p1"))
         assertEquals(1, database.outboxDao().pending().size)
     }
 

@@ -82,12 +82,12 @@ data class WorkoutWithExercises(
 @Dao
 interface WorkoutDao {
     @Transaction
-    @Query("SELECT * FROM workouts ORDER BY updatedAtEpochMs DESC")
-    fun observeAll(): Flow<List<WorkoutWithExercises>>
+    @Query("SELECT * FROM workouts WHERE ownerProfileId = :ownerProfileId ORDER BY updatedAtEpochMs DESC")
+    fun observeAll(ownerProfileId: String): Flow<List<WorkoutWithExercises>>
 
     @Transaction
-    @Query("SELECT * FROM workouts WHERE id = :id LIMIT 1")
-    suspend fun get(id: String): WorkoutWithExercises?
+    @Query("SELECT * FROM workouts WHERE id = :id AND ownerProfileId = :ownerProfileId LIMIT 1")
+    suspend fun get(id: String, ownerProfileId: String): WorkoutWithExercises?
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertWorkout(entity: WorkoutEntity)

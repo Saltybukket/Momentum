@@ -746,29 +746,38 @@ class RoomWorkoutRepository @Inject constructor(
     private val events: DomainEventDispatcher,
     private val syncEnqueuer: SyncEnqueuer,
 ) : WorkoutRepository {
-    override fun observeWorkouts(): Flow<List<Workout>> = workoutDao.observeAll().map { rows -> rows.map { it.toModel() } }
-    override suspend fun getWorkout(id: String): Workout? = workoutDao.get(id)?.toModel()
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    override fun observeWorkouts(): Flow<List<Workout>> = profileDao.observe().flatMapLatest { profile ->
+        if (profile == null) flowOf(emptyList())
+        else workoutDao.observeAll(profile.id).map { rows -> rows.map { it.toModel() } }
+    }
+
+    override suspend fun getWorkout(id: String): Workout? {
+        val profile = profileDao.get() ?: return null
+        return workoutDao.get(id, profile.id)?.toModel()
+    }
 
     override suspend fun create(title: String, exerciseIds: List<String>, notes: String): Workout {
-        val profile = profileDao.get() ?: error("Create a guest profile before adding workouts.")
-        exerciseIds.forEach { exerciseId ->
-            requireNotNull(exerciseDao.getActive(exerciseId, profile.id)) {
-                "Exercise $exerciseId does not exist or has been deleted."
-            }
-        }
         val now = clock.nowEpochMs()
-        val workoutId = ids.newUuid()
-        val workout = Workout(
-            id = workoutId, ownerProfileId = profile.id, title = title, notes = notes,
-            exercises = exerciseIds.mapIndexed { index, exerciseId ->
-                WorkoutExercise(ids.newUuid(), workoutId, exerciseId, index)
-            },
-            createdAtEpochMs = now, updatedAtEpochMs = now,
-        )
-        database.withTransaction {
-            workoutDao.insertWorkout(workout.toEntity())
-            workoutDao.insertExercises(workout.exercises.map { it.toEntity() })
-            outboxDao.insert(workoutOutbox(workout, OutboxOperationType.UPSERT_WORKOUT))
+        val workout = database.withTransaction {
+            val profile = profileDao.get() ?: error("Create a guest profile before adding workouts.")
+            exerciseIds.forEach { exerciseId ->
+                requireNotNull(exerciseDao.getActive(exerciseId, profile.id)) {
+                    "Exercise $exerciseId does not exist or has been deleted."
+                }
+            }
+            val workoutId = ids.newUuid()
+            val created = Workout(
+                id = workoutId, ownerProfileId = profile.id, title = title, notes = notes,
+                exercises = exerciseIds.mapIndexed { index, exerciseId ->
+                    WorkoutExercise(ids.newUuid(), workoutId, exerciseId, index)
+                },
+                createdAtEpochMs = now, updatedAtEpochMs = now,
+            )
+            workoutDao.insertWorkout(created.toEntity())
+            workoutDao.insertExercises(created.exercises.map { it.toEntity() })
+            outboxDao.insert(workoutOutbox(created, OutboxOperationType.UPSERT_WORKOUT))
+            created
         }
         events.publish(WorkoutCreated(ids.newUuid(), now, workout.id))
         syncEnqueuer.enqueue()
@@ -776,36 +785,44 @@ class RoomWorkoutRepository @Inject constructor(
     }
 
     override suspend fun start(id: String): Workout {
-        val current = requireNotNull(workoutDao.get(id)?.toModel()) { "Workout not found." }
-        if (current.status == WorkoutStatus.IN_PROGRESS) return current
-        require(current.status == WorkoutStatus.PLANNED) {
-            "Only a planned workout can be started."
-        }
         val now = clock.nowEpochMs()
-        val updated = current.copy(status = WorkoutStatus.IN_PROGRESS, startTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
-        database.withTransaction {
+        val result = database.withTransaction {
+            val profile = profileDao.get() ?: error("Workout not found.")
+            val current = requireNotNull(workoutDao.get(id, profile.id)?.toModel()) { "Workout not found." }
+            if (current.status == WorkoutStatus.IN_PROGRESS) return@withTransaction current to false
+            require(current.status == WorkoutStatus.PLANNED) {
+                "Only a planned workout can be started."
+            }
+            val updated = current.copy(status = WorkoutStatus.IN_PROGRESS, startTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
             workoutDao.updateWorkout(updated.toEntity())
             outboxDao.insert(workoutOutbox(updated, OutboxOperationType.START_WORKOUT))
+            updated to true
         }
-        events.publish(WorkoutStarted(ids.newUuid(), now, id))
-        syncEnqueuer.enqueue()
-        return updated
+        if (result.second) {
+            events.publish(WorkoutStarted(ids.newUuid(), now, id))
+            syncEnqueuer.enqueue()
+        }
+        return result.first
     }
 
     override suspend fun complete(id: String): Workout {
-        val current = requireNotNull(workoutDao.get(id)?.toModel()) { "Workout not found." }
-        if (current.status == WorkoutStatus.COMPLETED) return current
-        require(current.status == WorkoutStatus.IN_PROGRESS) { "Only a started workout can be completed." }
         val now = clock.nowEpochMs()
-        val updated = current.copy(status = WorkoutStatus.COMPLETED, endTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
-        database.withTransaction {
+        val result = database.withTransaction {
+            val profile = profileDao.get() ?: error("Workout not found.")
+            val current = requireNotNull(workoutDao.get(id, profile.id)?.toModel()) { "Workout not found." }
+            if (current.status == WorkoutStatus.COMPLETED) return@withTransaction current to false
+            require(current.status == WorkoutStatus.IN_PROGRESS) { "Only a started workout can be completed." }
+            val updated = current.copy(status = WorkoutStatus.COMPLETED, endTimeEpochMs = now, updatedAtEpochMs = now, syncStatus = SyncStatus.PENDING)
             workoutDao.updateWorkout(updated.toEntity())
             outboxDao.insert(workoutOutbox(updated, OutboxOperationType.COMPLETE_WORKOUT))
+            updated to true
         }
-        val deterministicEventId = UUID.nameUUIDFromBytes("WorkoutCompleted:$id".toByteArray(StandardCharsets.UTF_8)).toString()
-        events.publish(WorkoutCompleted(deterministicEventId, now, id))
-        syncEnqueuer.enqueue()
-        return updated
+        if (result.second) {
+            val deterministicEventId = UUID.nameUUIDFromBytes("WorkoutCompleted:$id".toByteArray(StandardCharsets.UTF_8)).toString()
+            events.publish(WorkoutCompleted(deterministicEventId, now, id))
+            syncEnqueuer.enqueue()
+        }
+        return result.first
     }
 
     private fun workoutOutbox(workout: Workout, type: OutboxOperationType): OutboxEntity {
