@@ -38,7 +38,11 @@ declare -A RUNNERS=(
   [feature:main]="at.fitnessplatform.feature.main.test/androidx.test.runner.AndroidJUnitRunner"
   [app]="at.fitnessplatform.app.test/androidx.test.runner.AndroidJUnitRunner"
 )
-MODULES=("${@:-core:database core:datastore data feature:main app}")
+if [[ "$#" -gt 0 ]]; then
+  MODULES=("$@")
+else
+  MODULES=(core:database core:datastore data feature:main app)
+fi
 
 for module in "${MODULES[@]}"; do
   if [[ -z "${RUNNERS[$module]:-}" ]]; then
