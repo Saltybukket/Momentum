@@ -195,12 +195,12 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             composable(Routes.HOME) {
                                 HomeScreen(
                                     state = state,
-                                    onCatalog = { navController.navigate(Routes.CATALOG) },
-                                    onPrivacy = { navController.navigate(Routes.PRIVACY) },
-                                    onWorkouts = { navController.navigate(Routes.WORKOUTS) },
-                                    onConflicts = { navController.navigate(Routes.CONFLICTS) },
-                                    onLocations = { navController.navigate(Routes.LOCATIONS) },
-                                    onPlans = { navController.navigate(Routes.PLANS) },
+                                    onCatalog = { navController.navigateRoot(Routes.CATALOG) },
+                                    onPrivacy = { navController.navigateRoot(Routes.PRIVACY) },
+                                    onWorkouts = { navController.navigateRoot(Routes.WORKOUTS) },
+                                    onConflicts = { navController.navigateRoot(Routes.CONFLICTS) },
+                                    onLocations = { navController.navigateRoot(Routes.LOCATIONS) },
+                                    onPlans = { navController.navigateRoot(Routes.PLANS) },
                                     onOpen = { navController.navigate("workout-detail/$it") },
                                 )
                             }
@@ -209,8 +209,8 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                     profile.displayName,
                                     state.operationInProgress,
                                     viewModel::renameGuest,
-                                    onLocations = { navController.navigate(Routes.LOCATIONS) },
-                                    onPrivacy = { navController.navigate(Routes.PRIVACY) },
+                                    onLocations = { navController.navigateRoot(Routes.LOCATIONS) },
+                                    onPrivacy = { navController.navigateRoot(Routes.PRIVACY) },
                                 )
                             }
                             composable(Routes.EXERCISES) {
@@ -263,8 +263,8 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                     onStart = viewModel::startWorkout,
                                     onComplete = viewModel::completeWorkout,
                                     onOpen = { navController.navigate("workout-detail/$it") },
-                                    onPlans = { navController.navigate(Routes.PLANS) },
-                                    onCalendar = { navController.navigate(Routes.CALENDAR) },
+                                    onPlans = { navController.navigateRoot(Routes.PLANS) },
+                                    onCalendar = { navController.navigateRoot(Routes.CALENDAR) },
                                 )
                             }
                             composable(

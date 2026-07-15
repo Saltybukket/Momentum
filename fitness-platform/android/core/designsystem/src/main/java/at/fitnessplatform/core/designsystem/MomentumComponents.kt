@@ -1,5 +1,6 @@
 package at.fitnessplatform.core.designsystem
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+
+import androidx.compose.material3.TextButton
 
 fun Modifier.momentumContentWidth(maxWidth: Dp = 960.dp): Modifier =
     fillMaxWidth().widthIn(max = maxWidth)
@@ -201,12 +204,9 @@ fun MomentumInlineBanner(
         ) {
             Text(message, Modifier.weight(1f), color = fg, style = MaterialTheme.typography.bodyMedium)
             if (actionLabel != null && onAction != null) {
-                Text(
-                    actionLabel,
-                    color = fg,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(start = MomentumSpacing.sm).semantics { },
-                )
+                TextButton(onClick = onAction, modifier = Modifier) {
+                    Text(actionLabel, color = fg, style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
     }
@@ -222,17 +222,18 @@ fun MomentumStatusChip(variant: MomentumStatusVariant, text: String, modifier: M
         MomentumStatusVariant.CONFLICT -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    AssistChip(
-        onClick = {},
-        label = { Text(text, color = fg, style = MaterialTheme.typography.labelMedium) },
-        modifier = modifier.semantics {
-            stateDescription = text
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            labelColor = fg,
-            leadingIconContentColor = fg,
-        ),
-    )
+    Surface(
+        modifier.semantics { stateDescription = text },
+        shape = MaterialTheme.shapes.small,
+        color = fg.copy(alpha = 0.12f),
+    ) {
+        Text(
+            text,
+            color = fg,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
 }
 
 @Composable
@@ -242,7 +243,10 @@ fun MomentumSegmentedControl(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm)) {
+    Row(
+        modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm),
+    ) {
         options.forEachIndexed { index, label ->
             val selected = index == selectedIndex
             FilterChip(

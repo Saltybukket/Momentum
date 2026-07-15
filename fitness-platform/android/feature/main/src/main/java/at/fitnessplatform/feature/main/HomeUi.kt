@@ -49,6 +49,7 @@ import at.fitnessplatform.core.model.WorkoutStatus
 import at.fitnessplatform.domain.GuestCredentialStatus
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 internal fun HomeScreen(
     state: PlatformUiState,
     onCatalog: () -> Unit,
@@ -72,19 +73,40 @@ internal fun HomeScreen(
     }
     item {
         val active = state.activeWorkout
+        val planned = state.nextPlannedWorkout
+        val heroWorkout = active ?: planned
         MomentumHeroCard(Modifier.fillMaxWidth()) {
             Text(
-                stringResource(if (active == null) R.string.home_workout_title else R.string.home_active_workout, active?.title ?: ""),
+                stringResource(
+                    when {
+                        active != null -> R.string.home_active_workout
+                        planned != null -> R.string.workout_planned
+                        else -> R.string.home_workout_title
+                    },
+                    heroWorkout?.title ?: "",
+                ),
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                if (active == null) stringResource(R.string.home_no_active_workout) else active.title,
+                when {
+                    active != null -> active.title
+                    planned != null -> planned.title
+                    else -> stringResource(R.string.home_no_active_workout)
+                },
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
-            Button(onClick = onWorkouts) {
+            Button(
+                onClick = {
+                    if (heroWorkout != null) onOpen(heroWorkout.id) else onWorkouts()
+                },
+            ) {
                 Text(
                     stringResource(
-                        if (active == null) R.string.home_start_workout else R.string.home_continue_workout,
+                        when {
+                            active != null -> R.string.home_continue_workout
+                            planned != null -> R.string.start
+                            else -> R.string.home_start_workout
+                        },
                     ),
                 )
             }

@@ -38,11 +38,11 @@ class WorkoutDetailUiTest {
 
     @Test
     fun `workout status maps correctly`() {
-        assertEquals(MomentumStatusVariant.COMPLETED, workoutStatus(WorkoutStatus.COMPLETED).first)
-        assertEquals(MomentumStatusVariant.PLANNED, workoutStatus(WorkoutStatus.PLANNED).first)
-        assertEquals(MomentumStatusVariant.ACTIVE, workoutStatus(WorkoutStatus.IN_PROGRESS).first)
-        assertEquals(MomentumStatusVariant.PAUSED, workoutStatus(WorkoutStatus.PAUSED).first)
-        assertEquals(MomentumStatusVariant.CANCELLED, workoutStatus(WorkoutStatus.CANCELLED).first)
+        assertEquals(MomentumStatusVariant.COMPLETED, workoutStatusVariant(WorkoutStatus.COMPLETED))
+        assertEquals(MomentumStatusVariant.PLANNED, workoutStatusVariant(WorkoutStatus.PLANNED))
+        assertEquals(MomentumStatusVariant.ACTIVE, workoutStatusVariant(WorkoutStatus.IN_PROGRESS))
+        assertEquals(MomentumStatusVariant.PAUSED, workoutStatusVariant(WorkoutStatus.PAUSED))
+        assertEquals(MomentumStatusVariant.CANCELLED, workoutStatusVariant(WorkoutStatus.CANCELLED))
     }
 
     @Test
@@ -58,8 +58,8 @@ class WorkoutDetailUiTest {
         )
 
         assertEquals("w3", state.activeWorkout?.id)
-        assertEquals(2, state.recentWorkouts.size)
-        assertEquals(setOf("w1", "w2"), state.recentWorkouts.map { it.id }.toSet())
+        assertEquals(1, state.recentWorkouts.size)
+        assertEquals(setOf("w1"), state.recentWorkouts.map { it.id }.toSet())
     }
 
     private fun completedWorkout() = Workout(

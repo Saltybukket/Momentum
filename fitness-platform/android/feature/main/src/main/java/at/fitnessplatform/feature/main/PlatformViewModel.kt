@@ -35,8 +35,11 @@ data class PlatformUiState(
     val activeWorkout: Workout?
         get() = workouts.firstOrNull { it.status == WorkoutStatus.IN_PROGRESS || it.status == WorkoutStatus.PAUSED }
 
+    val nextPlannedWorkout: Workout?
+        get() = workouts.filter { it.status == WorkoutStatus.PLANNED }.minByOrNull { it.createdAtEpochMs }
+
     val recentWorkouts: List<Workout>
-        get() = workouts.filter { it.status != WorkoutStatus.IN_PROGRESS && it.status != WorkoutStatus.PAUSED }.take(3)
+        get() = workouts.filter { it.status == WorkoutStatus.COMPLETED }.take(3)
 }
 
 @HiltViewModel
