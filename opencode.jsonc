@@ -1,6 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
+  "agent": {
+    "build": {
+      "variant": "high"
+    }
+  },
+
   "instructions": [
     "AGENTS.md",
     "README.md",
