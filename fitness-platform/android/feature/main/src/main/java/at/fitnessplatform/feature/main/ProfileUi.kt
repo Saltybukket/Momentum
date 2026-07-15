@@ -22,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import at.fitnessplatform.core.designsystem.MomentumCard
-import at.fitnessplatform.core.designsystem.MomentumFormScreen
 import at.fitnessplatform.core.designsystem.MomentumSectionHeader
 import at.fitnessplatform.core.designsystem.MomentumSpacing
 

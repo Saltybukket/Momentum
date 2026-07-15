@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -155,26 +156,87 @@ internal fun ConflictResolverScreen(
     conflict: ExerciseConflict,
     busy: Boolean,
     onResolve: (ExerciseConflictResolution, CustomExercise?) -> Unit,
+    onBack: () -> Unit,
 ) {
+    var showConfirm by rememberSaveable { mutableStateOf(false) }
+    var pendingResolution by rememberSaveable { mutableStateOf<ExerciseConflictResolution?>(null) }
+    var pendingMerged by rememberSaveable { mutableStateOf<CustomExercise?>(null) }
+    var mergeName by rememberSaveable { mutableStateOf(conflict.localSnapshot.name) }
+    var mergeDescription by rememberSaveable { mutableStateOf(conflict.localSnapshot.description) }
+    var mergeMuscle by rememberSaveable { mutableStateOf(conflict.localSnapshot.primaryMuscleGroup) }
+    var mergeEquipment by rememberSaveable { mutableStateOf(conflict.localSnapshot.requiredEquipment) }
+    var mergeNotes by rememberSaveable { mutableStateOf(conflict.localSnapshot.notes) }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false; pendingResolution = null },
+            title = { Text(stringResource(R.string.confirm_resolution)) },
+            text = { Text(stringResource(R.string.confirm_queue_version)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val resolved = pendingResolution
+                    val merged = pendingMerged
+                    showConfirm = false
+                    pendingResolution = null
+                    pendingMerged = null
+                    if (resolved != null) onResolve(resolved, merged)
+                }) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false; pendingResolution = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg), verticalArrangement = Arrangement.spacedBy(MomentumSpacing.md)) {
-        MomentumSectionHeader(stringResource(R.string.conflict_resolve_title))
+        MomentumSectionHeader(stringResource(R.string.conflict_resolve_title), conflictTypeLabel(conflict))
+        MomentumSectionHeader(stringResource(R.string.local_version, conflict.localRevision?.toString() ?: "?"))
         MomentumCard(Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.local_version, conflict.localRevision?.toString() ?: "?"))
             Text(stringResource(R.string.field_name, conflict.localSnapshot.name))
             Text(stringResource(R.string.field_description, conflict.localSnapshot.description))
             Text(stringResource(R.string.field_notes, conflict.localSnapshot.notes))
         }
+        MomentumSectionHeader(stringResource(R.string.server_version, conflict.remoteRevision))
         MomentumCard(Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.server_version, conflict.remoteRevision))
             Text(stringResource(R.string.field_name, conflict.remoteSnapshot.name))
             Text(stringResource(R.string.field_description, conflict.remoteSnapshot.description))
             Text(stringResource(R.string.field_notes, conflict.remoteSnapshot.notes))
         }
-        Button({ onResolve(ExerciseConflictResolution.KEEP_LOCAL, null) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.keep_local_version))
-        }
-        Button({ onResolve(ExerciseConflictResolution.TAKE_SERVER, null) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.use_server_version))
+        Button(
+            { pendingResolution = ExerciseConflictResolution.KEEP_LOCAL; pendingMerged = null; showConfirm = true },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.keep_local_version)) }
+        Button(
+            { pendingResolution = ExerciseConflictResolution.TAKE_SERVER; pendingMerged = null; showConfirm = true },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.use_server_version)) }
+        MomentumSectionHeader(stringResource(R.string.manual_merge))
+        OutlinedTextField(mergeName, { mergeName = it }, label = { Text(stringResource(R.string.name)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(mergeDescription, { mergeDescription = it }, label = { Text(stringResource(R.string.description)) }, enabled = !busy, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(mergeMuscle, { mergeMuscle = it }, label = { Text(stringResource(R.string.primary_muscle)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(mergeEquipment, { mergeEquipment = it }, label = { Text(stringResource(R.string.equipment)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(mergeNotes, { mergeNotes = it }, label = { Text(stringResource(R.string.notes)) }, enabled = !busy, modifier = Modifier.fillMaxWidth())
+        Button(
+            {
+                pendingResolution = ExerciseConflictResolution.MERGE
+                pendingMerged = conflict.localSnapshot.copy(
+                    name = mergeName.trim(),
+                    description = mergeDescription.trim(),
+                    primaryMuscleGroup = mergeMuscle.trim(),
+                    requiredEquipment = mergeEquipment.trim(),
+                    notes = mergeNotes.trim(),
+                )
+                showConfirm = true
+            },
+            enabled = !busy && mergeName.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.save_manual_merge)) }
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.cancel))
         }
     }
 }

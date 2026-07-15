@@ -195,13 +195,13 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                             composable(Routes.HOME) {
                                 HomeScreen(
                                     state = state,
-                                    onCatalog = { navController.navigateRoot(Routes.CATALOG) },
-                                    onPrivacy = { navController.navigateRoot(Routes.PRIVACY) },
+                                    onCatalog = { navController.navigate(Routes.CATALOG) },
+                                    onPrivacy = { navController.navigate(Routes.PRIVACY) },
                                     onWorkouts = { navController.navigateRoot(Routes.WORKOUTS) },
-                                    onConflicts = { navController.navigateRoot(Routes.CONFLICTS) },
-                                    onLocations = { navController.navigateRoot(Routes.LOCATIONS) },
-                                    onPlans = { navController.navigateRoot(Routes.PLANS) },
-                                    onOpen = { navController.navigate("workout-detail/$it") },
+                                    onConflicts = { navController.navigate(Routes.CONFLICTS) },
+                                    onLocations = { navController.navigate(Routes.LOCATIONS) },
+                                    onPlans = { navController.navigate(Routes.PLANS) },
+                                    onOpen = { navController.navigate(workoutDetailRoute(it)) },
                                 )
                             }
                             composable(Routes.PROFILE) {
@@ -209,8 +209,8 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                     profile.displayName,
                                     state.operationInProgress,
                                     viewModel::renameGuest,
-                                    onLocations = { navController.navigateRoot(Routes.LOCATIONS) },
-                                    onPrivacy = { navController.navigateRoot(Routes.PRIVACY) },
+                                    onLocations = { navController.navigate(Routes.LOCATIONS) },
+                                    onPrivacy = { navController.navigate(Routes.PRIVACY) },
                                 )
                             }
                             composable(Routes.EXERCISES) {
@@ -253,6 +253,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                             viewModel.resolveConflict(conflict.exerciseId, resolution, merged)
                                             navController.popBackStack()
                                         },
+                                        onBack = { navController.popBackStack() },
                                     )
                                 }
                             }
@@ -262,9 +263,9 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                     onCreate = viewModel::createWorkout,
                                     onStart = viewModel::startWorkout,
                                     onComplete = viewModel::completeWorkout,
-                                    onOpen = { navController.navigate("workout-detail/$it") },
-                                    onPlans = { navController.navigateRoot(Routes.PLANS) },
-                                    onCalendar = { navController.navigateRoot(Routes.CALENDAR) },
+                                    onOpen = { navController.navigate(workoutDetailRoute(it)) },
+                                    onPlans = { navController.navigate(Routes.PLANS) },
+                                    onCalendar = { navController.navigate(Routes.CALENDAR) },
                                 )
                             }
                             composable(
@@ -277,7 +278,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                     state = state,
                                     onStart = viewModel::startWorkout,
                                     onComplete = viewModel::completeWorkout,
-                                    onRepeat = { viewModel.repeatWorkout(id) { newId -> navController.navigate("workout-detail/$newId") } },
+                                    onRepeat = { viewModel.repeatWorkout(id) { newId -> navController.navigate(workoutDetailRoute(newId)) { launchSingleTop = true } } },
                                 )
                             }
                             composable(Routes.CATALOG) { CatalogRoute(onOpen = { navController.navigate("catalog/$it") }) }

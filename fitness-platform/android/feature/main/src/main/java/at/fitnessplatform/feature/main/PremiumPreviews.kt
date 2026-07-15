@@ -71,6 +71,34 @@ private fun HomePreview() = MomentumTheme {
     HomeScreen(previewPlatformState, {}, {}, {}, {}, {}, {})
 }
 
+@Preview(name = "Home active", widthDp = 411, heightDp = 891)
+@Composable
+private fun HomeActivePreview() = MomentumTheme {
+    HomeScreen(
+        PlatformUiState(
+            isLoading = false,
+            profile = previewProfile,
+            exercises = listOf(previewExercise),
+            workouts = listOf(previewCompletedWorkout.copy(status = WorkoutStatus.IN_PROGRESS)),
+        ),
+        {}, {}, {}, {}, {}, {},
+    )
+}
+
+@Preview(name = "Home planned", widthDp = 411, heightDp = 891)
+@Composable
+private fun HomePlannedPreview() = MomentumTheme {
+    HomeScreen(
+        PlatformUiState(
+            isLoading = false,
+            profile = previewProfile,
+            exercises = listOf(previewExercise),
+            workouts = listOf(previewCompletedWorkout.copy(id = "p1", status = WorkoutStatus.PLANNED)),
+        ),
+        {}, {}, {}, {}, {}, {},
+    )
+}
+
 @Preview(name = "Workouts empty", widthDp = 411, heightDp = 891)
 @Preview(name = "Workouts expanded", widthDp = 840, heightDp = 600)
 @Composable
@@ -85,7 +113,7 @@ private fun WorkoutsPreview() = MomentumTheme {
 @Composable
 private fun WorkoutDetailCompletedPreview() = MomentumTheme {
     WorkoutDetailScreen(
-        workoutId = "w",
+        workoutId = previewCompletedWorkout.id,
         state = PlatformUiState(
             isLoading = false,
             workouts = listOf(previewCompletedWorkout),
@@ -101,12 +129,36 @@ private fun WorkoutDetailCompletedPreview() = MomentumTheme {
 @Composable
 private fun WorkoutDetailMissingExercisePreview() = MomentumTheme {
     WorkoutDetailScreen(
-        workoutId = "w",
+        workoutId = previewCompletedWorkout.id,
         state = PlatformUiState(
             isLoading = false,
             workouts = listOf(previewCompletedWorkout),
             exercises = emptyList(),
         ),
+        onStart = {},
+        onComplete = {},
+        onRepeat = {},
+    )
+}
+
+@Preview(name = "Workout detail loading", widthDp = 411, heightDp = 891)
+@Composable
+private fun WorkoutDetailLoadingPreview() = MomentumTheme {
+    WorkoutDetailScreen(
+        workoutId = previewCompletedWorkout.id,
+        state = PlatformUiState(isLoading = true),
+        onStart = {},
+        onComplete = {},
+        onRepeat = {},
+    )
+}
+
+@Preview(name = "Workout detail not found", widthDp = 411, heightDp = 891)
+@Composable
+private fun WorkoutDetailNotFoundPreview() = MomentumTheme {
+    WorkoutDetailScreen(
+        workoutId = "nonexistent",
+        state = PlatformUiState(isLoading = false),
         onStart = {},
         onComplete = {},
         onRepeat = {},

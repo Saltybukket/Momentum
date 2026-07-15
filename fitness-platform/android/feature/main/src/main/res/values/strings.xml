@@ -20,7 +20,7 @@
     <string name="home_start_workout">Start a workout</string>
     <string name="home_continue_workout">Continue workout</string>
     <string name="home_recent_title">Recent workouts</string>
-    <string name="home_recent_empty">Completed and planned workouts will appear here.</string>
+    <string name="home_recent_empty">Completed workouts will appear here.</string>
     <string name="home_recent_empty_title">No recent workouts</string>
     <string name="home_library_title">Exercise library</string>
     <plurals name="home_custom_count">

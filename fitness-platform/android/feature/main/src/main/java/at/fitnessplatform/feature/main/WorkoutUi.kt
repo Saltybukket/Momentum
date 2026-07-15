@@ -147,16 +147,16 @@ internal fun WorkoutScreen(
         MomentumSegmentedControl(listOf(stringResource(R.string.calendar_today), stringResource(R.string.workouts_history)), section, onSelect = { section = it })
         Spacer(Modifier.height(MomentumSpacing.md))
         if (section == 0) {
-            workoutSection(R.string.workouts_active, active, busy, onStart, onComplete, onOpen)
-            workoutSection(R.string.workouts_planned, planned, busy, onStart, onComplete, onOpen)
+            WorkoutSection(R.string.workouts_active, active, busy, onStart, onComplete, onOpen)
+            WorkoutSection(R.string.workouts_planned, planned, busy, onStart, onComplete, onOpen)
         } else {
-            workoutSection(R.string.workouts_history, history, busy, onStart, onComplete, onOpen)
+            WorkoutSection(R.string.workouts_history, history, busy, onStart, onComplete, onOpen)
         }
     }
 }
 
 @Composable
-private fun workoutSection(
+private fun WorkoutSection(
     title: Int,
     workouts: List<Workout>,
     busy: Boolean,

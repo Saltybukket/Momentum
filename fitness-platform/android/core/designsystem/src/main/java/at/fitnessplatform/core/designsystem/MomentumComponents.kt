@@ -63,21 +63,6 @@ fun MomentumScreen(
 }
 
 @Composable
-fun MomentumFormScreen(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        Column(
-            Modifier.momentumContentWidth().verticalScroll(rememberScrollState())
-                .padding(MomentumSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(MomentumSpacing.md),
-            content = content,
-        )
-    }
-}
-
-@Composable
 fun MomentumSectionHeader(title: String, supporting: String? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(MomentumSpacing.xs)) {
         Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
@@ -253,9 +238,7 @@ fun MomentumSegmentedControl(
                 selected = selected,
                 onClick = { onSelect(index) },
                 label = { Text(label) },
-                modifier = Modifier
-                    .weight(1f)
-                    .semantics { if (selected) this.selected = true },
+                modifier = Modifier.semantics { if (selected) this.selected = true },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                 ),
