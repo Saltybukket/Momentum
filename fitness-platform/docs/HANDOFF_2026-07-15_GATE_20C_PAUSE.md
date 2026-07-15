@@ -1,8 +1,8 @@
 # Gate 20C pause handoff
 
-Date: 2026-07-15  
-Branch: `codex/fix-scaffold-reproducibility`  
-Local candidate: `d0dfcf6`  
+Date: 2026-07-15
+Branch: `codex/fix-scaffold-reproducibility`
+Local candidate: `d0dfcf6`
 Upstream before this run: `da1c62e`
 
 ## Outcome
