@@ -20,6 +20,16 @@ class RoomTrainingPlanCalendarCoordinator @Inject constructor(
         schedule: PlanSchedule,
         through: LocalDate,
     ): List<ScheduledWorkoutOccurrence> = database.withTransaction {
+        require(schedule.isActive) { "Schedule must be active." }
+        require(schedule.planId == planId) { "Schedule plan ID must match the target plan." }
+        require(!through.isBefore(schedule.startDate)) {
+            "Through date must be on or after the schedule start date."
+        }
+        val plan = requireNotNull(plans.getPlan(planId)) { "Training plan does not exist." }
+        require(schedule.ownerProfileId == plan.ownerProfileId) {
+            "Schedule owner must match plan owner."
+        }
+
         val rows = calendar.saveAndMaterialize(schedule, through)
         plans.setActive(planId)
         rows

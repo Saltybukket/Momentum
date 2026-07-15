@@ -156,17 +156,13 @@ class TrainingCalendarUseCasesTest {
         })
     }
 
-    @Test fun moveRejectsTerminalRowsAndFutureRuleReplacementIsExplicit() = runTest {
+    @Test fun moveRejectsTerminalRows() = runTest {
         val repository = FakeCalendarRepository()
         val completed = occurrence("completed", LocalDate.of(2026, 7, 13), LocalTime.NOON, 60, null)
             .copy(status = ScheduledWorkoutStatus.COMPLETED)
         assertTrue(runCatching {
             MoveOccurrenceUseCase(repository)(completed, completed.scheduledLocalDate.plusDays(1), null, 60, null)
         }.exceptionOrNull() is ValidationException)
-
-        val result = ReplaceFutureScheduleUseCase(repository)(schedule(), LocalDate.of(2026, 7, 14))
-        assertTrue(repository.replaced)
-        assertEquals(repository.rows, result)
     }
 
     @Test fun ensureHorizonTargetsTodayThroughFiftyFiveDaysAndIsDelegatedIdempotently() = runTest {

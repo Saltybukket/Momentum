@@ -41,6 +41,10 @@ class PlanRemovalDecisionRequiredException(
     val affectedPlanDayIds: Set<String>,
 ) : IllegalStateException("BLOCKED_PENDING_DECISION")
 
+class PlanScheduleDecisionRequiredException : IllegalStateException(
+    "PLAN_SCHEDULE_DECISION_REQUIRED",
+)
+
 fun validateTrainingPlan(plan: TrainingPlan) {
     validateText(plan.name, MAX_PLAN_NAME, "Plan name", allowBlank = false, singleLine = true)
     validateText(plan.description, 2_000, "Plan description", allowBlank = true, singleLine = false)
@@ -436,7 +440,7 @@ class SetActiveTrainingPlanUseCase(
     ): PlanActivationResult {
         val activeSchedule = calendarRepository.observeActiveSchedule().first()
         val pendingResult = if (activeSchedule != null && activeSchedule.planId != id) {
-            ensure(decision != null) { "PLAN_SCHEDULE_DECISION_REQUIRED" }
+            if (decision == null) throw PlanScheduleDecisionRequiredException()
             when (decision) {
                 PlanScheduleActivationDecision.CANCEL -> PlanActivationResult(false)
                 PlanScheduleActivationDecision.KEEP_CURRENT_SCHEDULE -> null

@@ -87,9 +87,7 @@ object TrainingPlanUseCaseModule {
 @Module
 @InstallIn(SingletonComponent::class)
 object TrainingCalendarUseCaseModule {
-    @Provides fun materializeSchedule(repository: TrainingCalendarRepository) = MaterializeScheduleUseCase(repository)
     @Provides fun ensureCalendarHorizon(repository: TrainingCalendarRepository) = EnsureCalendarHorizonUseCase(repository)
-    @Provides fun replaceFutureSchedule(repository: TrainingCalendarRepository) = ReplaceFutureScheduleUseCase(repository)
     @Provides fun moveOccurrence(repository: TrainingCalendarRepository) = MoveOccurrenceUseCase(repository)
     @Provides fun changeOccurrenceStatus(repository: TrainingCalendarRepository) = ChangeOccurrenceStatusUseCase(repository)
     @Provides fun detectCalendarConflicts() = DetectCalendarConflictsUseCase()

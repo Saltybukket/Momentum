@@ -110,7 +110,7 @@ class TrainingPlanUseCasesTest {
         val coordinator = FakePlanCalendarCoordinator(plans, calendar)
         val activate = SetActiveTrainingPlanUseCase(plans, calendar)
 
-        assertTrue(runCatching { activate("new-plan") }.exceptionOrNull() is ValidationException)
+        assertTrue(runCatching { activate("new-plan") }.exceptionOrNull() is PlanScheduleDecisionRequiredException)
         assertEquals(null, plans.activatedId)
         assertEquals(PlanActivationResult(false), activate("new-plan", PlanScheduleActivationDecision.CANCEL))
 

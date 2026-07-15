@@ -321,14 +321,6 @@ private fun ScheduledWorkoutOccurrence.toInstantInterval(): Pair<java.time.Insta
     }
 }
 
-class MaterializeScheduleUseCase(private val repository: TrainingCalendarRepository) {
-    suspend operator fun invoke(schedule: PlanSchedule): List<ScheduledWorkoutOccurrence> {
-        validateSchedule(schedule)
-        val saved = repository.saveSchedule(schedule)
-        return repository.materialize(saved.id, saved.startDate.plusDays(MATERIALIZATION_HORIZON_DAYS - 1))
-    }
-}
-
 class EnsureCalendarHorizonUseCase(private val repository: TrainingCalendarRepository) {
     suspend operator fun invoke(scheduleId: String, today: LocalDate): List<ScheduledWorkoutOccurrence> =
         repository.ensureHorizon(
@@ -336,15 +328,6 @@ class EnsureCalendarHorizonUseCase(private val repository: TrainingCalendarRepos
             from = today,
             through = today.plusDays(MATERIALIZATION_HORIZON_DAYS - 1),
         )
-}
-
-class ReplaceFutureScheduleUseCase(private val repository: TrainingCalendarRepository) {
-    suspend operator fun invoke(schedule: PlanSchedule, from: LocalDate): List<ScheduledWorkoutOccurrence> {
-        validateSchedule(schedule)
-        val saved = repository.saveSchedule(schedule)
-        val through = from.plusDays(MATERIALIZATION_HORIZON_DAYS - 1)
-        return repository.replaceFuturePlanned(saved.id, from, through)
-    }
 }
 
 class MoveOccurrenceUseCase(private val repository: TrainingCalendarRepository) {

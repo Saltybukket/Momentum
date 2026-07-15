@@ -37,6 +37,7 @@ import at.fitnessplatform.domain.SaveTrainingPlanUseCase
 import at.fitnessplatform.domain.SeedStarterTrainingPlansUseCase
 import at.fitnessplatform.domain.SetActiveTrainingPlanUseCase
 import at.fitnessplatform.domain.TrainingLocationRepository
+import at.fitnessplatform.domain.PlanScheduleDecisionRequiredException
 import at.fitnessplatform.domain.PlanStructureKind
 import at.fitnessplatform.domain.PlanScheduleActivationDecision
 import at.fitnessplatform.domain.PreviewPlanScheduleUseCase
@@ -267,7 +268,7 @@ class TrainingPlansViewModel @Inject constructor(
         runCatching { activatePlan(id) }
             .onFailure { error ->
                 state.update {
-                    if (error.message == "PLAN_SCHEDULE_DECISION_REQUIRED") {
+                    if (error is PlanScheduleDecisionRequiredException) {
                         it.copy(pendingActivationPlanId = id)
                     } else {
                         it.copy(error = error.message ?: "PLAN_OPERATION_FAILED")
