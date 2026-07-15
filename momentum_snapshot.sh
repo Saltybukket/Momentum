@@ -168,9 +168,30 @@ git branch --show-current > "$METADATA_DIR/branch.txt"
 if git rev-parse '@{upstream}' >/dev/null 2>&1; then
     git rev-parse '@{upstream}' > "$METADATA_DIR/upstream-commit.txt"
     git rev-parse --abbrev-ref '@{upstream}' > "$METADATA_DIR/upstream-ref.txt"
+
+    # Exact committed delta that is not represented by working-tree patches.
+    git rev-list --left-right --count '@{upstream}...HEAD'         > "$METADATA_DIR/upstream-ahead-behind.txt"
+    git log --format=fuller --decorate '@{upstream}..HEAD'         > "$METADATA_DIR/local-commits-since-upstream.txt"
+    git diff --binary '@{upstream}' HEAD         > "$METADATA_DIR/upstream-to-head.patch"
+    git diff --stat '@{upstream}' HEAD         > "$METADATA_DIR/upstream-to-head-stat.txt"
+    git diff --name-status '@{upstream}' HEAD         > "$METADATA_DIR/upstream-to-head-name-status.txt"
+    git diff --summary '@{upstream}' HEAD         > "$METADATA_DIR/upstream-to-head-summary.txt"
+    set +e
+    git diff --check '@{upstream}' HEAD         > "$METADATA_DIR/upstream-to-head-diff-check.txt" 2>&1
+    upstream_diff_check_status=$?
+    set -e
+    printf '%s\n' "$upstream_diff_check_status"         > "$METADATA_DIR/upstream-to-head-diff-check-exit-code.txt"
 else
     : > "$METADATA_DIR/upstream-commit.txt"
     : > "$METADATA_DIR/upstream-ref.txt"
+    : > "$METADATA_DIR/upstream-ahead-behind.txt"
+    : > "$METADATA_DIR/local-commits-since-upstream.txt"
+    : > "$METADATA_DIR/upstream-to-head.patch"
+    : > "$METADATA_DIR/upstream-to-head-stat.txt"
+    : > "$METADATA_DIR/upstream-to-head-name-status.txt"
+    : > "$METADATA_DIR/upstream-to-head-summary.txt"
+    : > "$METADATA_DIR/upstream-to-head-diff-check.txt"
+    : > "$METADATA_DIR/upstream-to-head-diff-check-exit-code.txt"
 fi
 
 git status --short --branch --untracked-files=all > "$METADATA_DIR/git-status.txt"
@@ -270,6 +291,10 @@ while IFS= read -r -d '' path; do
     printf '%s\n' "$path" >> "$selected_list"
 done < "$candidate_list"
 
+# The candidate list is only an internal NUL-delimited work file.
+# It must not become part of the snapshot.
+rm -f -- "$candidate_list"
+
 sort -u -o "$selected_list" "$selected_list"
 sort -u -o "$excluded_list" "$excluded_list"
 cp -- "$selected_list" "$METADATA_DIR/project-tree.txt"
@@ -313,10 +338,39 @@ fi
 
 sort -u -o "$TEST_EVIDENCE_INDEX" "$TEST_EVIDENCE_INDEX"
 
+# Human- and agent-friendly summary of any copied JUnit XML. The source files
+# remain authoritative; malformed or non-JUnit XML is recorded, not hidden.
+python3 - "$TEST_EVIDENCE_DIR" > "$METADATA_DIR/test-evidence-summary.tsv" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+root = Path(sys.argv[1])
+print("path\ttests\tfailures\terrors\tskipped\ttime\tstatus")
+if not root.exists():
+    raise SystemExit(0)
+
+for path in sorted(root.rglob("*.xml")):
+    rel = path.relative_to(root).as_posix()
+    try:
+        node = ET.parse(path).getroot()
+        suites = [node] if node.tag == "testsuite" else list(node.findall(".//testsuite"))
+        tests = sum(int(s.attrib.get("tests", 0)) for s in suites)
+        failures = sum(int(s.attrib.get("failures", 0)) for s in suites)
+        errors = sum(int(s.attrib.get("errors", 0)) for s in suites)
+        skipped = sum(int(s.attrib.get("skipped", s.attrib.get("disabled", 0))) for s in suites)
+        elapsed = sum(float(s.attrib.get("time", 0) or 0) for s in suites)
+        status = "parsed" if suites else "not-junit"
+        print(f"{rel}\t{tests}\t{failures}\t{errors}\t{skipped}\t{elapsed:.3f}\t{status}")
+    except Exception as exc:
+        message = str(exc).replace("\t", " ").replace("\n", " ")
+        print(f"{rel}\t0\t0\t0\t0\t0.000\tparse-error: {message}")
+PY
+
 {
     printf 'Created: %s\n' "$(date --iso-8601=seconds)"
     printf 'Host: %s\n' "$(uname -a)"
-    printf 'Archive format: compact working-tree review snapshot v2\n'
+    printf 'Archive format: compact working-tree review snapshot v3\n'
     printf 'Test evidence included: %s (existing files only; may be stale)\n' "$INCLUDE_TEST_EVIDENCE"
     printf 'Visual idea assets included: %s\n' "$INCLUDE_IDEA_ASSETS"
     printf '\n--- Git ---\n'
