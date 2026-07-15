@@ -1,0 +1,229 @@
+package at.fitnessplatform.feature.main
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import at.fitnessplatform.core.designsystem.MomentumCard
+import at.fitnessplatform.core.designsystem.MomentumListCard
+import at.fitnessplatform.core.designsystem.MomentumScreen
+import at.fitnessplatform.core.designsystem.MomentumSectionHeader
+import at.fitnessplatform.core.designsystem.MomentumSpacing
+import at.fitnessplatform.core.designsystem.MomentumStatusChip
+import at.fitnessplatform.core.designsystem.MomentumStatusVariant
+import at.fitnessplatform.core.designsystem.MomentumSegmentedControl
+import at.fitnessplatform.core.model.WorkoutStatus
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
+
+private val timeFormatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
+
+internal fun newWorkoutExerciseIds(): List<String> = emptyList()
+
+@Composable
+internal fun WorkoutScreen(
+    state: PlatformUiState,
+    onCreate: (String, List<String>) -> Unit,
+    onStart: (String) -> Unit,
+    onComplete: (String) -> Unit,
+    onOpen: (String) -> Unit,
+    onPlans: () -> Unit,
+    onCalendar: () -> Unit,
+) {
+    val defaultTitle = stringResource(R.string.workout_default_title)
+    var title by rememberSaveable { mutableStateOf(defaultTitle) }
+    val active = state.workouts.filter { it.status == WorkoutStatus.IN_PROGRESS || it.status == WorkoutStatus.PAUSED }
+    val planned = state.workouts.filter { it.status == WorkoutStatus.PLANNED }
+    val history = state.workouts.filter { it.status == WorkoutStatus.COMPLETED || it.status == WorkoutStatus.CANCELLED }
+    var section by rememberSaveable { mutableStateOf(0) }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm)) {
+            FilterChip(
+                selected = false,
+                onClick = onCalendar,
+                label = { Text(stringResource(R.string.calendar_title)) },
+            )
+            FilterChip(selected = false, onClick = onPlans, label = { Text(stringResource(R.string.plans_title)) })
+        }
+        Spacer(Modifier.height(MomentumSpacing.sm))
+        OutlinedTextField(title, { title = it }, label = { Text(stringResource(R.string.workout_title)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Button(
+            onClick = { onCreate(title, newWorkoutExerciseIds()) },
+            enabled = !state.operationInProgress,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.workout_create)) }
+        Text(
+            stringResource(R.string.workout_empty_creation_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(MomentumSpacing.md))
+        MomentumSegmentedControl(listOf(stringResource(R.string.calendar_today), stringResource(R.string.workouts_history)), section, onSelect = { section = it })
+        Spacer(Modifier.height(MomentumSpacing.md))
+        if (section == 0) {
+            workoutSection(R.string.workouts_active, active, onStart, onComplete, onOpen)
+            workoutSection(R.string.workouts_planned, planned, onStart, onComplete, onOpen)
+        } else {
+            workoutSection(R.string.workouts_history, history, onStart, onComplete, onOpen)
+        }
+    }
+}
+
+@Composable
+private fun workoutSection(
+    title: Int,
+    workouts: List<at.fitnessplatform.core.model.Workout>,
+    onStart: (String) -> Unit,
+    onComplete: (String) -> Unit,
+    onOpen: (String) -> Unit,
+) {
+    if (workouts.isEmpty()) return
+    Text(
+        stringResource(title),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = MomentumSpacing.md, bottom = MomentumSpacing.sm),
+    )
+    workouts.forEach { workout ->
+        MomentumListCard(Modifier.fillMaxWidth(), onClick = { onOpen(workout.id) }) {
+            Text(workout.title, style = MaterialTheme.typography.titleMedium)
+            val (variant, label) = workoutStatus(workout.status)
+            MomentumStatusChip(variant, label)
+            when (workout.status) {
+                WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }) { Text(stringResource(R.string.start)) }
+                WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }) { Text(stringResource(R.string.complete)) }
+                else -> Unit
+            }
+        }
+    }
+}
+
+@Composable
+@Suppress("CyclomaticComplexMethod")
+internal fun WorkoutDetailScreen(
+    workoutId: String,
+    state: PlatformUiState,
+    onStart: (String) -> Unit,
+    onComplete: (String) -> Unit,
+    onRepeat: (String) -> Unit,
+) {
+    val workout = state.workouts.firstOrNull { it.id == workoutId }
+    if (workout == null) {
+        Text(stringResource(R.string.workout_detail_not_found_body), modifier = Modifier.padding(16.dp))
+        return
+    }
+    val exercises = state.exercises.associateBy { it.id }
+    val hasMissing = workout.exercises.any { exercises[it.exerciseId] == null }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(MomentumSpacing.md),
+    ) {
+        MomentumSectionHeader(workout.title, workoutStatusLabel(workout.status))
+        val startMs = workout.startTimeEpochMs
+        if (startMs != null) {
+            MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_started, timeFormatter.format(Instant.ofEpochMilli(startMs).atZone(ZoneId.systemDefault()))))
+            }
+        }
+        val endMs = workout.endTimeEpochMs
+        if (endMs != null) {
+            MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_ended, timeFormatter.format(Instant.ofEpochMilli(endMs).atZone(ZoneId.systemDefault()))))
+            }
+        }
+        if (workout.notes.isNotBlank()) {
+            MomentumCard(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_notes_label), style = MaterialTheme.typography.titleMedium)
+                Text(workout.notes, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (workout.exercises.isNotEmpty()) {
+            MomentumSectionHeader(stringResource(R.string.workout_exercises_label))
+            workout.exercises.sortedBy { it.position }.forEach { we ->
+                val exercise = exercises[we.exerciseId]
+                MomentumCard(Modifier.fillMaxWidth()) {
+                    if (exercise != null) {
+                        Text(exercise.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.exercise_summary, exercise.primaryMuscleGroup, exercise.requiredEquipment),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text(
+                            stringResource(R.string.workout_exercise_missing),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        }
+        when (workout.status) {
+            WorkoutStatus.PLANNED -> Button({ onStart(workout.id) }, Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.start))
+            }
+            WorkoutStatus.IN_PROGRESS -> Button({ onComplete(workout.id) }, Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.complete))
+            }
+            WorkoutStatus.COMPLETED -> Button(
+                { if (!hasMissing && !state.operationInProgress) onRepeat(workout.id) },
+                Modifier.fillMaxWidth(),
+                enabled = !hasMissing && !state.operationInProgress,
+            ) {
+                Text(
+                    if (hasMissing) stringResource(R.string.workout_repeat_unavailable_missing)
+                    else stringResource(R.string.workout_repeat),
+                )
+            }
+            else -> Unit
+        }
+    }
+}
+
+internal fun workoutStatus(status: WorkoutStatus): Pair<MomentumStatusVariant, String> = when (status) {
+    WorkoutStatus.PLANNED -> MomentumStatusVariant.PLANNED to "Planned"
+    WorkoutStatus.IN_PROGRESS -> MomentumStatusVariant.ACTIVE to "In progress"
+    WorkoutStatus.PAUSED -> MomentumStatusVariant.PAUSED to "Paused"
+    WorkoutStatus.COMPLETED -> MomentumStatusVariant.COMPLETED to "Completed"
+    WorkoutStatus.CANCELLED -> MomentumStatusVariant.CANCELLED to "Cancelled"
+}
+
+@Composable
+internal fun workoutStatusLabel(status: WorkoutStatus): String = stringResource(
+    when (status) {
+        WorkoutStatus.PLANNED -> R.string.workout_planned
+        WorkoutStatus.IN_PROGRESS -> R.string.workout_in_progress
+        WorkoutStatus.PAUSED -> R.string.workout_paused
+        WorkoutStatus.COMPLETED -> R.string.workout_completed
+        WorkoutStatus.CANCELLED -> R.string.workout_cancelled
+    },
+)

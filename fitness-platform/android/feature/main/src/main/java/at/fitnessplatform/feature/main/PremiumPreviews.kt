@@ -84,13 +84,13 @@ private fun WorkoutsPreview() = MomentumTheme {
 @Preview(name = "Workout detail completed expanded", widthDp = 840, heightDp = 600)
 @Composable
 private fun WorkoutDetailCompletedPreview() = MomentumTheme {
-    WorkoutDetailContent(
-        state = WorkoutDetailUiState.Content(
-            workout = previewCompletedWorkout,
-            exercises = resolveWorkoutExercises(previewCompletedWorkout, listOf(previewExercise)),
-            repeatAllowed = true,
+    WorkoutDetailScreen(
+        workoutId = "w",
+        state = PlatformUiState(
+            isLoading = false,
+            workouts = listOf(previewCompletedWorkout),
+            exercises = listOf(previewExercise),
         ),
-        busy = false,
         onStart = {},
         onComplete = {},
         onRepeat = {},
@@ -100,13 +100,13 @@ private fun WorkoutDetailCompletedPreview() = MomentumTheme {
 @Preview(name = "Workout detail missing exercise", widthDp = 411, heightDp = 891)
 @Composable
 private fun WorkoutDetailMissingExercisePreview() = MomentumTheme {
-    WorkoutDetailContent(
-        state = WorkoutDetailUiState.Content(
-            workout = previewCompletedWorkout,
-            exercises = resolveWorkoutExercises(previewCompletedWorkout, emptyList()),
-            repeatAllowed = false,
+    WorkoutDetailScreen(
+        workoutId = "w",
+        state = PlatformUiState(
+            isLoading = false,
+            workouts = listOf(previewCompletedWorkout),
+            exercises = emptyList(),
         ),
-        busy = false,
         onStart = {},
         onComplete = {},
         onRepeat = {},
