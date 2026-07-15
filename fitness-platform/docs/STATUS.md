@@ -1,7 +1,8 @@
 # Project status
 
-Status basis: 2026-07-15, branch `codex/fix-scaffold-reproducibility`, verified Gate 18D
-implementation commit `4993310ac60a7c473ec396f3811a0599b2485908`.
+Status basis: 2026-07-15, branch `codex/fix-scaffold-reproducibility`, local Gate 20C
+candidate `d0dfcf6`. Gate 20C is not accepted or pushed because no stable API-36 Windows AVD is
+installed.
 
 ## Implemented
 
@@ -51,6 +52,10 @@ implementation commit `4993310ac60a7c473ec396f3811a0599b2485908`.
   and create/start/complete validation, persistence and outbox recording share Room transactions.
   This is not full workout execution: detail names are resolved from current exercise data rather
   than immutable execution snapshots.
+- The local Visual Sprint 1 candidate hardens responsive tracking controls, conflict resolution,
+  workout-detail state rendering, truthful home actions and route-family navigation. Dialogs now
+  remain open until persistence succeeds, conflict completion callbacks fire exactly once, and
+  keep-local conflict rows survive exercise updates until server acknowledgement.
 - Repository, migration, static-analysis, JVM/build and container verification workflows.
 
 ## Schema and verification authority
@@ -58,13 +63,14 @@ implementation commit `4993310ac60a7c473ec396f3811a0599b2485908`.
 - Alembic head: `0d4f6a8b2c17`.
 - Android Room version: 9; exported schemas 1–9 are committed.
 - The canonical command matrix and connected-test limitation are in [TESTING.md](../TESTING.md).
-- Gate 18D local Android verification passed 91 distinct JVM tests (156 task/variant executions)
-  with zero failures, errors or skips. `spotlessCheck detekt test lintDebug assembleDebug` passed
-  with 656 actionable tasks (114 executed, 542 up-to-date), and all five AndroidTest source modules
-  compiled. The repository contains 67 AndroidTest methods, including eight real
-  `RoomWorkoutRepositoryTest` methods; connected execution is not claimed because the stable
-  API-36 AVD remains unavailable. The Room version remains 9 and Alembic remains
-  `0d4f6a8b2c17`.
+- The Gate 20C candidate passes 101 distinct Android JVM tests (176 task/variant executions) with
+  zero failures, errors or skips. `spotlessCheck detekt test lintDebug assembleDebug` passed with
+  656 actionable tasks (62 executed, 594 up-to-date). Database, datastore, data, feature and app
+  AndroidTest sources compile; the sync task succeeds with `NO-SOURCE`. On the non-acceptance
+  API-37 preview AVD, database 20/20,
+  datastore 8/8 and data 36/36 instrumentation tests passed. Feature and app Compose tests cannot
+  initialize Espresso because that preview removed `InputManager.getInstance`; this evidence is
+  not Gate 20C connected acceptance.
 - Docker Compose config/build/up, container migration and smoke passed. Gitleaks found no secrets;
   Trivy found no fixed HIGH/CRITICAL filesystem or runtime-image vulnerabilities. The image report
   retains 20 unfixed HIGH/CRITICAL Debian findings for review.
@@ -78,8 +84,10 @@ implementation commit `4993310ac60a7c473ec396f3811a0599b2485908`.
 - Guest identity and explicit replacement remain a development contract, not production
   authentication, revocation or account linking. Replacing local credentials does not delete
   previously stored server data.
-- Stable Windows API-36 system image/AVD is unavailable, so connected acceptance tests are not
-  claimed; AndroidTest sources compile.
+- Stable Windows API-36 system image/AVD is unavailable. The installed API-37 preview AVD is not a
+  substitute and is incompatible with the current Espresso runtime, so connected visual,
+  accessibility and navigation acceptance is not claimed. Gate 20C commits remain local and no
+  final CI run exists.
 - Owner scoping is enforced at the Workout repository boundary; other private-data repositories
   still require their own later identity-boundary audit.
 - Health, nutrition, rewards, social, commerce, AI and production provider integrations are not
@@ -89,7 +97,7 @@ implementation commit `4993310ac60a7c473ec396f3811a0599b2485908`.
 
 ## Next phase
 
-Gate 18D is complete. No later feature gate is open. Full workout execution, calendar sync,
-gamification, optional location synchronization and the visual design sprint remain outside this
-gate. Removing a plan day referenced by dated calendar state is deliberately unsupported rather
-than destructive; a future flow requires explicit impact preview and confirmation.
+Install and run the stable Windows API-36 Google APIs/x86_64 AVD, execute the complete connected
+matrix, then update evidence, push and verify CI for the exact final head. Do not begin Visual
+Sprint 2 or another product gate before Gate 20C is accepted. Full workout execution, calendar
+sync, gamification and optional location synchronization remain outside this gate.

@@ -81,6 +81,7 @@ cd android
   :core:datastore:compileDebugAndroidTestKotlin \
   :core:sync:compileDebugAndroidTestKotlin \
   :data:compileDebugAndroidTestKotlin \
+  :feature:main:compileDebugAndroidTestKotlin \
   :app:compileDebugAndroidTestKotlin
 ./gradlew connectedProjectAndroidTest # only modules with AndroidTest sources
 ./gradlew lintDebug assembleDebug
@@ -94,11 +95,12 @@ make android-connected-test
 # or: ANDROID_SERIAL=emulator-5556 ./scripts/android-connected-tests.sh data
 ```
 
-It requires exactly one device (or an explicit `ANDROID_SERIAL`), builds only `core:database`,
-`data` and `app`, writes raw logs to `android/build/connected-test-results/`, parses successful
-test counts and times out after 180 seconds per runner. API 36 with Google APIs/x86_64 is the
-project baseline. The currently installed Windows emulator image is API 37 preview and is not a
-valid substitute for acceptance verification.
+It requires exactly one device (or an explicit `ANDROID_SERIAL`) and runs `core:database`,
+`core:datastore`, `data`, `feature:main` and `app`. `core:sync` has no AndroidTest source set; its
+adapter coverage is JVM/Robolectric. The script writes raw logs to
+`android/build/connected-test-results/`, parses successful test counts and times out after 180
+seconds per runner. API 36 with Google APIs/x86_64 is the project baseline. The currently installed
+Windows emulator image is API 37 preview and is not a valid substitute for acceptance verification.
 
 `core:testing` provides `FakeClock`, `FakeUuidProvider`, deterministic test values and `MainDispatcherRule`.
 
@@ -236,3 +238,12 @@ warnings (14 `NewerVersionAvailable`, 11 `GradleDependency`, 3
 inspection must confirm that `icon_and_image_ideas/` is absent. Compile-only AndroidTest results
 must never be described as connected visual or accessibility execution; those require the stable
 API-36 AVD.
+
+The local Gate 20C candidate passes 101 distinct JVM tests (176 debug/release task executions),
+Spotless, Detekt, lint and debug assembly. Diagnostic API-37 preview execution passes database
+20/20, datastore 8/8 and data 36/36. Feature and app Compose suites fail before test bodies because
+Espresso reflects the removed platform method `android.hardware.input.InputManager.getInstance`.
+This is environment evidence, not an accepted connected run. Install the stable image with
+`sdkmanager.bat "system-images;android-36;google_apis;x86_64"`, create `Momentum_API_36` with
+`avdmanager.bat create avd -n Momentum_API_36 -k
+"system-images;android-36;google_apis;x86_64"`, and rerun the full connected matrix before push.
