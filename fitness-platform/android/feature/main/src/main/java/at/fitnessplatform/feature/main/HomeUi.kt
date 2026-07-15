@@ -48,6 +48,15 @@ import at.fitnessplatform.core.designsystem.MomentumStatusVariant
 import at.fitnessplatform.core.model.WorkoutStatus
 import at.fitnessplatform.domain.GuestCredentialStatus
 
+internal fun homeHeroActionLabel(
+    hasActiveWorkout: Boolean,
+    hasPlannedWorkout: Boolean,
+): Int = when {
+    hasActiveWorkout -> R.string.home_continue_workout
+    hasPlannedWorkout -> R.string.home_view_workout
+    else -> R.string.home_start_workout
+}
+
 @Composable
 @Suppress("CyclomaticComplexMethod")
 internal fun HomeScreen(
@@ -101,13 +110,7 @@ internal fun HomeScreen(
                 },
             ) {
                 Text(
-                    stringResource(
-                        when {
-                            active != null -> R.string.home_continue_workout
-                            planned != null -> R.string.start
-                            else -> R.string.home_start_workout
-                        },
-                    ),
+                    stringResource(homeHeroActionLabel(active != null, planned != null)),
                 )
             }
         }

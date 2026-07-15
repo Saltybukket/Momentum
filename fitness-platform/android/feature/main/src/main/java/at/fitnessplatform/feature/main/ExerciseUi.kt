@@ -2,6 +2,8 @@ package at.fitnessplatform.feature.main
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,13 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import at.fitnessplatform.core.designsystem.MomentumCard
 import at.fitnessplatform.core.designsystem.MomentumSectionHeader
@@ -63,6 +66,8 @@ internal fun ExerciseListScreen(
                     2 -> onConflicts()
                 }
             },
+            modifier = Modifier.testTag("exercises-sections"),
+            optionTestTagPrefix = "exercise-section",
         )
         Spacer(Modifier.height(MomentumSpacing.sm))
         Button(onClick = onNew, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add)) }
@@ -120,20 +125,38 @@ internal fun ExerciseEditorScreen(
         OutlinedTextField(muscle, { muscle = it }, label = { Text(stringResource(R.string.primary_muscle)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(equipment, { equipment = it }, label = { Text(stringResource(R.string.equipment)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(notes, { notes = it }, label = { Text(stringResource(R.string.notes)) }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm)) {
-            TrackingType.entries.forEach { type ->
-                OutlinedButton(
-                    onClick = { trackingType = type },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f),
-                ) { Text(trackingTypeLabel(type)) }
-            }
-        }
+        MomentumSectionHeader(stringResource(R.string.tracking_type))
+        TrackingTypeSelector(trackingType, busy, { trackingType = it })
         Button(
             onClick = { onSave(name, description, muscle, equipment, trackingType, notes) },
             enabled = !busy && name.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(R.string.save)) }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+internal fun TrackingTypeSelector(
+    selected: TrackingType,
+    busy: Boolean,
+    onSelect: (TrackingType) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(MomentumSpacing.sm),
+    ) {
+        TrackingType.entries.forEach { type ->
+            FilterChip(
+                selected = selected == type,
+                onClick = { onSelect(type) },
+                enabled = !busy,
+                label = { Text(trackingTypeLabel(type)) },
+                modifier = Modifier.testTag("tracking-type-${type.name}"),
+            )
+        }
     }
 }
 
@@ -168,23 +191,18 @@ internal fun ConflictResolverScreen(
     var mergeNotes by rememberSaveable { mutableStateOf(conflict.localSnapshot.notes) }
 
     if (showConfirm) {
-        AlertDialog(
-            onDismissRequest = { showConfirm = false; pendingResolution = null },
-            title = { Text(stringResource(R.string.confirm_resolution)) },
-            text = { Text(stringResource(R.string.confirm_queue_version)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    val resolved = pendingResolution
-                    val merged = pendingMerged
+        ConflictConfirmationDialog(
+            resolution = pendingResolution,
+            busy = busy,
+            onConfirm = {
+                val resolved = pendingResolution
+                if (resolved != null) onResolve(resolved, pendingMerged)
+            },
+            onDismiss = {
+                if (!busy) {
                     showConfirm = false
                     pendingResolution = null
                     pendingMerged = null
-                    if (resolved != null) onResolve(resolved, merged)
-                }) { Text(stringResource(R.string.confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConfirm = false; pendingResolution = null }) {
-                    Text(stringResource(R.string.cancel))
                 }
             },
         )
@@ -207,15 +225,22 @@ internal fun ConflictResolverScreen(
         Button(
             { pendingResolution = ExerciseConflictResolution.KEEP_LOCAL; pendingMerged = null; showConfirm = true },
             enabled = !busy,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("conflict-keep-local"),
         ) { Text(stringResource(R.string.keep_local_version)) }
         Button(
             { pendingResolution = ExerciseConflictResolution.TAKE_SERVER; pendingMerged = null; showConfirm = true },
             enabled = !busy,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("conflict-take-server"),
         ) { Text(stringResource(R.string.use_server_version)) }
         MomentumSectionHeader(stringResource(R.string.manual_merge))
-        OutlinedTextField(mergeName, { mergeName = it }, label = { Text(stringResource(R.string.name)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(
+            mergeName,
+            { mergeName = it },
+            label = { Text(stringResource(R.string.name)) },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth().testTag("conflict-merge-name"),
+            singleLine = true,
+        )
         OutlinedTextField(mergeDescription, { mergeDescription = it }, label = { Text(stringResource(R.string.description)) }, enabled = !busy, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(mergeMuscle, { mergeMuscle = it }, label = { Text(stringResource(R.string.primary_muscle)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(mergeEquipment, { mergeEquipment = it }, label = { Text(stringResource(R.string.equipment)) }, enabled = !busy, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -233,12 +258,50 @@ internal fun ConflictResolverScreen(
                 showConfirm = true
             },
             enabled = !busy && mergeName.isNotBlank(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("conflict-merge"),
         ) { Text(stringResource(R.string.save_manual_merge)) }
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.cancel))
         }
     }
+}
+
+@Composable
+internal fun ConflictConfirmationDialog(
+    resolution: ExerciseConflictResolution?,
+    busy: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(stringResource(R.string.confirm_resolution)) },
+        text = {
+            Text(
+                stringResource(
+                    if (resolution == ExerciseConflictResolution.TAKE_SERVER) {
+                        R.string.confirm_take_server
+                    } else {
+                        R.string.confirm_queue_version
+                    },
+                ),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !busy,
+                modifier = Modifier.testTag("conflict-confirm"),
+            ) { Text(stringResource(R.string.confirm)) }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !busy,
+                modifier = Modifier.testTag("conflict-confirm-cancel"),
+            ) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable

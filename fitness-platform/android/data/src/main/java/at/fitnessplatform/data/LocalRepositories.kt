@@ -690,7 +690,9 @@ class RoomExerciseRepository @Inject constructor(
         database.withTransaction {
             when (resolution) {
                 ExerciseConflictResolution.TAKE_SERVER -> {
-                    exerciseDao.replace(remote.copy(ownerProfileId = current.ownerProfileId, syncStatus = SyncStatus.SYNCED).toEntity())
+                    exerciseDao.update(
+                        remote.copy(ownerProfileId = current.ownerProfileId, syncStatus = SyncStatus.SYNCED).toEntity(),
+                    )
                     outboxDao.deleteUnacknowledgedForAggregate(exerciseId)
                     conflictDao.updateStatus(exerciseId, ConflictResolutionStatus.RESOLVED.name, clock.nowEpochMs())
                 }
@@ -710,7 +712,7 @@ class RoomExerciseRepository @Inject constructor(
                         conflictVersion = remote.conflictVersion,
                     )
                     outboxDao.deleteUnacknowledgedForAggregate(exerciseId)
-                    exerciseDao.replace(resolved.toEntity())
+                    exerciseDao.update(resolved.toEntity())
                     outboxDao.insert(exerciseOutbox(resolved, if (resolved.deletedAtEpochMs == null) OutboxOperationType.UPSERT_EXERCISE else OutboxOperationType.DELETE_EXERCISE))
                     conflictDao.updateStatus(exerciseId, ConflictResolutionStatus.PENDING_CONFIRMATION.name, null)
                 }

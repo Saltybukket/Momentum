@@ -23,7 +23,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import at.fitnessplatform.core.designsystem.MomentumCard
 import at.fitnessplatform.core.designsystem.MomentumEmptyState
 import at.fitnessplatform.core.designsystem.MomentumListCard
@@ -84,7 +87,12 @@ internal fun workoutDetailState(
     }
 }
 
-internal fun workoutDetailRoute(workoutId: String) = "workout-detail/$workoutId"
+internal fun workoutDetailRoute(workoutId: String): String {
+    require(workoutId.isNotBlank() && '/' !in workoutId) {
+        "Workout ID is not route-safe."
+    }
+    return "workout-detail/$workoutId"
+}
 
 internal fun formatWorkoutDateTime(epochMs: Long, locale: Locale, zone: ZoneId): String {
     val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale)
@@ -132,8 +140,18 @@ internal fun WorkoutScreen(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm)) {
-            FilterChip(selected = false, onClick = onCalendar, label = { Text(stringResource(R.string.calendar_title)) })
-            FilterChip(selected = false, onClick = onPlans, label = { Text(stringResource(R.string.plans_title)) })
+            FilterChip(
+                selected = false,
+                onClick = onCalendar,
+                label = { Text(stringResource(R.string.calendar_title)) },
+                modifier = Modifier.testTag("workouts-open-calendar"),
+            )
+            FilterChip(
+                selected = false,
+                onClick = onPlans,
+                label = { Text(stringResource(R.string.plans_title)) },
+                modifier = Modifier.testTag("workouts-open-plans"),
+            )
         }
         Spacer(Modifier.height(MomentumSpacing.sm))
         OutlinedTextField(title, { title = it }, label = { Text(stringResource(R.string.workout_title)) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -144,7 +162,12 @@ internal fun WorkoutScreen(
         ) { Text(stringResource(R.string.workout_create)) }
         Text(stringResource(R.string.workout_empty_creation_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(MomentumSpacing.md))
-        MomentumSegmentedControl(listOf(stringResource(R.string.calendar_today), stringResource(R.string.workouts_history)), section, onSelect = { section = it })
+        MomentumSegmentedControl(
+            listOf(stringResource(R.string.calendar_today), stringResource(R.string.workouts_history)),
+            section,
+            onSelect = { section = it },
+            optionTestTagPrefix = "workout-section",
+        )
         Spacer(Modifier.height(MomentumSpacing.md))
         if (section == 0) {
             WorkoutSection(R.string.workouts_active, active, busy, onStart, onComplete, onOpen)
@@ -228,7 +251,16 @@ internal fun WorkoutDetailScreen(
                 if (detailState.exercises.isNotEmpty()) {
                     MomentumSectionHeader(stringResource(R.string.workout_exercises_label))
                     detailState.exercises.forEach { resolved ->
-                        MomentumCard(Modifier.fillMaxWidth()) {
+                        val missingDescription = stringResource(R.string.workout_exercise_missing_description)
+                        MomentumCard(
+                            Modifier.fillMaxWidth().then(
+                                if (resolved.exercise == null) {
+                                    Modifier.semantics { contentDescription = missingDescription }
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                        ) {
                             if (resolved.exercise != null) {
                                 Text(resolved.exercise.name, style = MaterialTheme.typography.titleMedium)
                                 Text(stringResource(R.string.exercise_summary, resolved.exercise.primaryMuscleGroup, resolved.exercise.requiredEquipment), color = MaterialTheme.colorScheme.onSurfaceVariant)

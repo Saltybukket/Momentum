@@ -10,7 +10,11 @@ import at.fitnessplatform.core.model.CatalogExercise
 import at.fitnessplatform.core.model.CatalogMuscle
 import at.fitnessplatform.core.model.CatalogStatus
 import at.fitnessplatform.core.model.CustomExercise
+import at.fitnessplatform.core.model.ConflictResolutionStatus
 import at.fitnessplatform.core.model.Equipment
+import at.fitnessplatform.core.model.ExerciseConflict
+import at.fitnessplatform.core.model.ExerciseConflictResolution
+import at.fitnessplatform.core.model.ExerciseConflictType
 import at.fitnessplatform.core.model.GuestProfile
 import at.fitnessplatform.core.model.Muscle
 import at.fitnessplatform.core.model.MuscleRole
@@ -60,6 +64,17 @@ private val previewCompletedWorkout = Workout(
     exercises = listOf(WorkoutExercise("preview-link", "preview-workout", previewExercise.id, 0)),
     createdAtEpochMs = 1_784_099_400_000,
     updatedAtEpochMs = 1_784_103_000_000,
+)
+private val previewConflict = ExerciseConflict(
+    id = "preview-conflict",
+    exerciseId = previewExercise.id,
+    type = ExerciseConflictType.BOTH_MODIFIED,
+    localRevision = 2,
+    remoteRevision = 3,
+    localSnapshot = previewExercise.copy(name = "Controlled local squat"),
+    remoteSnapshot = previewExercise.copy(name = "Controlled server squat"),
+    detectedAtEpochMs = 1_784_103_000_000,
+    resolutionStatus = ConflictResolutionStatus.OPEN,
 )
 
 @Preview(name = "Home compact", widthDp = 360, heightDp = 800)
@@ -141,6 +156,23 @@ private fun WorkoutDetailMissingExercisePreview() = MomentumTheme {
     )
 }
 
+@Preview(name = "Workout detail busy", widthDp = 411, heightDp = 891)
+@Composable
+private fun WorkoutDetailBusyPreview() = MomentumTheme {
+    WorkoutDetailScreen(
+        workoutId = previewCompletedWorkout.id,
+        state = PlatformUiState(
+            isLoading = false,
+            workouts = listOf(previewCompletedWorkout),
+            exercises = listOf(previewExercise),
+            operationInProgress = true,
+        ),
+        onStart = {},
+        onComplete = {},
+        onRepeat = {},
+    )
+}
+
 @Preview(name = "Workout detail loading", widthDp = 411, heightDp = 891)
 @Composable
 private fun WorkoutDetailLoadingPreview() = MomentumTheme {
@@ -170,6 +202,25 @@ private fun WorkoutDetailNotFoundPreview() = MomentumTheme {
 @Composable
 private fun ExercisesPreview() = MomentumTheme {
     ExerciseListScreen(emptyList(), emptyList(), {}, {}, {}, {}, {}, {})
+}
+
+@Preview(name = "Tracking selector compact", widthDp = 360, heightDp = 800)
+@Preview(name = "Tracking selector 200 percent", widthDp = 360, heightDp = 800, fontScale = 2f)
+@Composable
+private fun TrackingSelectorPreview() = MomentumTheme {
+    TrackingTypeSelector(TrackingType.REPS, false, {})
+}
+
+@Preview(name = "Conflict resolver merge", widthDp = 411, heightDp = 891)
+@Composable
+private fun ConflictResolverPreview() = MomentumTheme {
+    ConflictResolverScreen(previewConflict, false, { _, _ -> }, {})
+}
+
+@Preview(name = "Conflict resolver confirmation", widthDp = 411, heightDp = 891)
+@Composable
+private fun ConflictConfirmationPreview() = MomentumTheme {
+    ConflictConfirmationDialog(ExerciseConflictResolution.TAKE_SERVER, false, {}, {})
 }
 
 @Preview(name = "Catalog loaded", widthDp = 411, heightDp = 891)

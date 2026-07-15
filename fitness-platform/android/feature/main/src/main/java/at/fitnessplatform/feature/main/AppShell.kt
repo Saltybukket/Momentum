@@ -133,6 +133,7 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                         navController.navigateRoot(rootRouteFor(currentRoute) ?: Routes.HOME)
                                     }
                                 },
+                                modifier = Modifier.testTag("navigate-up"),
                             ) {
                                 Icon(
                                     painterResource(R.drawable.ic_back),
@@ -250,8 +251,9 @@ fun FitnessPlatformRoot(viewModel: PlatformViewModel = hiltViewModel()) {
                                         conflict = conflict,
                                         busy = state.operationInProgress,
                                         onResolve = { resolution, merged ->
-                                            viewModel.resolveConflict(conflict.exerciseId, resolution, merged)
-                                            navController.popBackStack()
+                                            viewModel.resolveConflict(conflict.exerciseId, resolution, merged) {
+                                                navController.popBackStack()
+                                            }
                                         },
                                         onBack = { navController.popBackStack() },
                                     )

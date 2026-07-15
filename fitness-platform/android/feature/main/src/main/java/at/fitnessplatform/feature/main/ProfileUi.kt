@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import at.fitnessplatform.core.designsystem.MomentumCard
 import at.fitnessplatform.core.designsystem.MomentumSectionHeader
@@ -50,9 +51,15 @@ internal fun ProfileScreen(
         MomentumCard(Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.locations_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.locations_description), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = onLocations, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.locations_manage)) }
+            OutlinedButton(
+                onClick = onLocations,
+                modifier = Modifier.fillMaxWidth().testTag("profile-open-locations"),
+            ) { Text(stringResource(R.string.locations_manage)) }
         }
-        OutlinedButton(onClick = onPrivacy, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = onPrivacy,
+            modifier = Modifier.fillMaxWidth().testTag("profile-open-privacy"),
+        ) {
             Text(stringResource(R.string.home_manage_privacy))
         }
     }

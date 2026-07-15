@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -227,6 +228,7 @@ fun MomentumSegmentedControl(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    optionTestTagPrefix: String? = null,
 ) {
     Row(
         modifier.horizontalScroll(rememberScrollState()),
@@ -238,7 +240,15 @@ fun MomentumSegmentedControl(
                 selected = selected,
                 onClick = { onSelect(index) },
                 label = { Text(label) },
-                modifier = Modifier.semantics { if (selected) this.selected = true },
+                modifier = Modifier
+                    .then(
+                        if (optionTestTagPrefix != null) {
+                            Modifier.testTag("$optionTestTagPrefix-$index")
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .semantics { if (selected) this.selected = true },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                 ),

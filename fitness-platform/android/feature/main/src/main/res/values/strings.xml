@@ -19,6 +19,7 @@
     <string name="home_active_workout">In progress: %1$s</string>
     <string name="home_start_workout">Start a workout</string>
     <string name="home_continue_workout">Continue workout</string>
+    <string name="home_view_workout">View workout</string>
     <string name="home_recent_title">Recent workouts</string>
     <string name="home_recent_empty">Completed workouts will appear here.</string>
     <string name="home_recent_empty_title">No recent workouts</string>
@@ -76,6 +77,7 @@
     <string name="tracking_duration">Duration</string>
     <string name="tracking_distance_duration">Distance + duration</string>
     <string name="tracking_manual">Manual</string>
+    <string name="tracking_type">Tracking type</string>
     <string name="conflicts_title">Exercise sync conflicts</string>
     <string name="conflicts_description">Choose a resolution explicitly; neither version is discarded automatically.</string>
     <string name="compare_versions">Compare versions</string>
@@ -428,6 +430,7 @@
     <string name="workout_notes_label">Notes</string>
     <string name="workout_exercises_label">Exercises</string>
     <string name="workout_exercise_missing">Exercise not available</string>
+    <string name="workout_exercise_missing_description">Referenced exercise is unavailable</string>
     <string name="workout_repeat">Repeat workout</string>
     <string name="workout_detail_loading">Loading workout</string>
     <string name="workout_detail_not_found_title">Workout not found</string>

@@ -150,8 +150,14 @@ class PlatformViewModel @Inject constructor(
 
     fun deleteExercise(id: String) = runOperation { deleteExercise.invoke(id) }
 
-    fun resolveConflict(exerciseId: String, resolution: ExerciseConflictResolution, merged: CustomExercise? = null) =
-        runOperation { resolveExerciseConflict(exerciseId, resolution, merged) }
+    fun resolveConflict(
+        exerciseId: String,
+        resolution: ExerciseConflictResolution,
+        merged: CustomExercise? = null,
+        onResolved: () -> Unit = {},
+    ) = runOperation(onSuccess = { onResolved() }) {
+        resolveExerciseConflict(exerciseId, resolution, merged)
+    }
 
     fun createWorkout(title: String, exerciseIds: List<String>) = runOperation {
         createWorkout(title, exerciseIds, "")
