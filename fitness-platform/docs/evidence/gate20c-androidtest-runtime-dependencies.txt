@@ -1,0 +1,23 @@
+Gate 20C AndroidTest runtime dependency resolution
+Date: 2026-07-15
+
+Commands:
+  ./gradlew :feature:main:dependencies --configuration debugAndroidTestRuntimeClasspath --no-daemon
+  ./gradlew :app:dependencies --configuration debugAndroidTestRuntimeClasspath --no-daemon
+
+Before the focused correction, both runtime graphs selected:
+  androidx.compose.ui:ui-test-junit4-android:1.11.3
+  androidx.test:core:1.7.0
+  androidx.test:runner:1.7.0
+  androidx.test.espresso:espresso-core:3.5.0 (transitive from Compose UI Test)
+
+The version catalog already defines Espresso 3.7.0. App and feature did not bind it directly, so
+the older transitive 3.5.0 implementation performed the reflective
+android.hardware.input.InputManager.getInstance call observed on the API-37 preview runtime.
+
+After adding only the catalogued espresso-core dependency to app and feature AndroidTest:
+  androidx.test.espresso:espresso-core:3.7.0
+  transitive androidx.test.espresso:espresso-core:3.5.0 -> 3.7.0
+
+No unrelated dependency was upgraded. Full temporary Gradle dependency trees were inspected
+locally and intentionally not committed; this concise selected-version evidence is canonical.

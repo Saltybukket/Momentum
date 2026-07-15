@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -132,7 +133,7 @@ internal fun TrainingCalendarScreen(
     var adding by remember { mutableStateOf(false) }
     var editingAvailability by remember { mutableStateOf(false) }
     var settingUpSchedule by remember { mutableStateOf(false) }
-    MomentumScreen(Modifier.fillMaxSize()) {
+    MomentumScreen(Modifier.fillMaxSize().testTag("screen-calendar")) {
         item {
             Text(
                 stringResource(R.string.calendar_title),

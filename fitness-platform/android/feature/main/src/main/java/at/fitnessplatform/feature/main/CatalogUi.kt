@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -66,7 +67,10 @@ internal fun CatalogScreen(
     onMuscle: (String?) -> Unit,
     onEquipment: (String?) -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        Modifier.fillMaxSize().testTag("screen-catalog").padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         Text(stringResource(R.string.catalog_separation))
         if (state.offline) AssistChip(onClick = onRefresh, label = { Text(stringResource(R.string.catalog_offline)) })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

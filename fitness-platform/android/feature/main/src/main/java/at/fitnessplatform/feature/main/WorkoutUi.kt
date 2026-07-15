@@ -138,7 +138,10 @@ internal fun WorkoutScreen(
     var section by rememberSaveable { mutableIntStateOf(0) }
     val busy = state.operationInProgress
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg)) {
+    Column(
+        Modifier.fillMaxSize().testTag("screen-workouts")
+            .verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg),
+    ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MomentumSpacing.sm)) {
             FilterChip(
                 selected = false,

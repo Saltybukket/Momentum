@@ -57,7 +57,7 @@ class VisualContractsTest {
         }
 
         rule.onNodeWithTag("conflict-keep-local").performClick()
-        rule.onNodeWithText("Queue this version for server confirmation?").assertIsDisplayed()
+        rule.onNodeWithText("Queue the local version using the server revision as its base?").assertIsDisplayed()
         assertEquals(0, resolutions)
         rule.onNodeWithTag("conflict-confirm-cancel").performClick()
         assertEquals(0, resolutions)
@@ -90,6 +90,8 @@ class VisualContractsTest {
 
         rule.onNodeWithTag("conflict-merge-name").performTextReplacement("Merged name")
         rule.onNodeWithTag("conflict-merge").performClick()
+        rule.onNodeWithText("Queue the edited merged version using the server revision as its base?")
+            .assertIsDisplayed()
         rule.onNodeWithTag("conflict-confirm").performClick()
 
         assertEquals("Merged name", merged?.name)

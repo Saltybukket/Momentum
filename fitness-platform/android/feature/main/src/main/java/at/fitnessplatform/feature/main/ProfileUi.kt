@@ -36,7 +36,8 @@ internal fun ProfileScreen(
 ) {
     var name by rememberSaveable(currentName) { mutableStateOf(currentName) }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg),
+        Modifier.fillMaxSize().testTag("screen-profile")
+            .verticalScroll(rememberScrollState()).padding(MomentumSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(MomentumSpacing.md),
     ) {
         MomentumSectionHeader(stringResource(R.string.profile_title), stringResource(R.string.profile_identity))

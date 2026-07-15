@@ -40,6 +40,7 @@ class NavigationSmokeTest {
     @Test fun guestCanReachExerciseScreen() {
         ensureLocalProfile()
         rule.onNodeWithTag("root-nav-exercises").performClick()
+        rule.onNodeWithTag("screen-exercises").assertIsDisplayed()
         rule.onNodeWithText(rule.activity.getString(MainFeatureR.string.custom_exercises_title)).assertIsDisplayed()
     }
 
@@ -73,7 +74,11 @@ class NavigationSmokeTest {
     @Test fun rootNavigationReturnsFromWorkoutsToHome() {
         ensureLocalProfile()
         rule.onNodeWithTag("root-nav-workouts").performClick().assertIsSelected()
+        rule.onNodeWithTag("screen-workouts").assertIsDisplayed()
+        rule.onNodeWithTag("screen-home").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-home").performClick().assertIsSelected()
+        rule.onNodeWithTag("screen-home").assertIsDisplayed()
+        rule.onNodeWithTag("screen-workouts").assertDoesNotExist()
         rule.onNodeWithText(rule.activity.getString(MainFeatureR.string.home_quick_actions)).assertIsDisplayed()
     }
 
@@ -81,8 +86,12 @@ class NavigationSmokeTest {
         ensureLocalProfile()
         rule.onNodeWithTag("root-nav-workouts").performClick()
         rule.onNodeWithTag("workouts-open-plans").performClick()
+        rule.onNodeWithTag("screen-plans").assertIsDisplayed()
+        rule.onNodeWithTag("screen-workouts").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
         rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("screen-workouts").assertIsDisplayed()
+        rule.onNodeWithTag("screen-plans").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
     }
 
@@ -90,8 +99,12 @@ class NavigationSmokeTest {
         ensureLocalProfile()
         rule.onNodeWithTag("root-nav-workouts").performClick()
         rule.onNodeWithTag("workouts-open-calendar").performClick()
+        rule.onNodeWithTag("screen-calendar").assertIsDisplayed()
+        rule.onNodeWithTag("screen-workouts").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
         rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("screen-workouts").assertIsDisplayed()
+        rule.onNodeWithTag("screen-calendar").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
     }
 
@@ -99,8 +112,12 @@ class NavigationSmokeTest {
         ensureLocalProfile()
         rule.onNodeWithTag("root-nav-profile").performClick()
         rule.onNodeWithTag("profile-open-locations").performClick()
+        rule.onNodeWithTag("screen-locations").assertIsDisplayed()
+        rule.onNodeWithTag("screen-profile").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-profile").assertIsSelected()
         rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("screen-profile").assertIsDisplayed()
+        rule.onNodeWithTag("screen-locations").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-profile").assertIsSelected()
     }
 
@@ -108,8 +125,12 @@ class NavigationSmokeTest {
         ensureLocalProfile()
         rule.onNodeWithTag("root-nav-profile").performClick()
         rule.onNodeWithTag("profile-open-privacy").performClick()
+        rule.onNodeWithTag("screen-privacy").assertIsDisplayed()
+        rule.onNodeWithTag("screen-profile").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-profile").assertIsSelected()
         rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("screen-profile").assertIsDisplayed()
+        rule.onNodeWithTag("screen-privacy").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-profile").assertIsSelected()
     }
 
@@ -117,8 +138,12 @@ class NavigationSmokeTest {
         ensureLocalProfile()
         rule.onNodeWithTag("root-nav-exercises").performClick()
         rule.onNodeWithTag("exercise-section-1").performClick()
+        rule.onNodeWithTag("screen-catalog").assertIsDisplayed()
+        rule.onNodeWithTag("screen-exercises").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-exercises").assertIsSelected()
         rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("screen-exercises").assertIsDisplayed()
+        rule.onNodeWithTag("screen-catalog").assertDoesNotExist()
         rule.onNodeWithTag("root-nav-exercises").assertIsSelected()
     }
 }

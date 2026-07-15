@@ -56,7 +56,7 @@ internal fun ExerciseListScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val visibleExercises = exercises.filter { it.name.contains(query.trim(), ignoreCase = true) }
-    Column(Modifier.fillMaxSize().padding(MomentumSpacing.lg)) {
+    Column(Modifier.fillMaxSize().testTag("screen-exercises").padding(MomentumSpacing.lg)) {
         MomentumSegmentedControl(
             listOf(stringResource(R.string.exercises_mine), stringResource(R.string.exercises_public), stringResource(R.string.exercises_conflicts)),
             0,
@@ -279,10 +279,11 @@ internal fun ConflictConfirmationDialog(
         text = {
             Text(
                 stringResource(
-                    if (resolution == ExerciseConflictResolution.TAKE_SERVER) {
-                        R.string.confirm_take_server
-                    } else {
-                        R.string.confirm_queue_version
+                    when (resolution) {
+                        ExerciseConflictResolution.KEEP_LOCAL -> R.string.confirm_keep_local
+                        ExerciseConflictResolution.TAKE_SERVER -> R.string.confirm_take_server
+                        ExerciseConflictResolution.MERGE -> R.string.confirm_merge
+                        null -> R.string.confirm_resolution
                     },
                 ),
             )

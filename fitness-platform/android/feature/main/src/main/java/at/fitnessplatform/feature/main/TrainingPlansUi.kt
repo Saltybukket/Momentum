@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -349,7 +350,7 @@ private fun PlanList(
     onCreate: () -> Unit,
     onCopy: (String) -> Unit,
     onActivate: (String) -> Unit,
-) = MomentumScreen(Modifier.fillMaxSize()) {
+) = MomentumScreen(Modifier.fillMaxSize().testTag("screen-plans")) {
     item {
         Text(
             stringResource(R.string.plans_title),

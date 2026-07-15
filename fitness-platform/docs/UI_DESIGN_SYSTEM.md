@@ -28,10 +28,10 @@ card, empty state and loading skeleton. Product screens keep business state and 
 feature layer. Status is communicated by text and semantics as well as color. Controls use at least
 48 dp touch targets, resource-backed labels and selected/error semantics.
 
-Compact multi-choice controls use the responsive segmented selector: options wrap without
-horizontal clipping, expose selected semantics and use localized labels. Status chips remain
-state-only and are not presented as actions. Technical slugs and enum constants never serve as
-visible labels.
+Compact multi-choice controls use a non-weighted, horizontally scrollable segmented selector so
+long localized options remain reachable without compression or clipping. Options expose selected
+semantics and use localized labels. Status chips remain state-only and are not presented as
+actions. Technical slugs and enum constants never serve as visible labels.
 
 ## Interaction contracts
 

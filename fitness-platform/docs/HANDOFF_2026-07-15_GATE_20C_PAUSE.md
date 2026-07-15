@@ -2,8 +2,10 @@
 
 Date: 2026-07-15
 Branch: `codex/fix-scaffold-reproducibility`
-Local candidate: `d0dfcf6`
-Upstream before this run: `da1c62e`
+Implementation/test candidate: `d0dfcf6`
+Pause documentation HEAD: `b56016f`
+Resume start HEAD: `b56016f`
+Upstream before resume: `da1c62e`
 
 ## Outcome
 
@@ -11,13 +13,16 @@ Visual Sprint 1 code and acceptance coverage are locally complete, but Gate 20C 
 must not be pushed yet. The required stable Windows API-36 Google APIs/x86_64 system image and AVD
 are absent. The available Pixel_10 emulator is API 37 / Android 17 preview and is diagnostic only.
 
-Local commits added in this run:
+All eight inherited local commits, preserved unchanged:
 
+- `858f9b3 feat(android-ui): expand Momentum design system`
+- `b0dfcfe feat(android-ui): redesign core app surfaces`
+- `e36a51b fix(android-ui): restore navigation and interaction contracts`
+- `c3b3c39 fix(android-ui): finalize visual sprint 1 stabilization`
 - `2da8e4a fix(android-ui): harden visual interaction contracts`
 - `d0dfcf6 test(android): strengthen visual acceptance coverage`
-
-The four inherited DeepSeek commits remain unchanged below them: `858f9b3`, `b0dfcfe`, `e36a51b`
-and `c3b3c39`.
+- `219e297 docs: record Gate 20C acceptance blocker`
+- `b56016f fix(docs): remove handoff whitespace`
 
 ## Verified evidence
 

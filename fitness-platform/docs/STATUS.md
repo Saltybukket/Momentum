@@ -1,8 +1,8 @@
 # Project status
 
-Status basis: 2026-07-15, branch `codex/fix-scaffold-reproducibility`, local Gate 20C
-candidate `d0dfcf6`. Gate 20C is not accepted or pushed because no stable API-36 Windows AVD is
-installed.
+Status basis: 2026-07-15, branch `codex/fix-scaffold-reproducibility`. The implementation/test
+candidate is `d0dfcf6`; the Gate 20C pause documentation HEAD and resume start HEAD are `b56016f`.
+Gate 20C is not accepted or pushed until the stable API-36 Connected matrix passes.
 
 ## Implemented
 
@@ -84,10 +84,10 @@ installed.
 - Guest identity and explicit replacement remain a development contract, not production
   authentication, revocation or account linking. Replacing local credentials does not delete
   previously stored server data.
-- Stable Windows API-36 system image/AVD is unavailable. The installed API-37 preview AVD is not a
-  substitute and is incompatible with the current Espresso runtime, so connected visual,
-  accessibility and navigation acceptance is not claimed. Gate 20C commits remain local and no
-  final CI run exists.
+- Stable API-36 connected acceptance has not yet completed. The earlier API-37 preview diagnostic
+  resolved Espresso 3.5.0 transitively despite the catalogued 3.7.0; Gate 20C.1 binds 3.7.0 only in
+  the affected AndroidTest configurations. API-37 remains non-acceptance evidence. Gate 20C
+  commits remain local and no final CI run exists.
 - Owner scoping is enforced at the Workout repository boundary; other private-data repositories
   still require their own later identity-boundary audit.
 - Health, nutrition, rewards, social, commerce, AI and production provider integrations are not

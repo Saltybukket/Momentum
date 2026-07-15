@@ -99,8 +99,10 @@ It requires exactly one device (or an explicit `ANDROID_SERIAL`) and runs `core:
 `core:datastore`, `data`, `feature:main` and `app`. `core:sync` has no AndroidTest source set; its
 adapter coverage is JVM/Robolectric. The script writes raw logs to
 `android/build/connected-test-results/`, parses successful test counts and times out after 180
-seconds per runner. API 36 with Google APIs/x86_64 is the project baseline. The currently installed
-Windows emulator image is API 37 preview and is not a valid substitute for acceptance verification.
+seconds per runner. Its parser requires exactly one success marker and a zero exit for every
+requested module, and rejects failure, crash, skip, timeout, missing and duplicate completion
+markers. API 36 with Google APIs/x86_64 is the project baseline; API 37 preview is not a valid
+substitute for acceptance verification.
 
 `core:testing` provides `FakeClock`, `FakeUuidProvider`, deterministic test values and `MainDispatcherRule`.
 
