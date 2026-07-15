@@ -99,9 +99,7 @@ def main() -> int:
     for result in results:
         print(f"{result.module}: API {args.api_level}, {result.test_count} tests, PASS")
     total = sum(result.test_count for result in results)
-    print(
-        f"Connected total: API {args.api_level}, {total} tests, PASS"
-    )
+    print(f"Connected total: API {args.api_level}, {total} tests, PASS")
     return 0
 
 
