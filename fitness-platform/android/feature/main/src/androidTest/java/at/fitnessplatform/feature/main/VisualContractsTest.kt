@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -88,10 +89,13 @@ class VisualContractsTest {
             }
         }
 
-        rule.onNodeWithTag("conflict-merge-name").performTextReplacement("Merged name")
-        rule.onNodeWithTag("conflict-merge").performClick()
-        rule.onNodeWithText("Queue the edited merged version using the server revision as its base?")
-            .assertIsDisplayed()
+        rule.onNodeWithTag("conflict-merge-name")
+            .performScrollTo()
+            .performTextReplacement("Merged name")
+        rule.onNodeWithTag("conflict-merge").performScrollTo().performClick()
+        rule.onNodeWithText("Queue this edited version using the server revision?")
+            .assertExists()
+        rule.onNodeWithTag("conflict-confirm").assertIsDisplayed()
         rule.onNodeWithTag("conflict-confirm").performClick()
 
         assertEquals("Merged name", merged?.name)

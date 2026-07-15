@@ -100,7 +100,7 @@
     <string name="confirm_resolution">Confirm resolution</string>
     <string name="confirm_keep_local">Queue the local version using the server revision as its base?</string>
     <string name="confirm_take_server">Replace the local version with the server version?</string>
-    <string name="confirm_merge">Queue the edited merged version using the server revision as its base?</string>
+    <string name="confirm_merge">Queue this edited version using the server revision?</string>
     <string name="confirm">Confirm</string>
     <string name="workouts_title">Workouts</string>
     <string name="workouts_active">Active</string>

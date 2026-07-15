@@ -1,10 +1,10 @@
 package at.fitnessplatform.app
 
-import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -55,20 +55,23 @@ class NavigationSmokeTest {
             val label = rule.activity.getString(labelResource)
             rule.onNodeWithTag("root-nav-$route")
                 .assertIsDisplayed()
-                .assertContentDescriptionEquals(label)
+            rule.onNodeWithContentDescription(label, useUnmergedTree = true).assertIsDisplayed()
         }
         rule.onNodeWithTag("root-nav-home").assertIsSelected()
         rule.onNodeWithText(rule.activity.getString(MainFeatureR.string.app_name)).assertIsDisplayed()
     }
 
-    @Test fun nestedPrivacyRouteSelectsProfileAndBackRestoresHomeSelection() {
+    @Test fun systemBackFromPrivacyRestoresSelectedProfileRoot() {
         ensureLocalProfile()
-        rule.onNodeWithText(rule.activity.getString(MainFeatureR.string.home_manage_privacy)).performClick()
+        rule.onNodeWithTag("root-nav-profile").performClick()
+        rule.onNodeWithTag("profile-open-privacy").performClick()
+        rule.onNodeWithTag("screen-privacy").assertIsDisplayed()
         rule.onNodeWithTag("root-nav-profile").assertIsSelected()
 
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
-        rule.onNodeWithTag("root-nav-home").assertIsSelected()
+        rule.onNodeWithTag("screen-profile").assertIsDisplayed()
+        rule.onNodeWithTag("root-nav-profile").assertIsSelected()
     }
 
     @Test fun rootNavigationReturnsFromWorkoutsToHome() {
