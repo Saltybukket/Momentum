@@ -71,7 +71,7 @@ class RoomExerciseRepositoryConflictTest {
         assertEquals("Local squat", stored.name)
         assertEquals(SyncStatus.PENDING.name, stored.syncStatus)
         assertEquals(1, database.outboxDao().pending().size)
-        assertEquals(ConflictResolutionStatus.PENDING_CONFIRMATION.name, database.exerciseConflictDao().getOpenForExercise("exercise")?.resolutionStatus)
+        assertEquals(ConflictResolutionStatus.PENDING_CONFIRMATION.name, conflictResolutionStatus("exercise"))
     }
 
     @Test fun manualMergeQueuesMergedSnapshotWithRemoteRevision() = runTest {
@@ -86,7 +86,7 @@ class RoomExerciseRepositoryConflictTest {
 
         val stored = requireNotNull(database.exerciseDao().get("exercise"))
         assertEquals("Merged squat", stored.name)
-        assertEquals(7, stored.conflictVersion)
+        assertEquals(7L, stored.conflictVersion)
         assertNotNull(database.outboxDao().pending().single())
     }
 
@@ -125,6 +125,15 @@ class RoomExerciseRepositoryConflictTest {
             ),
         )
     }
+
+    private fun conflictResolutionStatus(exerciseId: String): String? =
+        database.openHelper.readableDatabase
+            .query(
+                "SELECT resolutionStatus FROM exercise_conflicts WHERE exerciseId = ? LIMIT 1",
+                arrayOf(exerciseId),
+            ).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
 }
 
 private class FakeClock : Clock { override fun nowEpochMs(): Long = 10 }

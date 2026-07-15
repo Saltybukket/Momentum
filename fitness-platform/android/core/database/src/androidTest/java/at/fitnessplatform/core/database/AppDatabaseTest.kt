@@ -82,7 +82,7 @@ class AppDatabaseTest {
         database = Room.databaseBuilder(context, AppDatabase::class.java, name).allowMainThreadQueries().build()
         val conflict = database.exerciseConflictDao().getOpenForExercise("e1")
         assertNotNull(conflict)
-        assertEquals(2, conflict?.remoteRevision)
+        assertEquals(2L, conflict?.remoteRevision)
     }
 
     @Test fun catalogRelationsAndCombinedFiltersPersistOffline() = runTest {
@@ -310,6 +310,7 @@ class AppDatabaseTest {
             assertEquals(1, cursor.getInt(1))
             assertEquals("occurrence", cursor.getString(2))
         }
+        migrated.execSQL("PRAGMA foreign_keys = ON")
         assertThrows(android.database.sqlite.SQLiteConstraintException::class.java) {
             migrated.execSQL("DELETE FROM plan_days WHERE id = 'day'")
         }
@@ -426,12 +427,12 @@ class AppDatabaseTest {
 
         dao.setActive("gym", 3)
         assertEquals("gym", dao.active()?.location?.id)
-        assertEquals(1, dao.get("home")?.location?.revision)
-        assertEquals(3, dao.get("home")?.location?.updatedAtEpochMs)
-        assertEquals(1, dao.get("gym")?.location?.revision)
+        assertEquals(1L, dao.get("home")?.location?.revision)
+        assertEquals(3L, dao.get("home")?.location?.updatedAtEpochMs)
+        assertEquals(1L, dao.get("gym")?.location?.revision)
         dao.softDelete("gym", 4)
         assertEquals("home", dao.active()?.location?.id)
-        assertEquals(2, dao.get("home")?.location?.revision)
+        assertEquals(2L, dao.get("home")?.location?.revision)
         assertEquals(1, dao.countActiveRows())
     }
 

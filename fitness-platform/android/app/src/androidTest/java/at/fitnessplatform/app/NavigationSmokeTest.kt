@@ -29,6 +29,12 @@ class NavigationSmokeTest {
             val home = rule.activity.getString(MainFeatureR.string.nav_home)
             rule.waitUntil(5_000) { rule.onAllNodesWithText(home).fetchSemanticsNodes().isNotEmpty() }
         }
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithText(rule.activity.getString(MainFeatureR.string.nav_home))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag("root-nav-home").performClick()
+        rule.waitForIdle()
     }
 
     @Test fun guestCanReachExerciseScreen() {
@@ -62,5 +68,57 @@ class NavigationSmokeTest {
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         rule.onNodeWithTag("root-nav-home").assertIsSelected()
+    }
+
+    @Test fun rootNavigationReturnsFromWorkoutsToHome() {
+        ensureLocalProfile()
+        rule.onNodeWithTag("root-nav-workouts").performClick().assertIsSelected()
+        rule.onNodeWithTag("root-nav-home").performClick().assertIsSelected()
+        rule.onNodeWithText(rule.activity.getString(MainFeatureR.string.home_quick_actions)).assertIsDisplayed()
+    }
+
+    @Test fun plansUpReturnsToSelectedWorkoutsRoot() {
+        ensureLocalProfile()
+        rule.onNodeWithTag("root-nav-workouts").performClick()
+        rule.onNodeWithTag("workouts-open-plans").performClick()
+        rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
+        rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
+    }
+
+    @Test fun calendarUpReturnsToSelectedWorkoutsRoot() {
+        ensureLocalProfile()
+        rule.onNodeWithTag("root-nav-workouts").performClick()
+        rule.onNodeWithTag("workouts-open-calendar").performClick()
+        rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
+        rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("root-nav-workouts").assertIsSelected()
+    }
+
+    @Test fun locationsUpReturnsToSelectedProfileRoot() {
+        ensureLocalProfile()
+        rule.onNodeWithTag("root-nav-profile").performClick()
+        rule.onNodeWithTag("profile-open-locations").performClick()
+        rule.onNodeWithTag("root-nav-profile").assertIsSelected()
+        rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("root-nav-profile").assertIsSelected()
+    }
+
+    @Test fun privacyUpReturnsToSelectedProfileRoot() {
+        ensureLocalProfile()
+        rule.onNodeWithTag("root-nav-profile").performClick()
+        rule.onNodeWithTag("profile-open-privacy").performClick()
+        rule.onNodeWithTag("root-nav-profile").assertIsSelected()
+        rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("root-nav-profile").assertIsSelected()
+    }
+
+    @Test fun catalogUpReturnsToSelectedExercisesRoot() {
+        ensureLocalProfile()
+        rule.onNodeWithTag("root-nav-exercises").performClick()
+        rule.onNodeWithTag("exercise-section-1").performClick()
+        rule.onNodeWithTag("root-nav-exercises").assertIsSelected()
+        rule.onNodeWithTag("navigate-up").performClick()
+        rule.onNodeWithTag("root-nav-exercises").assertIsSelected()
     }
 }

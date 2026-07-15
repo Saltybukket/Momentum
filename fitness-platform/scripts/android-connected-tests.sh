@@ -31,10 +31,12 @@ RESULT_FILE="$RESULT_DIR/$(date -u +%Y%m%dT%H%M%SZ).txt"
 
 declare -A RUNNERS=(
   [core:database]="at.fitnessplatform.core.database.test/androidx.test.runner.AndroidJUnitRunner"
+  [core:datastore]="at.fitnessplatform.core.datastore.test/androidx.test.runner.AndroidJUnitRunner"
   [data]="at.fitnessplatform.data.test/androidx.test.runner.AndroidJUnitRunner"
+  [feature:main]="at.fitnessplatform.feature.main.test/androidx.test.runner.AndroidJUnitRunner"
   [app]="at.fitnessplatform.app.test/androidx.test.runner.AndroidJUnitRunner"
 )
-MODULES=("${@:-core:database data app}")
+MODULES=("${@:-core:database core:datastore data feature:main app}")
 
 for module in "${MODULES[@]}"; do
   if [[ -z "${RUNNERS[$module]:-}" ]]; then

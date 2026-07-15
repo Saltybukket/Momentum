@@ -1,65 +1,129 @@
 package at.fitnessplatform.feature.main
 
+import at.fitnessplatform.core.designsystem.MomentumStatusVariant
 import at.fitnessplatform.core.model.CustomExercise
 import at.fitnessplatform.core.model.TrackingType
 import at.fitnessplatform.core.model.Workout
 import at.fitnessplatform.core.model.WorkoutExercise
 import at.fitnessplatform.core.model.WorkoutStatus
-import at.fitnessplatform.core.designsystem.MomentumStatusVariant
+import java.time.ZoneId
+import java.util.Locale
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkoutDetailUiTest {
     @Test
-    fun `exercise resolution from state finds and marks missing references`() {
-        val workout = completedWorkout()
-        val exercises = listOf(exercise("available"))
+    fun `production resolver sorts links and marks missing references`() {
+        val resolved = resolveWorkoutExercises(completedWorkout(), listOf(exercise("available")))
 
-        val map = exercises.associateBy { it.id }
-        val resolved = workout.exercises.map { it.exerciseId to map[it.exerciseId] }
-
-        assertEquals(2, resolved.size)
-        assertEquals("available", resolved[1].first)
-        assertNotNull(resolved[1].second)
-        assertEquals("missing", resolved[0].first)
-        assertNull(resolved[0].second)
+        assertEquals(listOf("available", "missing"), resolved.map { it.link.exerciseId })
+        assertEquals("Available", resolved.first().exercise?.name)
+        assertNull(resolved.last().exercise)
     }
 
     @Test
-    fun `detail route belongs to workouts and uses Up navigation`() {
-        val route = "workout-detail/workout-42"
-
-        assertEquals("workouts", rootRouteFor(route))
-        assertTrue(showsUpNavigation(route))
+    fun `detail remains loading before platform state is ready`() {
+        assertEquals(
+            WorkoutDetailUiState.Loading,
+            workoutDetailState("workout", PlatformUiState(isLoading = true)),
+        )
     }
 
     @Test
-    fun `workout status maps correctly`() {
-        assertEquals(MomentumStatusVariant.COMPLETED, workoutStatusVariant(WorkoutStatus.COMPLETED))
-        assertEquals(MomentumStatusVariant.PLANNED, workoutStatusVariant(WorkoutStatus.PLANNED))
-        assertEquals(MomentumStatusVariant.ACTIVE, workoutStatusVariant(WorkoutStatus.IN_PROGRESS))
-        assertEquals(MomentumStatusVariant.PAUSED, workoutStatusVariant(WorkoutStatus.PAUSED))
-        assertEquals(MomentumStatusVariant.CANCELLED, workoutStatusVariant(WorkoutStatus.CANCELLED))
+    fun `unknown workout becomes not found only after loading`() {
+        assertEquals(
+            WorkoutDetailUiState.NotFound,
+            workoutDetailState("unknown", PlatformUiState(isLoading = false)),
+        )
     }
 
     @Test
-    fun `active workout finds in progress or paused and recent excludes both`() {
+    fun `repeat requires completed workout and every exercise resolved`() {
+        val completed = completedWorkout()
+        val resolvedState = PlatformUiState(
+            isLoading = false,
+            workouts = listOf(completed),
+            exercises = listOf(exercise("available"), exercise("missing")),
+        )
+        val missingState = resolvedState.copy(exercises = listOf(exercise("available")))
+
+        assertTrue((workoutDetailState(completed.id, resolvedState) as WorkoutDetailUiState.Content).repeatAllowed)
+        assertFalse((workoutDetailState(completed.id, missingState) as WorkoutDetailUiState.Content).repeatAllowed)
+        listOf(
+            WorkoutStatus.PLANNED,
+            WorkoutStatus.IN_PROGRESS,
+            WorkoutStatus.PAUSED,
+            WorkoutStatus.CANCELLED,
+        ).forEach { status ->
+            val state = resolvedState.copy(workouts = listOf(completed.copy(status = status)))
+            assertFalse((workoutDetailState(completed.id, state) as WorkoutDetailUiState.Content).repeatAllowed)
+        }
+    }
+
+    @Test
+    fun `detail route validates route-safe IDs`() {
+        assertEquals("workout-detail/workout-42", workoutDetailRoute("workout-42"))
+        assertEquals("workouts", rootRouteFor(workoutDetailRoute("workout-42")))
+        assertTrue(showsUpNavigation(workoutDetailRoute("workout-42")))
+        assertThrows(IllegalArgumentException::class.java) { workoutDetailRoute("") }
+        assertThrows(IllegalArgumentException::class.java) { workoutDetailRoute("folder/workout") }
+    }
+
+    @Test
+    fun `date formatting is deterministic for fixed locale and zone`() {
+        assertEquals(
+            "01.01.1970, 01:00:00",
+            formatWorkoutDateTime(0, Locale.GERMANY, ZoneId.of("Europe/Berlin")),
+        )
+    }
+
+    @Test
+    fun `every workout status maps to its visual status`() {
+        assertEquals(
+            mapOf(
+                WorkoutStatus.PLANNED to MomentumStatusVariant.PLANNED,
+                WorkoutStatus.IN_PROGRESS to MomentumStatusVariant.ACTIVE,
+                WorkoutStatus.PAUSED to MomentumStatusVariant.PAUSED,
+                WorkoutStatus.COMPLETED to MomentumStatusVariant.COMPLETED,
+                WorkoutStatus.CANCELLED to MomentumStatusVariant.CANCELLED,
+            ),
+            WorkoutStatus.entries.associateWith(::workoutStatusVariant),
+        )
+    }
+
+    @Test
+    fun `dashboard recent contains completed workouts only`() {
+        val workouts = WorkoutStatus.entries.mapIndexed { index, status ->
+            completedWorkout().copy(id = "w$index", status = status)
+        }
+        val state = PlatformUiState(isLoading = false, workouts = workouts)
+
+        assertEquals(listOf(WorkoutStatus.COMPLETED), state.recentWorkouts.map { it.status })
+    }
+
+    @Test
+    fun `next planned workout uses earliest creation time deterministically`() {
         val state = PlatformUiState(
             isLoading = false,
             workouts = listOf(
-                completedWorkout().copy(id = "w1", status = WorkoutStatus.COMPLETED),
-                completedWorkout().copy(id = "w2", status = WorkoutStatus.PLANNED),
-                completedWorkout().copy(id = "w3", status = WorkoutStatus.IN_PROGRESS),
-                completedWorkout().copy(id = "w4", status = WorkoutStatus.PAUSED),
+                completedWorkout().copy(id = "later", status = WorkoutStatus.PLANNED, createdAtEpochMs = 20),
+                completedWorkout().copy(id = "completed", status = WorkoutStatus.COMPLETED, createdAtEpochMs = 1),
+                completedWorkout().copy(id = "earlier", status = WorkoutStatus.PLANNED, createdAtEpochMs = 10),
             ),
         )
 
-        assertEquals("w3", state.activeWorkout?.id)
-        assertEquals(1, state.recentWorkouts.size)
-        assertEquals(setOf("w1"), state.recentWorkouts.map { it.id }.toSet())
+        assertEquals("earlier", state.nextPlannedWorkout?.id)
+    }
+
+    @Test
+    fun `planned home hero explicitly opens rather than starts workout`() {
+        assertEquals(R.string.home_view_workout, homeHeroActionLabel(false, true))
+        assertEquals(R.string.home_continue_workout, homeHeroActionLabel(true, true))
+        assertEquals(R.string.home_start_workout, homeHeroActionLabel(false, false))
     }
 
     private fun completedWorkout() = Workout(

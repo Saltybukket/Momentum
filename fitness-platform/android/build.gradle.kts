@@ -63,7 +63,9 @@ tasks.register("connectedProjectAndroidTest") {
     description = "Runs only Android modules that currently contain instrumentation tests."
     dependsOn(
         ":core:database:connectedDebugAndroidTest",
+        ":core:datastore:connectedDebugAndroidTest",
         ":data:connectedDebugAndroidTest",
+        ":feature:main:connectedDebugAndroidTest",
         ":app:connectedDebugAndroidTest",
     )
 }

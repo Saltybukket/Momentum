@@ -125,7 +125,7 @@ class RoomTrainingPlanRepositoryTest {
 
     @Test fun planScheduleSwitchAndArchiveLifecycleRollBackAsSingleTransactions() = runTest {
         val oldPlan = repository.create(plan("old-plan", "Old"))
-        val newPlan = repository.create(plan("new-plan", "New"))
+        val newPlan = repository.create(plan("new-plan", "New", "new-"))
         repository.setActive(oldPlan.id)
         val calendar = RoomTrainingCalendarRepository(
             database,
@@ -349,30 +349,32 @@ class RoomTrainingPlanRepositoryTest {
         assertTrue(repository.observePlans().first().isEmpty())
     }
 
-    private fun plan(id: String, name: String) = TrainingPlan(
+    private fun plan(id: String, name: String, nestedIdPrefix: String = "") = TrainingPlan(
         id = id,
         ownerProfileId = "profile",
         name = name,
         createdAtEpochMs = 0,
         updatedAtEpochMs = 0,
         weeks = listOf(
-            PlanWeek("week", 0, "Week", listOf(
-                PlanDay("day", 0, "Day", listOf(
+            PlanWeek("${nestedIdPrefix}week", 0, "Week", listOf(
+                PlanDay("${nestedIdPrefix}day", 0, "Day", listOf(
                     PlanBlock(
-                        "block",
+                        "${nestedIdPrefix}block",
                         0,
                         PlanBlockType.MAIN,
                         "Main",
                         listOf(
                             PlanExercise(
-                                "exercise",
+                                "${nestedIdPrefix}exercise",
                                 0,
                                 ExerciseReference(
                                     ExerciseReferenceKind.CUSTOM,
                                     customExerciseId = "custom",
                                     snapshot = ExerciseSnapshot("Squat", TrackingType.REPS, setOf("none"), "legs"),
                                 ),
-                                sets = listOf(SetPrescription("set", 0, repsMin = 8, restSeconds = 90)),
+                                sets = listOf(
+                                    SetPrescription("${nestedIdPrefix}set", 0, repsMin = 8, restSeconds = 90),
+                                ),
                             ),
                         ),
                     ),

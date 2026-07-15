@@ -112,6 +112,98 @@ class PlatformViewModelTest {
         job.cancel()
     }
 
+    @Test fun `keep local conflict success calls completion exactly once`() = runTest {
+        val exercises = FakeExerciseRepository()
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            exercises,
+            FakeWorkoutRepository(),
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        var completed = 0
+
+        viewModel.resolveConflict("exercise", ExerciseConflictResolution.KEEP_LOCAL) { completed++ }
+        advanceUntilIdle()
+
+        assertEquals(1, completed)
+        assertEquals(listOf(ExerciseConflictResolution.KEEP_LOCAL), exercises.resolutions.map { it.second })
+        assertFalse(viewModel.uiState.value.operationInProgress)
+        job.cancel()
+    }
+
+    @Test fun `manual merge forwards edited exercise`() = runTest {
+        val exercises = FakeExerciseRepository()
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            exercises,
+            FakeWorkoutRepository(),
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val merged = CustomExercise(
+            "exercise",
+            "p",
+            "Merged",
+            primaryMuscleGroup = "Full body",
+            requiredEquipment = "None",
+            trackingType = TrackingType.REPS,
+            createdAtEpochMs = 1,
+            updatedAtEpochMs = 2,
+        )
+
+        viewModel.resolveConflict("exercise", ExerciseConflictResolution.MERGE, merged)
+        advanceUntilIdle()
+
+        assertEquals(merged, exercises.resolutions.single().third)
+    }
+
+    @Test fun `conflict failure retains context and never calls completion`() = runTest {
+        val exercises = FakeExerciseRepository().apply {
+            resolveFailure = ValidationException("Resolution failed")
+        }
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            exercises,
+            FakeWorkoutRepository(),
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        var completed = 0
+
+        viewModel.resolveConflict("exercise", ExerciseConflictResolution.TAKE_SERVER) { completed++ }
+        advanceUntilIdle()
+
+        assertEquals(0, completed)
+        assertEquals("Resolution failed", viewModel.uiState.value.errorMessage)
+        assertFalse(viewModel.uiState.value.operationInProgress)
+        job.cancel()
+    }
+
+    @Test fun `double conflict submission executes resolution once`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val exercises = FakeExerciseRepository().apply { resolveGate = gate }
+        val viewModel = createViewModel(
+            FakeProfileRepository(GuestProfile("p", "Guest", 1)),
+            exercises,
+            FakeWorkoutRepository(),
+            PlatformFakeSyncPreferencesRepository(),
+        )
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
+        var completed = 0
+
+        viewModel.resolveConflict("exercise", ExerciseConflictResolution.KEEP_LOCAL) { completed++ }
+        viewModel.resolveConflict("exercise", ExerciseConflictResolution.TAKE_SERVER) { completed++ }
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.operationInProgress)
+        assertEquals(1, exercises.resolveCalls)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, completed)
+        assertEquals(1, exercises.resolveCalls)
+        job.cancel()
+    }
+
     @Test fun `repeat success navigates once and bridges delayed Room emission`() = runTest {
         val workouts = FakeWorkoutRepository().apply {
             add(completedWorkout())
@@ -292,7 +384,20 @@ private class FakeExerciseRepository : ExerciseRepository {
         CustomExercise("e", "p", name, description, primaryMuscleGroup, requiredEquipment, trackingType, notes, 1, 1).also { state.value += it }
     override suspend fun update(exercise: CustomExercise) = exercise.also { updated -> state.value = state.value.map { if (it.id == updated.id) updated else it } }
     override suspend fun delete(id: String) { state.value = state.value.filterNot { it.id == id } }
-    override suspend fun resolveConflict(exerciseId: String, resolution: ExerciseConflictResolution, mergedExercise: CustomExercise?) = Unit
+    val resolutions = mutableListOf<Triple<String, ExerciseConflictResolution, CustomExercise?>>()
+    var resolveCalls = 0
+    var resolveFailure: Throwable? = null
+    var resolveGate: CompletableDeferred<Unit>? = null
+    override suspend fun resolveConflict(
+        exerciseId: String,
+        resolution: ExerciseConflictResolution,
+        mergedExercise: CustomExercise?,
+    ) {
+        resolveCalls++
+        resolutions += Triple(exerciseId, resolution, mergedExercise)
+        resolveGate?.await()
+        resolveFailure?.let { throw it }
+    }
     fun addConflict() {
         val local = CustomExercise("e", "p", "Local", "", "Legs", "None", TrackingType.REPS, "", 1, 1)
         conflicts.value = listOf(

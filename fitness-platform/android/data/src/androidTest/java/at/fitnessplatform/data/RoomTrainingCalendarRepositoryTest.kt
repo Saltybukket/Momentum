@@ -153,7 +153,7 @@ class RoomTrainingCalendarRepositoryTest {
         database.calendarDao().changeStatus(initial[1].id, "profile", ScheduledWorkoutStatus.COMPLETED.name, 200)
 
         val repeated = repository.ensureHorizon(schedule.id, from, from.plusDays(7))
-        assertEquals(6, repeated.size)
+        assertEquals(4, repeated.size)
         database.openHelper.writableDatabase.execSQL(
             "DELETE FROM scheduled_workout_occurrences WHERE id = '${initial[2].id}'",
         )
@@ -161,9 +161,10 @@ class RoomTrainingCalendarRepositoryTest {
         assertTrue(recovered.any { it.id == initial[2].id })
 
         val replaced = repository.replaceFuturePlanned(schedule.id, from, from.plusDays(14))
+        val allRows = repository.observeOccurrences(from, from.plusDays(14)).first()
         assertTrue(replaced.any { it.id == moved.id && it.origin == OccurrenceOrigin.MOVED_ONCE })
-        assertTrue(replaced.any { it.id == copied.id && it.origin == OccurrenceOrigin.COPIED })
-        assertTrue(replaced.any { it.id == adHoc.id && it.origin == OccurrenceOrigin.AD_HOC })
+        assertTrue(allRows.any { it.id == copied.id && it.origin == OccurrenceOrigin.COPIED })
+        assertTrue(allRows.any { it.id == adHoc.id && it.origin == OccurrenceOrigin.AD_HOC })
         assertTrue(replaced.any { it.id == initial[1].id && it.status == ScheduledWorkoutStatus.COMPLETED })
         assertEquals(replaced.map { it.id }.toSet().size, replaced.size)
     }

@@ -239,13 +239,12 @@ class RoomTrainingPlanCalendarCoordinatorTest {
     }
 
     private fun unscopedScheduleCount(scheduleId: String): Int {
-        var count = 0
-        database.openHelper.readableDatabase.query("plan_schedules").use { cursor ->
-            while (cursor.moveToNext()) {
-                if (cursor.getString(cursor.getColumnIndexOrThrow("id")) == scheduleId) count++
+        return database.openHelper.readableDatabase
+            .query("SELECT COUNT(*) FROM plan_schedules WHERE id = ?", arrayOf(scheduleId))
+            .use { cursor ->
+                check(cursor.moveToFirst())
+                cursor.getInt(0)
             }
-        }
-        return count
     }
 
     private fun plan(id: String, name: String) = TrainingPlan(
