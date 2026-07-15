@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "instructions": [
+    "AGENTS.md",
+    "README.md",
+    "architecture/**/*.md"
+  ],
+
+  "watcher": {
+    "ignore": [
+      ".git/**",
+      "**/build/**",
+      "**/.gradle/**",
+      "**/__pycache__/**",
+      "**/.pytest_cache/**",
+      "**/.mypy_cache/**",
+      "**/node_modules/**",
+      "**/.venv/**",
+      "**/venv/**"
+    ]
+  },
+
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
